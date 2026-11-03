@@ -1,0 +1,6 @@
+.env
+.env.*
+plans/
+research/
+.claude/
+AGENTS.md
