@@ -1,0 +1,127 @@
+@import "tailwindcss";
+
+@source "../app";
+@source "../components";
+@source "../lib";
+
+/* Each colour has one meaning; see plans/frontend/04-plan.md. */
+:root {
+  --night: #0d0a12;
+  --night-2: #17121f;
+  --night-3: #221b2d;
+  --chalk: #efe8da;
+  --chalk-2: #e4dccb;
+  --ink: #17141c;
+  --uv: #8f6bff;
+  --uv-glow: #b9a2ff;
+  --rope: #b3243a;
+  --brass: #cfa349;
+  --graphite: #6e6875;
+
+  /* Workbench surfaces follow the theme; the stage is always night. */
+  --paper: var(--chalk);
+  --paper-2: var(--chalk-2);
+  --on-paper: var(--ink);
+  --rule: #cfc5b1;
+  --muted: var(--graphite);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #1b1622;
+    --paper-2: #241d2d;
+    --on-paper: #ece5d7;
+    --rule: #3a3145;
+    --muted: #9a92a3;
+  }
+}
+
+:root[data-theme="dark"] {
+  --paper: #1b1622;
+  --paper-2: #241d2d;
+  --on-paper: #ece5d7;
+  --rule: #3a3145;
+  --muted: #9a92a3;
+}
+
+@theme inline {
+  --color-night: var(--night);
+  --color-night-2: var(--night-2);
+  --color-night-3: var(--night-3);
+  --color-chalk: var(--chalk);
+  --color-ink: var(--ink);
+  --color-uv: var(--uv);
+  --color-uv-glow: var(--uv-glow);
+  --color-rope: var(--rope);
+  --color-brass: var(--brass);
+  --color-graphite: var(--graphite);
+  --color-paper: var(--paper);
+  --color-paper-2: var(--paper-2);
+  --color-on-paper: var(--on-paper);
+  --color-rule: var(--rule);
+  --color-muted: var(--muted);
+  --font-sign: var(--font-bungee);
+  --font-sign-inline: var(--font-bungee-inline);
+  --font-sans: var(--font-schibsted);
+  --font-mono: var(--font-jetbrains);
+}
+
+html {
+  background: var(--night);
+}
+
+body {
+  background: var(--night);
+  color: var(--chalk);
+  font-family: var(--font-schibsted), system-ui, sans-serif;
+}
+
+:focus-visible {
+  outline: 2px solid var(--uv);
+  outline-offset: 2px;
+}
+
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Faint street-light grain on stage screens. */
+.stage-grain {
+  background-image:
+    radial-gradient(ellipse 80% 60% at 50% -10%, rgb(143 107 255 / 0.18), transparent 60%),
+    radial-gradient(ellipse 60% 50% at 100% 110%, rgb(179 36 58 / 0.16), transparent 60%);
+}
+
+.neon-uv {
+  color: var(--uv-glow);
+  text-shadow:
+    0 0 6px rgb(143 107 255 / 0.9),
+    0 0 22px rgb(143 107 255 / 0.55);
+}
+
+.neon-brass {
+  color: #f0d48f;
+  text-shadow:
+    0 0 6px rgb(207 163 73 / 0.8),
+    0 0 20px rgb(207 163 73 / 0.4);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* A printed ticket: scalloped top and bottom edges. */
+.ticket {
+  --notch: radial-gradient(circle at 6px 0, transparent 4px, #000 4.5px) top left / 12px 51% repeat-x,
+    radial-gradient(circle at 6px 100%, transparent 4px, #000 4.5px) bottom left / 12px 51% repeat-x;
+  -webkit-mask: var(--notch);
+  mask: var(--notch);
+}
+
