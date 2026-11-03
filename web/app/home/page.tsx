@@ -1,8 +1,17 @@
+import { Suspense } from "react";
 import { HomeDoor } from "@/components/home/HomeDoor";
 import { readPublicEnv, readRelayEnv } from "@/lib/config";
 import { httpRpc, readDoor } from "@/lib/chain";
 
-export default async function HomeFrame() {
+export default function HomePage() {
+  return (
+    <Suspense fallback={<main className="min-h-dvh bg-night" />}>
+      <HomeFrame />
+    </Suspense>
+  );
+}
+
+async function HomeFrame() {
   const relay = readRelayEnv(process.env);
   const labels = readPublicEnv(process.env);
   if (!relay.ok || !labels.ok) {

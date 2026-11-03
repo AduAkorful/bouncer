@@ -21,7 +21,7 @@ export async function sendClaim(input: {
   if (!/^[0-9]+$/.test(input.round) || !Number.isSafeInteger(Number(input.round))) return { ok: false, error: "round" };
   try {
     const { JavascriptProvider } = await import("@fast-auth-near/javascript-provider");
-    const { FastAuthSigner } = await import("@fast-auth-near/react-sdk");
+    const { FastAuthSigner } = await import("@fast-auth-near/react-sdk/dist/core/signers/signer.js");
     const { JsonRpcProvider } = await import("near-api-js");
     const provider = new JavascriptProvider({ network: "testnet", clientId: input.authClientId });
     if (!(await provider.isLoggedIn())) await provider.login();

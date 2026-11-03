@@ -1,9 +1,18 @@
+import { Suspense } from "react";
 import { Blocked } from "@/components/Blocked";
 import { RevealDoor } from "@/components/reveal/RevealDoor";
 import { httpRpc, readDoor } from "@/lib/chain";
 import { readPublicEnv, readRelayEnv } from "@/lib/config";
 
-export default async function RevealPage() {
+export default function RevealPage() {
+  return (
+    <Suspense fallback={<main className="min-h-dvh bg-night" />}>
+      <RevealGate />
+    </Suspense>
+  );
+}
+
+async function RevealGate() {
   const relay = readRelayEnv(process.env);
   const labels = readPublicEnv(process.env);
   if (!relay.ok || !labels.ok) {
