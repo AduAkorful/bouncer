@@ -1,0 +1,26 @@
+[package]
+name = "vault"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Bouncer USDC vault. Testnet payout only. The model never holds a key."
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+near-sdk = "=5.30.0"
+
+[dev-dependencies]
+ed25519-dalek = "2"
+near-sdk = { version = "=5.30.0", features = ["unit-testing"] }
+near-workspaces = "0.24.0"
+serde_json = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+
+[profile.release]
+codegen-units = 1
+opt-level = "z"
+lto = true
+panic = "abort"
+overflow-checks = true
