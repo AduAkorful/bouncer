@@ -1,0 +1,173 @@
+//! WASI Preview 2 entry. Stdin is one JSON operation. Stdout is one JSON result.
+//! This binary builds for wasm32-wasip2. The host signs. The model does not.
+
+fn main() {
+    #[cfg(all(target_arch = "wasm32", target_os = "wasi"))]
+    entry::run();
+}
+
+#[cfg(all(target_arch = "wasm32", target_os = "wasi"))]
+#[used]
+#[link_section = "outlayer.manifest"]
+static OUTLAYER_MANIFEST: [u8; include_bytes!("../manifest.json").len()] = *include_bytes!("../manifest.json");
+
+#[cfg(all(target_arch = "wasm32", target_os = "wasi"))]
+mod entry {
+    use guard::{
+        door_from_reports, handle, Budget, Chain, DoorView, Host, Model, Random, Signer, MAX_TOKENS,
+        MODEL_ID, TEMPERATURE_MILLI,
+    };
+
+    use crate::OUTLAYER_MANIFEST;
+
+    const COMPLETIONS: &str = "https://cloud-api.near.ai/v1/chat/completions";
+
+    pub fn run() {
+        let _manifest = &OUTLAYER_MANIFEST;
+        let input = outlayer::env::input_string().unwrap_or_default();
+        let seed = match read_seed() {
+            Ok(seed) => seed,
+            Err(error) => {
+                outlayer::env::output_string(&refuse(error));
+                return;
+            }
+        };
+        let mut host = Host {
+            seed,
+            model: Cloud,
+            signer: ProjectKey,
+            chain: VaultDoor,
+            random: OsRandom,
+            budget: Marks,
+        };
+        let output = scrub(handle(&input, &mut host), &seed);
+        outlayer::env::output_string(&output);
+    }
+
+    fn read_seed() -> Result<[u8; 32], &'static str> {
+        let text = std::env::var("PROTECTED_SEED").map_err(|_| "seed")?;
+        let bytes = hex::decode(text.trim()).map_err(|_| "seed")?;
+        bytes.try_into().map_err(|_| "seed")
+    }
+
+    fn scrub(output: String, seed: &[u8; 32]) -> String {
+        let lower = hex::encode(seed);
+        let upper = lower.to_ascii_uppercase();
+        if output.contains(&lower) || output.contains(&upper) {
+            return refuse("seed");
+        }
+        output
+    }
+
+    fn refuse(error: &str) -> String {
+        format!(r#"{{"ok":false,"error":"{error}"}}"#)
+    }
+
+    struct Cloud;
+
+    impl Model for Cloud {
+        fn complete(&mut self, system: &str, user: &str) -> Result<String, ()> {
+            let key = std::env::var("NEAR_AI_KEY").map_err(|_| ())?;
+            if key.is_empty() {
+                return Err(());
+            }
+            let body = serde_json::json!({
+                "model": MODEL_ID,
+                "messages": [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user}
+                ],
+                "max_tokens": MAX_TOKENS,
+                "temperature": 0.7,
+                "stream": false
+            });
+            let payload = serde_json::to_vec(&body).map_err(|_| ())?;
+            if payload.windows(key.len()).any(|window| window == key.as_bytes()) {
+                return Err(());
+            }
+            let response = wasi_http_client::Client::new()
+                .post(COMPLETIONS)
+                .header("Content-Type", "application/json")
+                .header("Authorization", format!("Bearer {key}"))
+                .body(&payload)
+                .send()
+                .map_err(|_| ())?;
+            if !(200..300).contains(&response.status()) {
+                return Err(());
+            }
+            let bytes = response.body().map_err(|_| ())?;
+            let parsed: serde_json::Value = serde_json::from_slice(&bytes).map_err(|_| ())?;
+            let text = parsed
+                .pointer("/choices/0/message/content")
+                .and_then(|value| value.as_str())
+                .ok_or(())?;
+            if text.is_empty() || text.contains(&key) {
+                return Err(());
+            }
+            Ok(text.to_string())
+        }
+    }
+
+    struct ProjectKey;
+
+    impl Signer for ProjectKey {
+        fn public_key(&self) -> [u8; 32] {
+            let bytes = outlayer::signing_keys::public_key("verdict", None).unwrap_or_default();
+            bytes.try_into().unwrap_or_else(|_| panic!("key"))
+        }
+
+        fn sign(&mut self, message: &[u8]) -> [u8; 64] {
+            let bytes = outlayer::signing_keys::sign("verdict", None, message).unwrap_or_default();
+            bytes.try_into().unwrap_or_else(|_| panic!("sign"))
+        }
+    }
+
+    struct VaultDoor;
+
+    impl Chain for VaultDoor {
+        fn door(&self, vault_id: &str) -> Result<DoorView, ()> {
+            let account = std::env::var("VAULT_ACCOUNT").map_err(|_| ())?;
+            if account.is_empty() {
+                return Err(());
+            }
+            let args = serde_json::json!({"vault_id": vault_id}).to_string();
+            let (view_ok, view_err) = outlayer::raw::rpc::view(&account, "get_vault", &args, "final");
+            let (block_ok, block_err) = outlayer::raw::rpc::block("final");
+            door_from_reports(&view_ok, &view_err, &block_ok, &block_err)
+        }
+    }
+
+    struct OsRandom;
+
+    impl Random for OsRandom {
+        fn nonce(&mut self) -> [u8; 12] {
+            let mut nonce = [0u8; 12];
+            getrandom::getrandom(&mut nonce).unwrap_or_else(|_| panic!("random"));
+            nonce
+        }
+    }
+
+    struct Marks;
+
+    impl Budget for Marks {
+        fn seen(&self, key: &str) -> u8 {
+            match outlayer::storage::get_worker(&mark_key(key)) {
+                Ok(Some(bytes)) if bytes.len() == 1 && bytes[0] <= 6 => bytes[0],
+                Ok(None) => 0,
+                _ => u8::MAX,
+            }
+        }
+
+        fn record(&mut self, key: &str, used: u8) {
+            if outlayer::storage::set_worker(&mark_key(key), &[used]).is_err() {
+                panic!("mark");
+            }
+        }
+    }
+
+    fn mark_key(key: &str) -> String {
+        format!("used:{key}")
+    }
+
+    const _: () = assert!(TEMPERATURE_MILLI == 700);
+}

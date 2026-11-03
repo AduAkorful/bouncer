@@ -1,0 +1,16 @@
+{
+  "capabilities": {
+    "network": ["cloud-api.near.ai"]
+  },
+  "signing_keys": [
+    {
+      "path": "verdict",
+      "type": "ed25519",
+      "bind": "project",
+      "caller": "signer"
+    }
+  ],
+  "author_secrets": {
+    "profile": "guard"
+  }
+}
