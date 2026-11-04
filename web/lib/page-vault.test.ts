@@ -69,3 +69,26 @@ test("every failed read is an error and nothing is filled in", async () => {
   assert.deepEqual(await readPageVault(rpcFor(noToken), env, "anchor"), { ok: false, error: "token" });
   assert.deepEqual(await readPageVault(rpcFor(base), env, "bad id!"), { ok: false, error: "id" });
 });
+
+test("sponsor token reads start without waiting for the sealed spec", async () => {
+  const calls: string[] = [];
+  let releaseSpec!: () => void;
+  let tokenStarted!: () => void;
+  const started = new Promise<void>((resolve) => { tokenStarted = resolve; });
+  const spec = new Promise<void>((resolve) => { releaseSpec = resolve; });
+  const rpc: Rpc = async (request) => {
+    const method = (request.params as { method_name: string }).method_name;
+    calls.push(method);
+    if (method === "get_vault") return { ok: true, value: row({ spec_hash: key, card }) };
+    if (method === "get_owner") return { ok: true, value: "owner.testnet" };
+    if (method === "get_spec") { await spec; return { ok: true, value: "AQID" }; }
+    if (method === "get_usdc_account") { tokenStarted(); return { ok: true, value: "usdc.testnet" }; }
+    return { ok: true, value: { symbol: "USDC", decimals: 6 } };
+  };
+  const reading = readPageVault(rpc, env, "anchor");
+  await started;
+  assert.ok(calls.includes("get_spec"));
+  releaseSpec();
+  const result = await reading;
+  assert.ok(result.ok && result.page.specCt === "010203");
+});

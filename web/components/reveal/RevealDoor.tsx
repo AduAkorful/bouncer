@@ -145,7 +145,7 @@ export function RevealDoor({
             Closes <Countdown endsAtNs={vault.closesAt} className="text-chalk" />
           </p>
         )}
-        <Link href="/" className="mt-6 inline-block text-sm text-chalk/70 underline decoration-white/20">
+        <Link href="/home" className="chalk-focus mt-6 inline-flex min-h-11 items-center text-sm text-chalk/80 underline decoration-white/20">
           Back to the door
         </Link>
       </div>

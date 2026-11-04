@@ -32,7 +32,7 @@ export function startIdle(root: Element) {
   if (has(".goer-idle")) gsap.to(all(".goer-idle"), { y: -1.2, duration: 1.6, ease: "sine.inOut", yoyo: true, repeat: -1, stagger: { each: 0.37, from: "random" } });
   if (has(".goer-bob")) gsap.to(all(".goer-bob"), { y: -3, rotation: 2, transformOrigin: "50% 100%", duration: 0.254, ease: "sine.inOut", yoyo: true, repeat: -1, stagger: 0.13 });
   // Arms swing about the shoulder (see Swing in Goer.tsx). Each person keeps their own timing; the three
-  // copies that make up one person (rim, colour, shadow) move together.
+  // copies that make up one person (rim and shaded colour) move together.
   const swing = (sel: string, from: number, to: number, dur: number, gap = 0) =>
     root.querySelectorAll(".goer").forEach((g, i) => {
       const parts = g.querySelectorAll(sel);
@@ -50,12 +50,6 @@ export function startIdle(root: Element) {
   if (has(".coals")) gsap.to(all(".coals"), { opacity: 0.6, duration: 0.18, ease: "steps(3)", yoyo: true, repeat: -1, repeatDelay: 0.3 });
   if (has(".exhaust")) gsap.fromTo(all(".exhaust"), { x: 0, opacity: 0.5, scale: 0.6 }, { x: 22, y: -6, opacity: 0, scale: 2, transformOrigin: "50% 50%", duration: 1.4, repeat: -1, stagger: 0.45 });
   if (has(".wander")) gsap.to(all(".wander"), { x: 46, duration: 7, ease: "sine.inOut", yoyo: true, repeat: -1 });
-  if (has(".stroll"))
-    gsap
-      .timeline({ repeat: -1 })
-      .fromTo(all(".stroll"), { x: 130, opacity: 0 }, { x: -50, duration: 16, ease: "none" })
-      .to(all(".stroll"), { opacity: 1, duration: 1.2 }, 0)
-      .to(all(".stroll"), { opacity: 0, duration: 1.2 }, 14.8);
   if (has(".open-sign")) gsap.timeline({ repeat: -1, repeatDelay: 5 }).to(all(".open-sign"), { opacity: 0.2, duration: 0.06, yoyo: true, repeat: 3 });
   if (has(".laser")) gsap.fromTo(all(".laser"), { rotation: -22 }, { rotation: 22, duration: 1.9, ease: "sine.inOut", yoyo: true, repeat: -1, stagger: 0.6 });
   if (has(".tube")) gsap.timeline({ repeat: -1, repeatDelay: 7 }).to(all(".tube"), { opacity: 0.15, duration: 0.05, yoyo: true, repeat: 5, ease: "steps(1)" });

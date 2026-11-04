@@ -31,9 +31,6 @@ export type PublicEnv = {
   decimals: number;
   networkTag: string;
   networkId: string;
-  authContractId: string;
-  mpcContractId: string;
-  authClientId: string;
   storageName: string;
   messageBudget: number;
   venue: string;
@@ -67,9 +64,6 @@ const PUBLIC_KEYS = [
   "NEXT_PUBLIC_CURRENCY_DECIMALS",
   "NEXT_PUBLIC_NETWORK_TAG",
   "NEXT_PUBLIC_NETWORK_ID",
-  "NEXT_PUBLIC_AUTH_CONTRACT_ID",
-  "NEXT_PUBLIC_MPC_CONTRACT_ID",
-  "NEXT_PUBLIC_AUTH_CLIENT_ID",
   "NEXT_PUBLIC_STORAGE_NAME",
   "NEXT_PUBLIC_MESSAGE_BUDGET",
   "NEXT_PUBLIC_VENUE",
@@ -146,9 +140,6 @@ export function readPublicEnv(source: EnvSource | undefined): Ready<PublicEnv> |
       decimals: decimals as number,
       networkTag: read("NEXT_PUBLIC_NETWORK_TAG"),
       networkId: read("NEXT_PUBLIC_NETWORK_ID"),
-      authContractId: read("NEXT_PUBLIC_AUTH_CONTRACT_ID"),
-      mpcContractId: read("NEXT_PUBLIC_MPC_CONTRACT_ID"),
-      authClientId: read("NEXT_PUBLIC_AUTH_CLIENT_ID"),
       storageName: read("NEXT_PUBLIC_STORAGE_NAME"),
       messageBudget: messageBudget as number,
       venue: read("NEXT_PUBLIC_VENUE"),

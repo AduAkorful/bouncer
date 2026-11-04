@@ -2,11 +2,12 @@
 
 import gsap from "gsap";
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DemoBadge } from "@/components/bits";
 import { DoorScene } from "@/components/DoorScene";
 import { SceneLife } from "@/components/SceneLife";
-import { HEAD_COLORS, NEONS, PARTS, SAM, SKINS, type Look, type Neon, type Option } from "@/lib/look";
+import { HEAD_COLORS, NEONS, PARTS, SKINS, type Look, type Neon, type Option } from "@/lib/look";
+import { CREATOR_STORAGE, DEFAULT_DRAFT, parseCreatorDraft } from "@/lib/creator-draft";
 import { CITIES, type CityId } from "@/lib/cities";
 import { rigTo, rigTween } from "@/lib/rigMotion";
 import { setSound, sfx } from "@/lib/sfx";
@@ -18,13 +19,44 @@ const pick = <T,>(xs: readonly T[]) => xs[Math.floor(Math.random() * xs.length)]
 
 export default function CreatorFrame() {
   const root = useRef<HTMLDivElement>(null);
-  const [look, setLook] = useState<Look>({ ...SAM, name: "Kwame", catchphrase: "Not on my list, not tonight." });
-  const [sign, setSign] = useState("THE GATE");
-  const [neon, setNeon] = useState<Neon>("rope");
-  const [city, setCity] = useState<CityId>("accra");
+  const [look, setLook] = useState<Look>(DEFAULT_DRAFT.look);
+  const [sign, setSign] = useState(DEFAULT_DRAFT.sign);
+  const [neon, setNeon] = useState<Neon>(DEFAULT_DRAFT.neon);
+  const [city, setCity] = useState<CityId>(DEFAULT_DRAFT.city);
   const [tab, setTab] = useState<Tab>("Body");
   const [saved, setSaved] = useState(false);
   const [sound, setSoundOn] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [storageError, setStorageError] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(CREATOR_STORAGE);
+      if (raw) {
+        const draft = parseCreatorDraft(raw);
+        setLook(draft.look); setSign(draft.sign); setNeon(draft.neon);
+        setCity(draft.city); setSoundOn(draft.sound); setSound(draft.sound);
+        setSaved(true);
+      }
+    } catch {
+      setStorageError("Your saved design could not be read. You can edit and try saving again.");
+    }
+    setReady(true);
+    return () => setSound(false);
+  }, []);
+
+  function save() {
+    try {
+      const draft = parseCreatorDraft(JSON.stringify({ version: 1, look, sign, neon, city, sound }));
+      window.localStorage.setItem(CREATOR_STORAGE, JSON.stringify(draft));
+      setStorageError(null);
+      setSaved(true);
+      sfx.win();
+    } catch {
+      setSaved(false);
+      setStorageError("Your design could not be saved on this browser. Allow site storage and try again.");
+    }
+  }
 
   const set = <K extends keyof Look>(k: K, v: Look[K]) => {
     setLook((l) => ({ ...l, [k]: v }));
@@ -33,6 +65,7 @@ export default function CreatorFrame() {
   };
 
   function randomize() {
+    setSaved(false);
     setLook((l) => ({
       ...l,
       build: pick(PARTS.build).value,
@@ -93,6 +126,7 @@ export default function CreatorFrame() {
             onClick={() => {
               setSound(!sound);
               setSoundOn(!sound);
+              setSaved(false);
             }}
             className="shrink-0 rounded-full bg-black/50 px-2 py-1 font-mono text-[11px] sm:px-2.5 sm:text-xs"
             aria-pressed={sound}
@@ -100,7 +134,7 @@ export default function CreatorFrame() {
             {sound ? "♪ on" : "♪ off"}
           </button>
         </header>
-        <SceneLife key={JSON.stringify(look) + city} className="absolute inset-0">
+        <SceneLife key={`${city}-${look.build}`} className="absolute inset-0">
           <DoorScene city={city} sign={sign.toUpperCase() || "YOUR VENUE"} neon={neon} look={look} p="cr" className="size-full" label={`${look.name} at the door of ${sign}`} />
         </SceneLife>
         <div className="absolute left-3 top-[20%] max-w-[55%] animate-[fadeIn_.35s_ease-out] rounded-2xl rounded-bl-sm bg-chalk px-3 py-2 text-[13px] text-ink shadow-lg">
@@ -138,6 +172,7 @@ export default function CreatorFrame() {
         </nav>
 
         <div className="space-y-6 p-4">
+          <p className="text-sm text-chalk/80" aria-live="polite">{look.name || "Your bouncer"} at the door of {sign || "your venue"} · {CITIES[city].name}</p>
           {tab === "Body" && (
             <>
               <Group label="Build">
@@ -215,6 +250,7 @@ export default function CreatorFrame() {
                       key={c}
                       onClick={() => {
                         setCity(c);
+                        setSaved(false);
                         sfx.tick();
                       }}
                       className={`rounded-xl border px-4 py-2 text-sm ${city === c ? "border-chalk bg-chalk text-ink" : "border-white/15"}`}
@@ -230,7 +266,7 @@ export default function CreatorFrame() {
                   {NEONS.map((n) => (
                     <button
                       key={n.value}
-                      onClick={() => setNeon(n.value)}
+                      onClick={() => { setNeon(n.value); setSaved(false); }}
                       className={`rounded-xl border px-4 py-2 text-sm ${neon === n.value ? "border-chalk" : "border-white/15"}`}
                       style={{ color: n.fill, textShadow: `0 0 8px ${n.stroke}` }}
                     >
@@ -271,17 +307,16 @@ export default function CreatorFrame() {
             decision, so there&apos;s nothing to read off their face.
           </div>
 
+          {storageError ? <p role="alert" className="text-sm text-chalk">{storageError}</p> : null}
           {saved ? (
             <div className="rounded-2xl border border-chalk/30 bg-night p-4">
-              <div className="font-sign">{look.name} is ready for the door.</div>
-              <p className="mt-1 text-sm text-chalk/60">Next: write their instructions and run the test bench.</p>
+              <div role="status" className="font-sign">Saved on this browser.</div>
+              <p className="mt-1 text-sm text-chalk/60">Your look is saved here. It has not been published.</p>
             </div>
           ) : (
             <button
-              onClick={() => {
-                setSaved(true);
-                sfx.win();
-              }}
+              onClick={save}
+              disabled={!ready}
               className="w-full rounded-2xl bg-chalk py-4 font-sign text-lg text-ink shadow-[0_6px_0_#9c9483] transition active:translate-y-1 active:shadow-[0_2px_0_#9c9483]"
             >
               Save {look.name || "bouncer"}

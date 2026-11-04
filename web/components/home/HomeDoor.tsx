@@ -23,15 +23,15 @@ const wristbands = [
 const phaseCopy = {
   open: {
     line: "One of my payees changed bank details tonight. Think you can get past me?",
-    note: "No sign-up · messages on the door · back office tonight",
+    note: "Six messages, including bills · Street talk is free",
   },
   cracked: {
-    line: "People got in. The pot is splitting. The list stays up until reset.",
-    note: "The door is open · the ledger is still live",
+    line: "People got in. The ledger stays shut until this round closes.",
+    note: "Six messages, including bills · Street talk is free",
   },
   closed: {
     line: "Last call is over. The door is shut.",
-    note: "Reset is the next thing on this door",
+    note: "Check back for the next opening",
   },
 } as const;
 
@@ -68,7 +68,7 @@ export function HomeDoor({
       </a>
       <header className="relative z-20 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 px-4 py-3 sm:absolute sm:inset-x-0 sm:top-0 sm:flex-nowrap">
         <span className="order-1 font-sign text-lg drop-shadow">BOUNCER</span>
-        <div className="order-3 flex w-full flex-wrap items-center gap-1.5 sm:order-2 sm:ml-auto sm:w-auto sm:flex-nowrap sm:justify-end sm:gap-2">
+        <div className="order-3 flex w-full items-center gap-1.5 sm:order-2 sm:ml-auto sm:w-auto sm:flex-nowrap sm:justify-end sm:gap-2">
           <NetworkTag label={networkTag} className="whitespace-nowrap bg-black/40 text-chalk/80 backdrop-blur" />
           <span className="cursor-default select-none font-mono text-xs text-chalk/80">Queue</span>
           {vault ? <span className="font-mono text-xs text-chalk/80">{vault.crackCount} in</span> : null}
@@ -160,6 +160,12 @@ export function HomeDoor({
             </p>
           )}
           <p className="mt-3 text-center text-sm text-chalk/60">{vault ? phaseCopy[phase].note : "Nothing on this door was filled in."}</p>
+          <p className="mt-3 text-center text-xs leading-relaxed text-chalk/70">Test tokens have no cash value. Playing costs no money.</p>
+          <p className="text-center">
+            <Link href="/#how-to-play" className="chalk-focus inline-flex min-h-11 items-center text-sm text-chalk/80 underline decoration-white/20">
+              How to play
+            </Link>
+          </p>
           <p className="mt-2 text-center text-sm">
             <Link href={`${base}/reveal`} className="chalk-focus inline-flex min-h-11 items-center text-chalk/80 underline decoration-white/20">
               Last night&apos;s door
@@ -172,9 +178,9 @@ export function HomeDoor({
       <div className="mx-auto mt-8 grid min-w-0 max-w-5xl gap-8 px-4 lg:grid-cols-2">
         <section className="min-w-0">
           <h2 className="font-sign text-lg">Down the street</h2>
-          <div className="night-scroll mt-3 flex gap-3 overflow-x-auto pb-2">
+          <div className="mt-3 grid grid-cols-1 gap-3 min-[360px]:grid-cols-2 sm:grid-cols-3 lg:grid-cols-2">
             {otherDoors.map((door) => (
-              <Link key={door.name} href={door.href} className="chalk-focus w-40 shrink-0 overflow-hidden rounded-2xl border border-white/10 bg-night-2">
+              <Link key={door.name} href={door.href} className="chalk-focus min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-night-2">
                 <DoorScene
                   sign={door.sign}
                   neighbors={false}
@@ -193,7 +199,7 @@ export function HomeDoor({
             ))}
           </div>
         </section>
-        <section>
+        <section className="min-w-0">
           <h2 className="font-sign text-lg">Your wristband</h2>
           <div className="mt-3 space-y-2">
             {wristbands.map((band) => (

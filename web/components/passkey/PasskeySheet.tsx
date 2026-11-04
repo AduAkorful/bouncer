@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { deriveSecrets, unlockDevice } from "@/lib/device-pass";
 import { accessMessage, accessOnAccount, testnetAccountId, writePayoutAccount } from "@/lib/imported-account";
 
@@ -26,11 +26,30 @@ export function PasskeySheet({
   const [accountId, setAccountId] = useState<string | null>(null);
   const [publicKey, setPublicKey] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const request = useRef<AbortController | null>(null);
+  useEffect(() => () => {
+    request.current?.abort();
+    request.current = null;
+  }, []);
+
+  async function unlock() {
+    request.current?.abort();
+    const controller = new AbortController();
+    request.current = controller;
+    const result = await unlockDevice(controller.signal, "create");
+    if (request.current !== controller) {
+      if ("ikm" in result) result.ikm.fill(0);
+      return null;
+    }
+    request.current = null;
+    return result;
+  }
 
   async function create() {
     setStep("signing");
     setDetail(null);
-    const unlocked = await unlockDevice();
+    const unlocked = await unlock();
+    if (!unlocked) return;
     if ("error" in unlocked) {
       setStep("error");
       setDetail(unlocked.error);
@@ -56,7 +75,8 @@ export function PasskeySheet({
     }
     setStep("signing");
     setDetail(null);
-    const unlocked = await unlockDevice();
+    const unlocked = await unlock();
+    if (!unlocked) return;
     if ("error" in unlocked) {
       setStep("error");
       setDetail(unlocked.error);
@@ -99,7 +119,7 @@ export function PasskeySheet({
         <h1 className="mt-2 font-sign text-3xl leading-none">{step === "done" ? "Saved." : step === "add" ? "Add this key" : "Save your streak"}</h1>
         {step === "create" && (
           <>
-            <p className="mt-3 text-sm text-chalk/70">One passkey on this phone. No seed phrase, no password. Clearing this site does not remove it.</p>
+            <p className="mt-3 text-sm text-chalk/70">Use a passkey from your device or password manager. No seed phrase, no password. Clearing this site does not remove it.</p>
             <button onClick={() => void create()} className="mt-6 w-full rounded-2xl bg-chalk py-4 font-sign text-lg text-ink shadow-[0_5px_0_#9c9483]">
               Create passkey
             </button>
@@ -118,7 +138,9 @@ export function PasskeySheet({
         {step === "signing" && (
           <div className="mt-8 mb-6 text-center">
             <div className="mx-auto size-16 animate-pulse rounded-full border-2 border-uv" />
-            <p className="mt-4 font-sign text-xl">Waiting for this phone</p>
+            <p role="status" className="mt-4 font-sign text-xl">Waiting for your passkey</p>
+            <p className="mt-3 text-sm text-chalk/70">Follow your browser’s prompt. Use your device or password manager, or your phone if the browser offers a QR code.</p>
+            <button type="button" onClick={() => request.current?.abort()} className="chalk-focus mt-4 min-h-11 rounded-full border border-chalk/30 px-5 text-sm">Cancel</button>
           </div>
         )}
         {step === "add" && accountId && publicKey && (
@@ -156,7 +178,7 @@ export function PasskeySheet({
             </Link>
           </>
         )}
-        <Link href="/" className="mt-6 inline-block text-sm text-chalk/70 underline decoration-white/20">
+        <Link href="/home" className="mt-6 inline-block text-sm text-chalk/70 underline decoration-white/20">
           Back to the door
         </Link>
       </div>

@@ -341,10 +341,10 @@ function HeadBack({ look }: { look: Look }) {
   if (look.head !== "braids") return null;
   return (
     <g stroke={look.headColor} strokeWidth="3.4" strokeLinecap="round" fill="none">
-      <path d="M-15,-2 Q-20,14 -18,32" />
-      <path d="M-11,0 Q-14,16 -12,34" />
-      <path d="M15,-2 Q20,14 18,32" />
-      <path d="M11,0 Q14,16 12,34" />
+      <path d="M-15,-24 Q-23,-2 -18,32" />
+      <path d="M-11,-26 Q-18,-2 -12,34" />
+      <path d="M15,-24 Q23,-2 18,32" />
+      <path d="M11,-26 Q18,-2 12,34" />
     </g>
   );
 }
@@ -362,7 +362,7 @@ function HeadTop({ look, base, rim }: { look: Look; base: string; rim: string })
     case "lowcut":
       return <path d="M-17,-12 Q-18,-35 0,-35 Q18,-35 17,-12 Q12,-22 0,-23 Q-12,-22 -17,-12 Z" fill={c} opacity="0.95" />;
     case "afro":
-      return <path d="M-17,-11 Q-16,-31 0,-31 Q16,-31 17,-11 Q10,-20 0,-21 Q-10,-20 -17,-11 Z" fill={c} />;
+      return <path d="M-18,-10 Q-20,-37 0,-37 Q20,-37 18,-10 Q10,-20 0,-21 Q-10,-20 -18,-10 Z" fill={c} />;
     case "braids":
       return (
         <g>

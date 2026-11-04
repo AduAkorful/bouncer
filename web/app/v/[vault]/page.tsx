@@ -7,7 +7,7 @@ export const metadata = screen("A door", "A door run by a sponsor.");
 
 export default function Page({ params }: { params: Promise<{ vault: string }> }) {
   return (
-    <Suspense fallback={<NightShell door />}>
+    <Suspense fallback={<NightShell />}>
       <Resolved params={params} />
     </Suspense>
   );

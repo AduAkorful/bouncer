@@ -31,11 +31,13 @@ export async function readPageVault(rpc: Rpc, env: PageEnv, vaultId?: string): P
     if (id !== env.defaultVaultId) return { ok: false, error: "no story" };
     return { ok: true, page: { vaultId: id, vault, owner: door.owner, venueId: env.venue, card: null, specCt: null, currency: env.currency, decimals: env.decimals } };
   }
-  const spec = await rpc(viewRequest(env.contractId, "get_spec", { vault_id: id }));
+  const [spec, token] = await Promise.all([
+    rpc(viewRequest(env.contractId, "get_spec", { vault_id: id })),
+    readToken(rpc, env.contractId),
+  ]);
   const ct = spec.ok ? parseSpecCt(spec.value) : null;
   if (!ct || !ct.ok || ct.value === null) return { ok: false, error: "spec" };
   const parsed = parseCard(vault.card);
-  const token = await readToken(rpc, env.contractId);
   if (!token.ok) return { ok: false, error: "token" };
   return {
     ok: true,

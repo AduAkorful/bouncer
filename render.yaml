@@ -7,7 +7,7 @@ services:
     region: oregon
     plan: starter
     buildCommand: cd server && npm ci
-    startCommand: cd server && npx tsx src/index.ts
+    startCommand: cd server && NODE_PATH=$PWD/node_modules npx tsx src/index.ts
     healthCheckPath: /health
     autoDeploy: false
     envVars:

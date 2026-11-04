@@ -1,24 +1,42 @@
 import { parseOwner, parseRpcJson, parseVault, viewRequest, type VaultView } from "./vault.ts";
 
 export type Rpc = (request: ReturnType<typeof viewRequest>) => Promise<{ ok: true; value: unknown } | { ok: false; error: string }>;
+type RpcOptions = { timeoutMs?: number; signal?: AbortSignal };
 
-export function httpRpc(rpcUrl: string, fetchImpl: typeof fetch = fetch): Rpc {
+export function httpRpc(rpcUrl: string, fetchImpl: typeof fetch = fetch, options: RpcOptions = {}): Rpc {
   return async (request) => {
-    let response: Response;
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    options.signal?.addEventListener("abort", abort, { once: true });
+    if (options.signal?.aborted) abort();
+    const timer = setTimeout(abort, options.timeoutMs ?? 10_000);
+    let onAbort: () => void = () => {};
+    const aborted = new Promise<never>((_, reject) => {
+      onAbort = () => reject(new DOMException("RPC read aborted", "AbortError"));
+      controller.signal.addEventListener("abort", onAbort, { once: true });
+    });
     try {
-      response = await fetchImpl(rpcUrl, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(request),
-      });
+      controller.signal.throwIfAborted();
+      return await Promise.race([aborted, (async (): ReturnType<Rpc> => {
+        const response = await fetchImpl(rpcUrl, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(request),
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        controller.signal.throwIfAborted();
+        if (!response.ok) return { ok: false, error: "rpc" };
+        const body = await response.json();
+        controller.signal.throwIfAborted();
+        return parseRpcJson(body);
+      })()]);
     } catch {
       return { ok: false, error: "rpc" };
-    }
-    if (!response.ok) return { ok: false, error: "rpc" };
-    try {
-      return parseRpcJson(await response.json());
-    } catch {
-      return { ok: false, error: "rpc" };
+    } finally {
+      clearTimeout(timer);
+      options.signal?.removeEventListener("abort", abort);
+      controller.signal.removeEventListener("abort", onAbort);
     }
   };
 }

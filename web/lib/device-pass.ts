@@ -48,22 +48,47 @@ export async function importClaimKey(seed: Uint8Array): Promise<CryptoKey> {
 }
 
 /** Asks this device for its passkey. The same passkey returns the same bytes. */
-export async function unlockDevice(): Promise<Unlocked> {
+export async function unlockDevice(signal?: AbortSignal, mode: "get" | "create" = "get"): Promise<Unlocked> {
   if (typeof window === "undefined" || !window.PublicKeyCredential || !navigator.credentials) {
     return { error: "This phone cannot keep a key in the passkey." };
   }
   const host = window.location.hostname;
   if (!host) return { error: "This phone cannot keep a key in the passkey." };
+  const controller = new AbortController();
+  const cancel = () => controller.abort();
+  signal?.addEventListener("abort", cancel, { once: true });
+  if (signal?.aborted) cancel();
+  let timedOut = false;
+  const timer = setTimeout(() => { timedOut = true; controller.abort(); }, 60_000);
+  const active = controller.signal;
+  let onAbort: () => void = () => {};
+  const aborted = new Promise<never>((_, reject) => {
+    onAbort = () => reject(new DOMException("Passkey cancelled", "AbortError"));
+    active.addEventListener("abort", onAbort, { once: true });
+  });
   try {
-    const salt = await digest(PRF_LABEL);
-    const existing = await getPasskey(host, salt);
-    const credential = existing ?? (await createPasskey(host, salt));
-    const ikm = prfBytes(credential) ?? prfBytes(await getPasskey(host, salt, rawId(credential)));
-    if (!ikm || ikm.length !== 32) return { error: "This phone cannot keep a key in the passkey." };
-    return { ikm };
+    active.throwIfAborted();
+    return await Promise.race([aborted, (async (): Promise<Unlocked> => {
+      const salt = await digest(PRF_LABEL);
+      active.throwIfAborted();
+      const credential = mode === "create"
+        ? await createPasskey(host, salt, active)
+        : await getPasskey(host, salt, active);
+      active.throwIfAborted();
+      if (!credential) return { error: "No passkey was selected. Create one from the passkey page, or try again with your existing passkey." };
+      const ikm = prfBytes(credential) ?? prfBytes(await getPasskey(host, salt, active, rawId(credential)));
+      if (active.aborted) { ikm?.fill(0); active.throwIfAborted(); }
+      if (!ikm || ikm.length !== 32) return { error: "This passkey cannot unlock Bouncer. Try a passkey provider that supports secure key derivation (PRF)." };
+      return { ikm };
+    })()]);
   } catch (error) {
+    if (active.aborted) return { error: timedOut ? "The passkey request timed out. Try again when your device is ready." : "The passkey was cancelled." };
     if (error instanceof DOMException && error.name === "NotAllowedError") return { error: "The passkey was dismissed." };
     return { error: "This phone cannot keep a key in the passkey." };
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", cancel);
+    active.removeEventListener("abort", onAbort);
   }
 }
 
@@ -92,13 +117,15 @@ function prfExtension(salt: Uint8Array) {
   return { prf: { eval: { first: salt } } };
 }
 
-async function getPasskey(host: string, salt: Uint8Array, id?: BufferSource): Promise<PublicKeyCredential | null> {
+async function getPasskey(host: string, salt: Uint8Array, signal: AbortSignal, id?: BufferSource): Promise<PublicKeyCredential | null> {
   const challenge = new Uint8Array(32);
   crypto.getRandomValues(challenge);
   const credential = await navigator.credentials.get({
+    signal,
     publicKey: {
       challenge,
       rpId: host,
+      timeout: 60_000,
       userVerification: "required",
       allowCredentials: id ? [{ type: "public-key", id }] : [],
       extensions: prfExtension(salt) as AuthenticationExtensionsClientInputs,
@@ -107,15 +134,16 @@ async function getPasskey(host: string, salt: Uint8Array, id?: BufferSource): Pr
   return credential instanceof PublicKeyCredential ? credential : null;
 }
 
-async function createPasskey(host: string, salt: Uint8Array): Promise<PublicKeyCredential> {
+async function createPasskey(host: string, salt: Uint8Array, signal: AbortSignal): Promise<PublicKeyCredential> {
   const challenge = new Uint8Array(32);
   const user = new Uint8Array(16);
   crypto.getRandomValues(challenge);
   crypto.getRandomValues(user);
   const credential = await navigator.credentials.create({
+    signal,
     publicKey: {
       rp: { name: "Bouncer", id: host },
-      user: { id: user, name: "player", displayName: "Player" },
+      user: { id: user, name: `bouncer-${[...user.slice(0, 4)].map((b) => b.toString(16).padStart(2, "0")).join("")}`, displayName: "Bouncer player" },
       challenge,
       pubKeyCredParams: [
         { type: "public-key", alg: -7 },

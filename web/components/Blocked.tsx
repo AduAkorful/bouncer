@@ -7,7 +7,7 @@ export function Blocked({ title, detail }: { title: string; detail: string }) {
         <p className="font-mono text-xs uppercase tracking-[0.22em] text-chalk/80">Unavailable</p>
         <h1 className="mt-2 font-sign text-3xl leading-none">{title}</h1>
         <p className="mt-3 text-sm text-chalk/70">{detail}</p>
-        <Link href="/" className="mt-6 inline-block text-sm text-chalk/70 underline decoration-white/20">
+        <Link href="/home" className="chalk-focus mt-6 inline-flex min-h-11 items-center text-sm text-chalk/80 underline decoration-white/20">
           Back to the door
         </Link>
       </div>

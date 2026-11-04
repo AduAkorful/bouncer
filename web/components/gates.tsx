@@ -22,7 +22,7 @@ async function load(vaultId?: string): Promise<Loaded> {
   const labels = publicLabels();
   if (!labels) return { ok: false, detail: UNSET };
   const page = await readPageVault(
-    httpRpc(labels.rpcUrl),
+    httpRpc(labels.rpcUrl, fetch, { signal: AbortSignal.timeout(12_000) }),
     { contractId: labels.contractId, defaultVaultId: labels.vaultId, currency: labels.currency, decimals: labels.decimals, venue: labels.venue },
     vaultId,
   );

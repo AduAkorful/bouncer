@@ -11,13 +11,13 @@ export default function SettingsPage() {
         <h1 className="mt-1 font-sign text-3xl">This device</h1>
         <p className="mt-2 text-sm text-chalk/65">No account is stored here yet.</p>
         <div className="mt-8 space-y-2">
-          <Link href="/profile" className="block rounded-2xl border border-white/10 px-4 py-3">
+          <Link href="/profile" className="chalk-focus flex min-h-11 items-center rounded-2xl border border-white/10 px-4 py-3">
             Profile
           </Link>
-          <Link href="/passkey" className="block rounded-2xl border border-white/10 px-4 py-3">
+          <Link href="/passkey" className="chalk-focus flex min-h-11 items-center rounded-2xl border border-white/10 px-4 py-3">
             Passkey
           </Link>
-          <Link href="/" className="block rounded-2xl border border-white/10 px-4 py-3">
+          <Link href="/home" className="chalk-focus flex min-h-11 items-center rounded-2xl border border-white/10 px-4 py-3">
             The door
           </Link>
         </div>

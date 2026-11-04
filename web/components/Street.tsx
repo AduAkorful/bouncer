@@ -23,6 +23,9 @@ export function SuyaStand({ x, p, rim, gossip, index }: { x: number; p: string; 
   return (
     <g transform={`translate(${x} 0)`}>
       <defs>
+        <clipPath id={`${p}-vendor-upper`}>
+          <rect x="-40" y="70" width="80" height="102" />
+        </clipPath>
         <radialGradient id={`${p}-coal`} cx="0.5" cy="0.5" r="0.5">
           <stop offset="0" stopColor="#ff9a4a" stopOpacity="0.85" />
           <stop offset="1" stopColor="#ff6a2a" stopOpacity="0" />
@@ -39,7 +42,9 @@ export function SuyaStand({ x, p, rim, gossip, index }: { x: number; p: string; 
       <circle className="bulb-warm" cx="0" cy="125" r="3.2" fill="#fff1c8" />
       <ellipse cx="0" cy="225" rx="64" ry="7" fill="#ffb060" opacity="0.14" />
 
-      <Goer x={4} y={208} s={0.8} look={VENDOR} rim="#ffb060" dark={0.15} index={index} gossip={gossip} />
+      <g clipPath={`url(#${p}-vendor-upper)`}>
+        <Goer x={4} y={208} s={0.8} look={VENDOR} rim="#ffb060" dark={0.15} index={index} gossip={gossip} />
+      </g>
 
       {/* Cart */}
       <g data-learn="food" style={gossip ? { cursor: "pointer" } : undefined}>
@@ -189,6 +194,9 @@ export function NextDoor({ x, p, ad, kiosk, hints }: { x: number; p: string; ad:
           <stop offset="0" stopColor="#ffe2a0" stopOpacity="0.14" />
           <stop offset="1" stopColor="#ffe2a0" stopOpacity="0" />
         </radialGradient>
+        <clipPath id={`${p}-kiosk-opening`}>
+          <rect x="152" y="158" width="66" height="48" />
+        </clipPath>
       </defs>
       <rect x="0" y="-400" width="500" height="622" fill="#1f1b26" />
       {/* Damp patches on old plaster */}
@@ -237,7 +245,6 @@ export function NextDoor({ x, p, ad, kiosk, hints }: { x: number; p: string; ad:
       <g transform="translate(-120 0)" data-learn="kiosk" style={hints ? { cursor: "pointer" } : undefined}>
       <rect x="150" y="150" width="70" height="72" fill="#16131b" />
       <rect x="152" y="162" width="66" height="44" fill="#1f2a30" />
-      <Goer x={200} y={232} s={0.62} look={KEEPER} rim="#dff4ff" dark={0.2} />
       <rect className="tube" x="156" y="154" width="58" height="3" rx="1.5" fill="#dff4ff" />
       <rect className="tube" x="152" y="157" width="66" height="50" fill="#dff4ff" opacity="0.1" />
       <g>
@@ -246,6 +253,9 @@ export function NextDoor({ x, p, ad, kiosk, hints }: { x: number; p: string; ad:
             <rect key={`${r}${c}`} x={156 + c * 10} y={166 + r * 12} width="7" height="8" rx="1" fill={["#cfa349", "#b3243a", "#3b4a8f", "#2c6e49", "#efe8da", "#8f6bff"][(r + c) % 6]} opacity="0.75" />
           )),
         )}
+      </g>
+      <g data-kiosk-attendant clipPath={`url(#${p}-kiosk-opening)`}>
+        <Goer x={200} y={232} s={0.62} look={KEEPER} rim="#dff4ff" dark={0.2} />
       </g>
       <rect x="146" y="206" width="78" height="6" fill="#2a2234" />
       <rect x="146" y="128" width="78" height="18" fill="#efe8da" />
@@ -265,10 +275,15 @@ export function NextDoor({ x, p, ad, kiosk, hints }: { x: number; p: string; ad:
   );
 }
 
-/** An Accra taxi at the kerb, engine running, driver's elbow out of the window. */
-export function Taxi({ x, rim, gossip, index }: { x: number; rim: string; gossip: boolean; index: number }) {
+/** An Accra taxi at the kerb, engine running, driver's elbow resting at the window. */
+export function Taxi({ x, p, rim, gossip, index }: { x: number; p: string; rim: string; gossip: boolean; index: number }) {
   return (
     <g transform={`translate(${x} 0)`}>
+      <defs>
+        <clipPath id={`${p}-driver-window`}>
+          <path d="M-56,214 Q-48,200 -30,199 L-4,199 L-4,214 Z" />
+        </clipPath>
+      </defs>
       <ellipse cx="0" cy="256" rx="84" ry="5" fill="#000" opacity="0.6" />
       {/* Headlight beam reaching left along the kerb */}
       <path d="M-78,236 L-200,214 L-200,262 Z" fill="#fff6d8" opacity="0.08" />
@@ -295,10 +310,11 @@ export function Taxi({ x, rim, gossip, index }: { x: number; rim: string; gossip
       <LearnBadge x={40} y={228} show={gossip} />
       {/* Driver */}
       <g data-person={index} style={gossip ? { cursor: "pointer" } : undefined}>
-        <circle cx="-22" cy="204" r="6.5" fill="#3b2417" />
-        <path d="M-28,214 Q-28,209 -22,208 Q-16,209 -16,214 Z" fill="#efe8da" />
-        <path d="M-34,214 L-40,210 L-42,214 Z" fill="#3b2417" />
-        <rect x="-44" y="210" width="16" height="5" rx="2.5" fill="#efe8da" />
+        <g data-taxi-driver clipPath={`url(#${p}-driver-window)`}>
+          <circle cx="-22" cy="205" r="5.5" fill="#3b2417" />
+          <path d="M-29,216 Q-29,210 -22,209 Q-15,210 -15,216 Z" fill="#efe8da" />
+          <path d="M-24,212 L-35,212" stroke="#3b2417" strokeWidth="3" strokeLinecap="round" />
+        </g>
         {gossip && <rect x="-46" y="190" width="34" height="26" fill="transparent" />}
         {gossip && (
           <g className="gossip-hint" transform="translate(-22 180)">

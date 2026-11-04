@@ -231,7 +231,7 @@ export function ClaimDoor({
         {error ? <p className="mt-4 text-sm text-chalk/70">{error}</p> : phase === null && !missing ? <p className="mt-4 text-sm text-chalk/70">Reading this claim.</p> : null}
         {missing && (
           <button disabled={busy} onClick={() => void recover()} className="mt-4 w-full rounded-2xl bg-chalk py-4 font-sign text-lg text-ink disabled:opacity-40">
-            {busy ? "Waiting for this phone" : "Use this phone's passkey"}
+            {busy ? "Waiting for your passkey" : "Use this phone's passkey"}
           </button>
         )}
         {phase === "locked" && crack && (
