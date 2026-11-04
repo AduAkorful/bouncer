@@ -26,6 +26,31 @@ test("only the site's origin is answered, and preflight is handled", async () =>
   assert.equal(bare.status, 200);
 });
 
+test("browser sponsor preflights allow the signed header without executing a guard call", async () => {
+  const { deps, posts } = testDeps();
+  const app = createApp(deps);
+  for (const path of ["/sponsor/draft", "/sponsor/check", "/sponsor/seal", "/sponsor/commit"]) {
+    const response = await app.request(path, {
+      method: "OPTIONS",
+      headers: { origin: ORIGIN, "access-control-request-method": "POST", "access-control-request-headers": "content-type,x-sponsor-auth" },
+    });
+    assert.equal(response.status, 204);
+    assert.equal(response.headers.get("access-control-allow-origin"), ORIGIN);
+    const allowed = response.headers.get("access-control-allow-headers")!.toLowerCase().split(",").map((h) => h.trim());
+    assert.ok(allowed.includes("content-type"));
+    assert.ok(allowed.includes("x-sponsor-auth"), path);
+    assert.equal(allowed.includes("*"), false);
+  }
+  assert.equal(posts.length, 0);
+  const denied = await app.request("/sponsor/draft", {
+    method: "OPTIONS", headers: { origin: "https://evil.test", "access-control-request-method": "POST", "access-control-request-headers": "x-sponsor-auth" },
+  });
+  assert.equal(denied.status, 403);
+  assert.equal(denied.headers.get("access-control-allow-origin"), null);
+  assert.equal((await app.request("/sponsor/draft", post("/sponsor/draft", { story: "hello", decimals: 6 }))).status, 401);
+  assert.equal(posts.length, 0);
+});
+
 test("a body over the limit is refused", async () => {
   const app = createApp(testDeps().deps);
   const res = await app.request("/guard", post("/guard", { op: "say", pad: "x".repeat(100_000) }));

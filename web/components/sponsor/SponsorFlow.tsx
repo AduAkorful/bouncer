@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiPost } from "@/lib/api";
 import { buildCard, MAX_NAME, MAX_PITCH, MAX_SIGN, type Card } from "@/lib/card";
 import { httpRpc } from "@/lib/chain";
@@ -9,6 +9,7 @@ import { PARTS, SKINS } from "@/lib/look";
 import { preflightCommit, preflightCreate, preflightFund, preflightKeeper, preflightReclaim, preflightSetSpec, validVaultId, type Check, type Funds } from "@/lib/preflight";
 import { chainNowNs, connectSponsor, readChain, readFunds, readVault, vaultRegistered, type Chain, type Sponsor } from "@/lib/sponsor-client";
 import { sponsorStep } from "@/lib/sponsor-state";
+import { runSponsorAction, sponsorDetail } from "@/lib/sponsor-action";
 import { createBytes, depositFor, specBytes } from "@/lib/storage-cost";
 import { fromBaseUnits, toBaseUnits } from "@/lib/token";
 import { commitRound, createSponsorVault, fund, reclaim, setKeeper, setSpec, type Call } from "@/lib/vault-calls";
@@ -39,7 +40,13 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
   const [vaultId, setVaultId] = useState("");
   const [vault, setVault] = useState<VaultView | null>(null);
   const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ text: string } | null>(null);
+  const [readNotice, setReadNotice] = useState<string | null>(null);
+  const noticeRef = useRef<HTMLParagraphElement>(null);
+
+  useEffect(() => {
+    if (notice) noticeRef.current?.scrollIntoView({ block: "nearest", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  }, [notice]);
 
   const [story, setStory] = useState("");
   const [specText, setSpecText] = useState(() => JSON.stringify({ ...SAMPLE_SPEC, salt: "" }, null, 2));
@@ -60,13 +67,18 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
 
   const refresh = useCallback(async () => {
     if (!sponsor || !chain) return;
-    const [f, v] = await Promise.all([
-      readFunds(rpc, rpcUrl, chain.tokenId, sponsor.accountId),
-      vaultId && validVaultId(vaultId) ? readVault(rpc, contractId, vaultId) : Promise.resolve({ ok: true as const, vault: null }),
-    ]);
-    setFunds(f);
-    if (v.ok) setVault(v.vault);
-    else setNotice("The vault did not answer.");
+    try {
+      const [f, v] = await Promise.all([
+        readFunds(rpc, rpcUrl, chain.tokenId, sponsor.accountId),
+        vaultId && validVaultId(vaultId) ? readVault(rpc, contractId, vaultId) : Promise.resolve({ ok: true as const, vault: null }),
+      ]);
+      setFunds(f);
+      if (v.ok) setVault(v.vault);
+      setReadNotice(!v.ok ? "The vault did not answer." : !f ? "The balances did not answer." : null);
+    } catch {
+      setFunds(null);
+      setReadNotice("The balances and vault could not be refreshed. Try again.");
+    }
   }, [sponsor, chain, rpc, rpcUrl, contractId, vaultId]);
 
   useEffect(() => {
@@ -74,14 +86,8 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
   }, [refresh]);
 
   const run = async (work: () => Promise<string | null>) => {
-    setBusy(true);
-    setNotice(null);
-    try {
-      setNotice(await work());
-    } finally {
-      setBusy(false);
-      await refresh();
-    }
+    await runSponsorAction(work, { busy: setBusy, notice: (text) => setNotice(text === null ? null : { text }) });
+    await refresh();
   };
 
   const connect = () =>
@@ -120,7 +126,7 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
     await run(async () => {
       const answer = await apiPost("/sponsor/draft", { story, decimals }, sponsor?.authHeaders("/sponsor/draft"));
       const body = (answer.ok ? answer.body : null) as { ok?: boolean; spec?: unknown; detail?: string; error?: string } | null;
-      if (!body?.ok) return body?.detail ?? "The draft did not come back. Write it by hand or try again.";
+      if (!body?.ok || !body.spec || typeof body.spec !== "object" || Array.isArray(body.spec)) return sponsorDetail(body, "The draft did not come back. Write it by hand or try again.");
       setSpecText(JSON.stringify(body.spec, null, 2));
       setReport(null);
       return "Draft ready. Read it, edit it, then run the test.";
@@ -146,7 +152,7 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
       if (cap === null || cap <= 0n) return "Enter a cap above zero.";
       const answer = await apiPost("/sponsor/check", { spec, cap: cap.toString() }, sponsor?.authHeaders("/sponsor/check"));
       const body = (answer.ok ? answer.body : null) as { ok?: boolean; pass?: boolean; failures?: string[]; warnings?: string[]; detail?: string } | null;
-      if (!body?.ok) return body?.detail ?? "The test did not run.";
+      if (!body?.ok || typeof body.pass !== "boolean" || !Array.isArray(body.failures) || !body.failures.every((f) => typeof f === "string") || !Array.isArray(body.warnings) || !body.warnings.every((w) => typeof w === "string")) return sponsorDetail(body, "The test did not run. Try again.");
       setSpecText(JSON.stringify(spec, null, 2));
       setReport({ pass: body.pass === true, failures: body.failures ?? [], warnings: body.warnings ?? [] });
       return null;
@@ -180,7 +186,7 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
       if (spec.hint !== undefined && !ackHint) return "Confirm the hint first.";
       const sealed = await apiPost("/sponsor/seal", { vault_id: vaultId, spec, cap: capUnits.toString(), ack_hint: ackHint }, sponsor.authHeaders("/sponsor/seal"));
       const body = (sealed.ok ? sealed.body : null) as { ok?: boolean; spec_ct?: string; spec_hash?: string; detail?: string } | null;
-      if (!body?.ok || typeof body.spec_ct !== "string" || typeof body.spec_hash !== "string") return body?.detail ?? "The story could not be sealed.";
+      if (!body?.ok || typeof body.spec_ct !== "string" || typeof body.spec_hash !== "string") return sponsorDetail(body, "The story could not be sealed.");
       const ctBytes = body.spec_ct.length / 2;
       const deposit = depositFor(specBytes(ctBytes, builtCard.text, vaultId), chain.byteCost);
       const check = preflightSetSpec({ limits: chain.limits, vault, accountId: sponsor.accountId, ctBytes, card: builtCard.text, depositYocto: deposit, funds });
@@ -248,7 +254,9 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
         <p className="text-sm text-chalk/70">
           You write the story, fund a pot, and the guard runs your door every night. The story passes through this site&apos;s server and the guard in plaintext, and the draft uses a model. Testnet only.
         </p>
-        {notice ? <p role="status" className="rounded-xl border border-white/15 px-4 py-3 text-sm">{notice}</p> : null}
+        {busy ? <p role="status" className="text-sm text-chalk/80">Working on this step…</p> : null}
+        {notice ? <p ref={noticeRef} role="status" className="rounded-xl border border-white/15 px-4 py-3 text-sm">{notice.text}</p> : null}
+        {readNotice ? <p role="status" className="text-sm text-chalk/70">{readNotice}</p> : null}
 
         <section className={box}>
           <h2 className="font-sign text-lg">1 · Your account</h2>
@@ -263,7 +271,7 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
             <div className="mt-2 space-y-1 text-sm">
               <p className="font-mono break-all">{sponsor.accountId}</p>
               <p className="text-chalk/70">
-                {nothing ? "Reading balances…" : `${fromBaseUnits(funds.nearYocto, 24)} NEAR · ${fromBaseUnits(funds.tokenUnits, decimals)} ${symbol}`}
+                {nothing ? (readNotice ? "Balances unavailable." : "Reading balances…") : `${fromBaseUnits(funds.nearYocto, 24)} NEAR · ${fromBaseUnits(funds.tokenUnits, decimals)} ${symbol}`}
               </p>
               <p className="text-chalk/60">You need {symbol} for the pot and a little NEAR for storage. This site does not send you either.</p>
             </div>

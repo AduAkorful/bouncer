@@ -51,7 +51,7 @@ export function createApp(deps: Deps) {
       c.header("access-control-allow-origin", origin);
       c.header("vary", "origin");
       c.header("access-control-allow-methods", "GET, POST, OPTIONS");
-      c.header("access-control-allow-headers", "content-type");
+      c.header("access-control-allow-headers", "content-type, x-sponsor-auth");
       c.header("access-control-max-age", "600");
     }
     if (c.req.method === "OPTIONS") return c.body(null, 204);
