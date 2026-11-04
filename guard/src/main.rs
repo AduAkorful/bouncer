@@ -14,7 +14,7 @@ static OUTLAYER_MANIFEST: [u8; include_bytes!("../manifest.json").len()] = *incl
 #[cfg(all(target_arch = "wasm32", target_os = "wasi"))]
 mod entry {
     use guard::{
-        door_from_reports, handle, Budget, Chain, DoorView, Host, Model, Random, Signer, MAX_TOKENS,
+        door_from_reports, handle, Budget, Chain, DoorView, Host, Model, Random, Sealer, Signer, MAX_TOKENS,
         MODEL_ID, TEMPERATURE_MILLI,
     };
 
@@ -39,6 +39,7 @@ mod entry {
             chain: VaultDoor,
             random: OsRandom,
             budget: Marks,
+            sealer: Box::new(SpecKey),
         };
         let output = scrub(handle(&input, &mut host), &seed);
         outlayer::env::output_string(&output);
@@ -137,6 +138,19 @@ mod entry {
         }
     }
 
+    /// The project's `spec` encryption key. The host seals and opens. The guest never holds it.
+    struct SpecKey;
+
+    impl Sealer for SpecKey {
+        fn seal(&self, aad: &[u8], plain: &[u8]) -> Result<Vec<u8>, ()> {
+            outlayer::encryption_keys::encrypt("spec", None, plain, aad).map_err(|_| ())
+        }
+
+        fn open(&self, aad: &[u8], ciphertext: &[u8]) -> Result<Vec<u8>, ()> {
+            outlayer::encryption_keys::decrypt("spec", None, ciphertext, aad).map_err(|_| ())
+        }
+    }
+
     struct OsRandom;
 
     impl Random for OsRandom {
@@ -163,6 +177,22 @@ mod entry {
                 panic!("mark");
             }
         }
+
+        fn last(&self, key: &str) -> Option<(String, String)> {
+            let bytes = outlayer::storage::get_worker(&reply_key(key)).ok()??;
+            let row: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
+            Some((row.get("hash")?.as_str()?.to_string(), row.get("response")?.as_str()?.to_string()))
+        }
+
+        fn keep(&mut self, key: &str, hash: &str, response: &str) -> Result<(), ()> {
+            let row = serde_json::json!({"hash": hash, "response": response});
+            let bytes = serde_json::to_vec(&row).map_err(|_| ())?;
+            outlayer::storage::set_worker(&reply_key(key), &bytes).map_err(|_| ())
+        }
+    }
+
+    fn reply_key(key: &str) -> String {
+        format!("reply:{key}")
     }
 
     fn mark_key(key: &str) -> String {

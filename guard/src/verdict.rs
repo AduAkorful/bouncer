@@ -12,6 +12,7 @@ pub const GENERATOR: [u8; 32] = [
 
 pub const VERDICT_DOMAIN: &[u8] = b"bouncer.verdict.v1";
 pub const REVEAL_DOMAIN: &[u8] = b"bouncer.reveal.v1";
+pub const COMMIT_DOMAIN: &[u8] = b"bouncer.commit.v1";
 
 #[derive(BorshSerialize)]
 pub struct VerdictBody {
@@ -78,6 +79,21 @@ pub fn reveal_bytes(
     };
     let encoded = borsh::to_vec(&body).map_err(|_| "borsh")?;
     Ok(domain_bytes(REVEAL_DOMAIN, &encoded))
+}
+
+#[derive(BorshSerialize)]
+struct CommitBody {
+    vault_id: String,
+    round: u64,
+    commitment: [u8; 32],
+    guard_version: [u8; 32],
+}
+
+/// What the vault checks before it accepts a round: the guard signed this commitment and version.
+pub fn commit_bytes(vault_id: &str, round: u64, commitment: [u8; 32], guard_version: [u8; 32]) -> Result<Vec<u8>, &'static str> {
+    let body = CommitBody { vault_id: vault_id.to_string(), round, commitment, guard_version };
+    let encoded = borsh::to_vec(&body).map_err(|_| "borsh")?;
+    Ok(domain_bytes(COMMIT_DOMAIN, &encoded))
 }
 
 pub fn bill_hash(payee: &str, reference: &str, item: &str, qty: u128, unit: u128) -> Result<[u8; 32], &'static str> {

@@ -27,6 +27,8 @@ pub struct Session {
     pub rule: u8,
     pub used: u8,
     pub transcript: Vec<Turn>,
+    /// Set for a sponsor's story. Every later call must carry a spec that hashes to this.
+    pub spec_hash: Option<[u8; 32]>,
 }
 
 impl Session {
@@ -70,7 +72,7 @@ pub fn unseal(blob: &str, seed: &[u8; 32], vault_id: &str, round: u64, player_id
 }
 
 fn blob_key(seed: &[u8; 32], vault_id: &str, round: u64, player_id: &str) -> Result<[u8; 32], &'static str> {
-    let hk = Hkdf::<Sha256>::new(Some(b"bouncer.blob.v1"), seed);
+    let hk = Hkdf::<Sha256>::new(Some(b"bouncer.blob.v2"), seed);
     let mut info = Vec::new();
     info.push(u8::try_from(vault_id.len()).map_err(|_| "bad id")?);
     info.extend(vault_id.as_bytes());

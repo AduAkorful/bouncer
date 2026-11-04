@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Countdown } from "@/components/Countdown";
+import { apiPost } from "@/lib/api";
 import { Money, NetworkTag } from "@/components/bits";
 import { playableRaid } from "@/lib/door";
 import { revealChecksOut } from "@/lib/reveal";
@@ -19,6 +20,7 @@ export function RevealDoor({
   decimals,
   storageName,
   venueId,
+  specCt = null,
   networkTag,
   shut,
 }: {
@@ -28,6 +30,8 @@ export function RevealDoor({
   decimals: number;
   storageName: string;
   venueId: string;
+  /** The sponsor's sealed story for a custom vault, so the guard can rebuild the ledger. */
+  specCt?: string | null;
   networkTag: string;
   shut: boolean;
 }) {
@@ -50,18 +54,15 @@ export function RevealDoor({
         if (!cancel) setError("The door did not answer. The ledger stays shut.");
         return;
       }
-      const response = await fetch("/api/guard", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          op: "reveal",
-          vault_id: vaultId,
-          round: Number(vault.round),
-          player_id: raid.playerId,
-          venue: venueId,
-        }),
+      const sent = await apiPost("/guard", {
+        op: "reveal",
+        vault_id: vaultId,
+        round: Number(vault.round),
+        player_id: raid.playerId,
+        venue: venueId,
+        ...(specCt ? { spec_ct: specCt } : {}),
       });
-      const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+      const body = (sent.ok ? sent.body : null) as Record<string, unknown> | null;
       if (!body || body.ok !== true) {
         if (!cancel) setError("The door did not answer. The ledger stays shut.");
         return;

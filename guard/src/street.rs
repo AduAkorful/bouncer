@@ -85,3 +85,21 @@ fn queue(venue: Venue, payable: Option<&Line>) -> Vec<Value> {
         }),
     ]
 }
+
+/// What a player can overhear at a sponsor's door: the payee names, and the hint filled from the
+/// first unpaid line that has a reference. A spec with no hint gives the payees only.
+pub fn street_custom(spec: &crate::spec::Spec, lines: &[Line]) -> Value {
+    let payees: Vec<&str> = lines.iter().map(|line| line.payee.as_str()).collect();
+    let heard = spec.hint.as_ref().and_then(|hint| {
+        let line = lines.iter().find(|line| !line.paid && !line.reference.is_empty())?;
+        let amount = crate::ledger::money_d(line.total, spec.decimals);
+        let text = hint.replace("{payee}", &line.payee).replace("{reference}", &line.reference).replace("{amount}", &amount);
+        let note = format!("{} · {} · {}", line.payee, line.reference, amount);
+        Some(json!({"text": text, "note": note}))
+    });
+    let queue = match heard {
+        Some(heard) => vec![json!({"who": "Someone in the queue", "lines": [heard]})],
+        None => Vec::new(),
+    };
+    json!({"payees": payees, "poster": [], "queue": queue})
+}

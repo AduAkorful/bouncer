@@ -63,7 +63,7 @@ fn split_three_crackers_leave_a_remainder() {
     world.contract.set_guard_key("velvet".into(), guard.pk().to_vec());
     assert_eq!(deposit(&mut world, "velvet", &id(SPONSOR), 100, 0), 0);
     world.at(OWNER, 0);
-    world.contract.commit_round("velvet".into(), hash(9), hash(8), 0);
+    commit(&mut world, &guard, "velvet", hash(9), hash(8), 0);
     let mut door = Door { world, guard, claim, vault_id: "velvet".into() };
     assert_eq!(door.vault().day_pot, 100);
     for (raid, player, bill) in [("r1", "p1", 1u8), ("r2", "p2", 2), ("r3", "p3", 3)] {
@@ -102,7 +102,7 @@ fn cap_change_applies_on_the_next_round_only() {
     door.world.at(OWNER, 1);
     door.world.contract.close_round(door.vault_id.clone());
     door.world.contract.set_cap(door.vault_id.clone(), 50);
-    door.world.contract.commit_round(door.vault_id.clone(), hash(7), hash(8), DAY_NS);
+    commit(&mut door.world, &door.guard, &door.vault_id.clone(), hash(7), hash(8), DAY_NS);
     assert_eq!(door.crack(1, "r1").amount, 100);
     assert_eq!(door.vault().cap, 50);
     assert_eq!(door.vault().round, 2);

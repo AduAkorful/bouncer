@@ -25,7 +25,7 @@ sha2 = "0.10"
 
 [target.'cfg(all(target_arch = "wasm32", target_os = "wasi"))'.dependencies]
 getrandom = "0.2"
-outlayer = { version = "0.2.1", features = ["signing-keys"] }
+outlayer = { version = "0.2.1", features = ["signing-keys", "encryption-keys"] }
 wasi-http-client = "0.2.1"
 
 [dev-dependencies]

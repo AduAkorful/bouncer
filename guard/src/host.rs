@@ -28,6 +28,18 @@ pub trait Budget {
     /// Highest `used` already accepted for this vault, round, and player.
     fn seen(&self, key: &str) -> u8;
     fn record(&mut self, key: &str, used: u8);
+    /// The last reply the guard gave this player, with the hash of the call that earned it.
+    /// A retry of that call after a lost reply is answered from here.
+    fn last(&self, key: &str) -> Option<(String, String)>;
+    /// Store the reply before the mark is recorded. An error stops the turn.
+    fn keep(&mut self, key: &str, hash: &str, response: &str) -> Result<(), ()>;
+}
+
+/// Seals and opens a sponsor's spec under the project's encryption key. The key never reaches
+/// the guest. A failure is an error, and the guard never makes up a key.
+pub trait Sealer {
+    fn seal(&self, aad: &[u8], plain: &[u8]) -> Result<Vec<u8>, ()>;
+    fn open(&self, aad: &[u8], ciphertext: &[u8]) -> Result<Vec<u8>, ()>;
 }
 
 pub struct Host<M, S, C, R, B> {
@@ -37,4 +49,5 @@ pub struct Host<M, S, C, R, B> {
     pub chain: C,
     pub random: R,
     pub budget: B,
+    pub sealer: Box<dyn Sealer>,
 }

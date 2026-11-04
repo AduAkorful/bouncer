@@ -2,7 +2,7 @@
 //! Do not reorder or remove fields inside `StateV1`, `Vault`, or `Crack`.
 
 use near_sdk::borsh::BorshSerialize;
-use near_sdk::store::LookupMap;
+use near_sdk::store::{LookupMap, Vector};
 use near_sdk::{env, near, require, AccountId, BorshStorageKey};
 
 /// Circle USDC on NEAR testnet. 6 decimals. Pinned 30 Oct 2026.
@@ -14,6 +14,13 @@ pub const NEAR_FLOAT: u128 = 50_000_000_000_000_000_000_000;
 pub const FEE_BPS_DENOM: u128 = 10_000;
 pub const VERDICT_DOMAIN: &[u8] = b"bouncer.verdict.v1";
 pub const CLAIM_DOMAIN: &[u8] = b"bouncer.claim.v1";
+pub const COMMIT_DOMAIN: &[u8] = b"bouncer.commit.v1";
+pub const GUARD_V2_DOMAIN: &[u8] = b"bouncer.guard.v2";
+/// `bouncer.guard.v1`, then 16 zero bytes. The guard's `GENERATOR`. A test pins it to the guard's value.
+pub const GUARD_GENERATOR: [u8; 32] = [
+    b'b', b'o', b'u', b'n', b'c', b'e', b'r', b'.', b'g', b'u', b'a', b'r', b'd', b'.', b'v', b'1',
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+];
 pub const SECOND_NS: u64 = 1_000_000_000;
 pub const DAY_NS: u64 = 24 * 60 * 60 * SECOND_NS;
 pub const GUEST_HOLD_NS: u64 = 7 * DAY_NS;
@@ -32,6 +39,8 @@ enum StorageKey {
     Crews,
     SpentClaims,
     SpentMembers,
+    Specs,
+    VaultIds,
 }
 
 #[near(serializers = [borsh, json])]
@@ -146,6 +155,49 @@ pub struct Vault {
     pub closed_pending_bump: bool,
     pub refund_in_flight: u128,
     pub crack_count: u32,
+    /// Names the account that may open and close rounds for the sponsor. It can do nothing else.
+    pub keeper: Option<AccountId>,
+    /// Hash of the sponsor's sealed story. The ciphertext is in `specs`, not here, to keep this view small.
+    pub spec_hash: Option<[u8; 32]>,
+    /// Plain text a player sees before a raid.
+    pub card: Option<String>,
+    /// Set at the first round. A story is fixed from then on.
+    pub spec_locked: bool,
+    /// Owner switch. Blocks a new round and nothing else.
+    pub suspended: bool,
+}
+
+/// What a sponsor may do on a vault they create. Set by the owner. A fresh deploy is closed.
+#[near(serializers = [borsh, json])]
+#[derive(Clone, Debug)]
+pub struct Limits {
+    pub self_serve: bool,
+    pub max_cap: u128,
+    pub max_cracks: u32,
+    pub min_lock_ns: u64,
+    pub max_lock_ns: u64,
+    pub max_open_lead_ns: u64,
+    pub max_spec_ct: u32,
+    pub max_card: u32,
+    pub default_guard_pk: Option<[u8; 32]>,
+    pub reserved_prefixes: Vec<String>,
+}
+
+impl Limits {
+    pub fn closed() -> Self {
+        Self {
+            self_serve: false,
+            max_cap: 0,
+            max_cracks: 0,
+            min_lock_ns: MIN_LOCK_NS,
+            max_lock_ns: MIN_LOCK_NS,
+            max_open_lead_ns: 0,
+            max_spec_ct: 0,
+            max_card: 0,
+            default_guard_pk: None,
+            reserved_prefixes: Vec::new(),
+        }
+    }
 }
 
 #[near(serializers = [borsh, json])]
@@ -186,6 +238,14 @@ pub struct ClaimMessage {
 }
 
 #[near(serializers = [borsh])]
+pub struct CommitMessage {
+    pub vault_id: String,
+    pub round: u64,
+    pub commitment: [u8; 32],
+    pub guard_version: [u8; 32],
+}
+
+#[near(serializers = [borsh])]
 pub struct StateV1 {
     pub owner: AccountId,
     pub fee_bps: u16,
@@ -204,6 +264,11 @@ pub struct StateV1 {
     pub crews: LookupMap<CrewKey, CrewRecord>,
     pub spent_claims: LookupMap<SpentClaimKey, bool>,
     pub spent_members: LookupMap<SpentMemberKey, bool>,
+    pub limits: Limits,
+    /// The sealed story of a sponsor vault. Public ciphertext. Only the guard can open it.
+    pub specs: LookupMap<String, Vec<u8>>,
+    /// Every vault id, in creation order. A `LookupMap` cannot be walked, and the keeper needs to.
+    pub vault_ids: Vector<String>,
 }
 
 #[near(serializers = [borsh])]
@@ -230,6 +295,9 @@ impl StateV1 {
             crews: LookupMap::new(StorageKey::Crews),
             spent_claims: LookupMap::new(StorageKey::SpentClaims),
             spent_members: LookupMap::new(StorageKey::SpentMembers),
+            limits: Limits::closed(),
+            specs: LookupMap::new(StorageKey::Specs),
+            vault_ids: Vector::new(StorageKey::VaultIds),
         }
     }
 }
@@ -320,4 +388,13 @@ pub fn domain_bytes<T: BorshSerialize>(domain: &[u8], body: &T) -> Vec<u8> {
     let encoded = near_sdk::borsh::to_vec(body).unwrap_or_else(|_| env::panic_str("borsh"));
     out.extend(encoded);
     out
+}
+
+/// The `guard_version` a round must carry when the vault has a sealed story. The guard writes the same
+/// value into every verdict, so a verdict made under another story is refused.
+pub fn spec_guard_version(spec_hash: &[u8; 32]) -> [u8; 32] {
+    let mut input = GUARD_V2_DOMAIN.to_vec();
+    input.extend(GUARD_GENERATOR);
+    input.extend(spec_hash);
+    env::sha256_array(&input)
 }

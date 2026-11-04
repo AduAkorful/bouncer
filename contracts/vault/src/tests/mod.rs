@@ -4,6 +4,7 @@ mod deposits;
 mod factory;
 mod owner;
 mod rounds;
+mod sponsor;
 mod support;
 mod tickets;
 mod verdicts;

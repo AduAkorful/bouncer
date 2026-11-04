@@ -1,12 +1,16 @@
 use serde_json::{json, Value};
 
-use crate::chat::{chip_reply, leaks, user_prompt, APPROVED, FALLBACK, REFUSAL, SYSTEM};
+use crate::chat::{leaks_with, user_prompt_with, APPROVED, FALLBACK, REFUSAL};
 use crate::host::{Budget, Chain, Host, Model, Random, Signer};
 use crate::ids::require_id;
-use crate::ledger::{generate, match_bill, Draft, Hit, Rule, Venue};
+use crate::ledger::{generate, match_bill_with, Draft, Hit, Rule, Venue};
+use crate::rules::{self, Rules};
+use crate::spec_ops;
 use crate::session::{seal, unseal, Session, Turn, PLAYER, GUARD};
-use crate::street::street;
-use crate::verdict::{bill_hash, commitment, conversation_hash, reveal_bytes, verdict_bytes, VerdictBody, GENERATOR};
+use crate::street::{street, street_custom};
+use crate::verdict::{sha256, bill_hash, commitment, conversation_hash, reveal_bytes, verdict_bytes, VerdictBody};
+use crate::spec_ledger::spec_commitment;
+use crate::verdict::GENERATOR;
 
 const MAX_TEXT: usize = 500;
 const MAX_FIELD: usize = 80;
@@ -25,7 +29,10 @@ where
     };
     match value.get("op").and_then(|v| v.as_str()).unwrap_or("") {
         "pubkey" => pubkey(host),
-        "commit" => commit(host),
+        "commit" => spec_ops::commit(&value, host),
+        "seal_spec" => spec_ops::seal_spec(&value, host),
+        "check_spec" => spec_ops::check_spec(&value),
+        "draft_spec" => spec_ops::draft_spec(&value, host),
         "open" => open(&value, host),
         "say" => say(&value, host),
         "bill" => bill(&value, host),
@@ -39,10 +46,6 @@ where
     S: Signer,
 {
     json!({"ok": true, "public_key": hex::encode(host.signer.public_key())}).to_string()
-}
-
-fn commit<M, S, C, R, B>(host: &Host<M, S, C, R, B>) -> String {
-    json!({"ok": true, "commitment": hex::encode(commitment(&host.seed))}).to_string()
 }
 
 fn open<M, S, C, R, B>(value: &Value, host: &mut Host<M, S, C, R, B>) -> String
@@ -65,9 +68,17 @@ where
         Some(round) => round,
         None => return fail("bad id"),
     };
-    let venue = match value.get("venue").and_then(|v| v.as_str()).and_then(Venue::parse) {
-        Some(venue) => venue,
-        None => return fail("venue"),
+    let venue_name = value.get("venue").and_then(|v| v.as_str()).unwrap_or("");
+    let (venue, spec) = if venue_name == "custom" {
+        match rules::open_spec(host, &vault_id, value) {
+            Ok(opened) => (None, Some(opened)),
+            Err(error) => return fail(error),
+        }
+    } else {
+        match Venue::parse(venue_name) {
+            Some(venue) => (Some(venue), None),
+            None => return fail("venue"),
+        }
     };
     let rule = match value.get("rule").and_then(|v| v.as_str()).and_then(Rule::parse) {
         Some(rule) => rule,
@@ -83,12 +94,20 @@ where
         player_id,
         raid_id,
         claim_pk,
-        venue: venue.as_str().into(),
+        venue: venue.map_or("custom", Venue::as_str).into(),
         rule: rule.tag(),
         used: 0,
         transcript: Vec::new(),
+        spec_hash: spec.as_ref().map(|(_, hash)| *hash),
     };
-    let heard = street(&host.seed, &session.vault_id, session.round, &session.player_id, venue);
+    let heard = match (&spec, venue) {
+        (Some((spec, hash)), _) => {
+            let lines = crate::spec_ledger::generate_spec(spec, &host.seed, hash, &session.vault_id, session.round, &session.player_id);
+            street_custom(spec, &lines)
+        }
+        (None, Some(venue)) => street(&host.seed, &session.vault_id, session.round, &session.player_id, venue),
+        (None, None) => return fail("venue"),
+    };
     match seal(&session, &host.seed, host.random.nonce()) {
         Ok(blob) => json!({"ok": true, "blob": blob, "used": 0, "street": heard}).to_string(),
         Err(error) => fail(error),
@@ -109,28 +128,32 @@ where
         Some(text) if !text.trim().is_empty() && text.chars().count() <= MAX_TEXT => text.to_string(),
         _ => return fail("bad text"),
     };
+    let hash = turn_hash("say", &blob, &[text.clone()]);
+    if let Some(stored) = retry(host, &session, &hash) {
+        return stored;
+    }
     if session.spent() {
         return fail_blob("spent", &blob);
     }
     if replay(&session, host) {
         return fail_blob("replay", &blob);
     }
-    let lines = generate(&host.seed, &session.vault_id, session.round, &session.player_id, match session.venue() {
-        Ok(venue) => venue,
-        Err(error) => return fail(error),
-    });
-    let reply = if let Some(reply) = chip_reply(&text) {
-        reply.to_string()
+    let rules = match rules::for_session(host, &session, value) {
+        Ok(rules) => rules,
+        Err(error) => return fail_blob(error, &blob),
+    };
+    let reply = if let Some(reply) = rules.chip(&text) {
+        reply
     } else {
-        let prompt = user_prompt(&lines, &session.transcript, &text);
-        match host.model.complete(SYSTEM, &prompt) {
+        let prompt = user_prompt_with(&rules.lines, &session.transcript, &text);
+        match host.model.complete(&rules.system, &prompt) {
             Err(()) => return fail_blob("model", &blob),
-            Ok(answer) if answer.trim().is_empty() || leaks(&answer, &lines) => FALLBACK.to_string(),
+            Ok(answer) if answer.trim().is_empty() || leaks_with(&answer, &rules.lines, rules.decimals) => FALLBACK.to_string(),
             Ok(answer) => answer,
         }
     };
     spend(&mut session, &text, &reply);
-    finish_chat(&session, host, &reply)
+    finish_chat(&session, host, &reply, &hash)
 }
 
 fn bill<M, S, C, R, B>(value: &Value, host: &mut Host<M, S, C, R, B>) -> String
@@ -157,30 +180,41 @@ where
         Ok(draft) => draft,
         Err(error) => return fail(error),
     };
+    let fields = [
+        draft.payee.clone(),
+        draft.reference.clone(),
+        draft.item.clone(),
+        draft.qty.to_string(),
+        draft.unit.to_string(),
+        value.get("rule").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+    ];
+    let hash = turn_hash("bill", &blob, &fields);
+    if let Some(stored) = retry(host, &session, &hash) {
+        return stored;
+    }
     if session.spent() {
         return fail_blob("spent", &blob);
     }
     if replay(&session, host) {
         return fail_blob("replay", &blob);
     }
-    let venue = match session.venue() {
-        Ok(venue) => venue,
-        Err(error) => return fail(error),
-    };
     let rule = match session.rule() {
         Ok(rule) => rule,
         Err(error) => return fail(error),
     };
-    let lines = generate(&host.seed, &session.vault_id, session.round, &session.player_id, venue);
+    let rules = match rules::for_session(host, &session, value) {
+        Ok(rules) => rules,
+        Err(error) => return fail_blob(error, &blob),
+    };
     let text = format!(
         "bill:{}|{}|{}|{}|{}",
         draft.payee, draft.reference, draft.item, draft.qty, draft.unit
     );
-    match match_bill(&draft, &lines) {
-        Hit::One(line) => approve(host, &blob, &mut session, &lines, &draft, &line, &text, rule),
+    match match_bill_with(&draft, &rules.lines, rules.tolerance) {
+        Hit::One(line) => approve(host, &blob, &mut session, &rules, &draft, &line, &text, rule, &hash),
         Hit::None | Hit::Many => {
             spend(&mut session, &text, REFUSAL);
-            finish_chat(&session, host, REFUSAL)
+            finish_chat(&session, host, REFUSAL, &hash)
         }
     }
 }
@@ -189,11 +223,12 @@ fn approve<M, S, C, R, B>(
     host: &mut Host<M, S, C, R, B>,
     blob: &str,
     session: &mut Session,
-    lines: &[crate::ledger::Line],
+    rules: &Rules,
     draft: &Draft,
     line: &crate::ledger::Line,
     text: &str,
     rule: Rule,
+    hash: &[u8; 32],
 ) -> String
 where
     M: Model,
@@ -201,9 +236,9 @@ where
     R: Random,
     B: Budget,
 {
-    let prompt = user_prompt(lines, &session.transcript, text);
-    let reply = match host.model.complete(SYSTEM, &prompt) {
-        Ok(answer) if !answer.trim().is_empty() && !leaks(&answer, lines) => answer,
+    let prompt = user_prompt_with(&rules.lines, &session.transcript, text);
+    let reply = match host.model.complete(&rules.system, &prompt) {
+        Ok(answer) if !answer.trim().is_empty() && !leaks_with(&answer, &rules.lines, rules.decimals) => answer,
         _ => APPROVED.to_string(),
     };
     let amount = match rule {
@@ -230,7 +265,7 @@ where
         amount,
         claim_pk: session.claim_pk,
         conversation_hash,
-        guard_version: GENERATOR,
+        guard_version: rules.guard_version,
     };
     let message = match verdict_bytes(&body) {
         Ok(message) => message,
@@ -242,8 +277,7 @@ where
         Ok(sealed) => sealed,
         Err(error) => return fail_blob(error, blob),
     };
-    host.budget.record(&budget_key(session), session.used);
-    json!({
+    let response = json!({
         "ok": true,
         "blob": sealed,
         "reply": reply,
@@ -261,7 +295,8 @@ where
         },
         "signature": hex::encode(signature),
     })
-    .to_string()
+    .to_string();
+    keep_and_record(host, session, hash, response)
 }
 
 fn reveal<M, S, C, R, B>(value: &Value, host: &mut Host<M, S, C, R, B>) -> String
@@ -281,10 +316,19 @@ where
         Some(round) => round,
         None => return fail("bad id"),
     };
-    let venue = match value.get("venue").and_then(|v| v.as_str()).and_then(Venue::parse) {
-        Some(venue) => venue,
-        None => return fail("venue"),
+    let venue_name = value.get("venue").and_then(|v| v.as_str()).unwrap_or("");
+    let custom = if venue_name == "custom" {
+        match rules::open_spec(host, &vault_id, value) {
+            Ok(opened) => Some(opened),
+            Err(error) => return fail(error),
+        }
+    } else {
+        None
     };
+    let venue = Venue::parse(venue_name);
+    if custom.is_none() && venue.is_none() {
+        return fail("venue");
+    }
     let door = match host.chain.door(&vault_id) {
         Ok(door) => door,
         Err(()) => return fail("view"),
@@ -292,12 +336,18 @@ where
     if door.open || door.now <= door.closes_at {
         return fail("view");
     }
-    let lines = generate(&host.seed, &vault_id, round, &player_id, venue);
+    let (lines, commitment) = match (&custom, venue) {
+        (Some((spec, hash)), _) => (
+            crate::spec_ledger::generate_spec(spec, &host.seed, hash, &vault_id, round, &player_id),
+            spec_commitment(&GENERATOR, &host.seed, hash),
+        ),
+        (None, Some(venue)) => (generate(&host.seed, &vault_id, round, &player_id, venue), commitment(&host.seed)),
+        (None, None) => return fail("venue"),
+    };
     let ledger_hash = match crate::verdict::ledger_hash(&lines) {
         Ok(hash) => hash,
         Err(error) => return fail(error),
     };
-    let commitment = commitment(&host.seed);
     let message = match reveal_bytes(&vault_id, round, &player_id, ledger_hash, commitment) {
         Ok(message) => message,
         Err(error) => return fail(error),
@@ -353,15 +403,15 @@ fn budget_key(session: &Session) -> String {
     format!("{}|{}|{}", session.vault_id, session.round, session.player_id)
 }
 
-fn finish_chat<M, S, C, R, B>(session: &Session, host: &mut Host<M, S, C, R, B>, reply: &str) -> String
+fn finish_chat<M, S, C, R, B>(session: &Session, host: &mut Host<M, S, C, R, B>, reply: &str, hash: &[u8; 32]) -> String
 where
     R: Random,
     B: Budget,
 {
     match seal(session, &host.seed, host.random.nonce()) {
         Ok(blob) => {
-            host.budget.record(&budget_key(session), session.used);
-            json!({"ok": true, "blob": blob, "reply": reply, "used": session.used}).to_string()
+            let response = json!({"ok": true, "blob": blob, "reply": reply, "used": session.used}).to_string();
+            keep_and_record(host, session, hash, response)
         }
         Err(error) => fail(error),
     }
@@ -413,4 +463,37 @@ fn fail(error: &str) -> String {
 
 fn fail_blob(error: &str, blob: &str) -> String {
     json!({"ok": false, "error": error, "blob": blob}).to_string()
+}
+
+/// Unambiguous hash of the call a reply answers: the op, the blob it carried, and its own fields.
+fn turn_hash(op: &str, blob: &str, fields: &[String]) -> [u8; 32] {
+    let encoded = borsh::to_vec(&(op.to_string(), blob.to_string(), fields.to_vec())).unwrap_or_default();
+    sha256(&encoded)
+}
+
+/// A lost reply leaves the player with the blob it already held. When that exact call comes back,
+/// answer it from the stored reply instead of refusing it as a replay.
+fn retry<M, S, C, R, B>(host: &Host<M, S, C, R, B>, session: &Session, hash: &[u8; 32]) -> Option<String>
+where
+    B: Budget,
+{
+    if !replay(session, host) {
+        return None;
+    }
+    let (stored, response) = host.budget.last(&budget_key(session))?;
+    (stored == hex::encode(hash)).then_some(response)
+}
+
+/// Store the reply first, then record the mark. A crash between the two leaves a reply with no mark,
+/// and the retry runs as a fresh turn. The reverse order would lose the reply.
+fn keep_and_record<M, S, C, R, B>(host: &mut Host<M, S, C, R, B>, session: &Session, hash: &[u8; 32], response: String) -> String
+where
+    B: Budget,
+{
+    let key = budget_key(session);
+    if host.budget.keep(&key, &hex::encode(hash), &response).is_err() {
+        return fail("store");
+    }
+    host.budget.record(&key, session.used);
+    response
 }

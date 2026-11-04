@@ -120,6 +120,19 @@ pub fn generate(seed: &[u8; 32], vault_id: &str, round: u64, player_id: &str, ve
 }
 
 pub fn match_bill(draft: &Draft, lines: &[Line]) -> Hit {
+    match_bill_with(draft, lines, TOLERANCE)
+}
+
+/// Rounding slack for a token with `decimals`: half a cent. Two decimals means exact.
+pub fn tolerance(decimals: u8) -> u128 {
+    if decimals < 3 {
+        0
+    } else {
+        5 * 10u128.pow(u32::from(decimals) - 3)
+    }
+}
+
+pub fn match_bill_with(draft: &Draft, lines: &[Line], tolerance: u128) -> Hit {
     let Some(total) = draft.qty.checked_mul(draft.unit) else {
         return Hit::None;
     };
@@ -131,7 +144,7 @@ pub fn match_bill(draft: &Draft, lines: &[Line]) -> Hit {
         if !line.reference.is_empty() && norm(&draft.reference) != norm(&line.reference) {
             continue;
         }
-        if total.abs_diff(line.total) > TOLERANCE {
+        if total.abs_diff(line.total) > tolerance {
             continue;
         }
         if found.is_some() {
@@ -150,9 +163,13 @@ pub fn norm(value: &str) -> String {
 }
 
 pub fn money(total: u128) -> String {
-    let whole = total / 1_000_000;
-    let cents = (total % 1_000_000) / 10_000;
-    format!("{whole}.{cents:02}")
+    money_d(total, 6)
+}
+
+pub fn money_d(total: u128, decimals: u8) -> String {
+    let unit = 10u128.pow(u32::from(decimals));
+    let cents = (total % unit) / 10u128.pow(u32::from(decimals) - 2);
+    format!("{}.{cents:02}", total / unit)
 }
 
 fn same_name(a: &str, b: &str) -> bool {
@@ -280,7 +297,7 @@ fn mac_message(vault_id: &str, round: u64, player_id: &str, venue: Venue) -> Vec
     msg
 }
 
-fn hmac(key: &[u8; 32], data: &[u8]) -> [u8; 32] {
+pub(crate) fn hmac(key: &[u8; 32], data: &[u8]) -> [u8; 32] {
     let mut mac = HmacSha256::new_from_slice(key).expect("hmac key");
     mac.update(data);
     let bytes = mac.finalize().into_bytes();
@@ -289,7 +306,7 @@ fn hmac(key: &[u8; 32], data: &[u8]) -> [u8; 32] {
     out
 }
 
-struct Stream<'a> {
+pub(crate) struct Stream<'a> {
     seed: &'a [u8; 32],
     mac: [u8; 32],
     counter: u32,
@@ -298,12 +315,16 @@ struct Stream<'a> {
 }
 
 impl<'a> Stream<'a> {
-    fn new(seed: &'a [u8; 32], mac: [u8; 32]) -> Self {
+    pub(crate) fn new(seed: &'a [u8; 32], mac: [u8; 32]) -> Self {
         let block = hmac(seed, &block_message(&mac, 1));
         Self { seed, mac, counter: 1, block, at: 0 }
     }
 
-    fn byte(&mut self) -> u8 {
+    pub(crate) fn byte_below(&mut self, n: u8) -> u8 {
+        self.byte() % n
+    }
+
+    pub(crate) fn byte(&mut self) -> u8 {
         if self.at == 32 {
             self.counter = self.counter.saturating_add(1);
             self.block = hmac(self.seed, &block_message(&self.mac, self.counter));
@@ -312,6 +333,14 @@ impl<'a> Stream<'a> {
         let byte = self.block[self.at];
         self.at += 1;
         byte
+    }
+
+    pub(crate) fn u64(&mut self) -> u64 {
+        let mut bytes = [0u8; 8];
+        for slot in &mut bytes {
+            *slot = self.byte();
+        }
+        u64::from_le_bytes(bytes)
     }
 
     fn u16(&mut self) -> u16 {

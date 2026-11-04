@@ -117,8 +117,17 @@ pub fn door(rule: PayoutRule, ticketed: bool, fee_bps: u16) -> Door {
     let returned = deposit(&mut world, "velvet", &id(SPONSOR), 10_000_000, 0);
     assert_eq!(returned, 0);
     world.at(OWNER, 0);
-    world.contract.commit_round("velvet".into(), hash(9), hash(8), 0);
+    commit(&mut world, &guard, "velvet", hash(9), hash(8), 0);
     Door { world, guard, claim, vault_id: "velvet".into() }
+}
+
+/// Opens the next round the way the guard would: sign the commitment and version for the round that
+/// will open, then call `commit_round` as whoever the world is currently acting as.
+pub fn commit(world: &mut World, guard: &Key, vault: &str, commitment: [u8; 32], version: [u8; 32], opens_at: u64) {
+    let current = world.contract.get_vault(vault.to_string()).unwrap();
+    let round = if current.closed_pending_bump { current.round + 1 } else { current.round };
+    let signature = guard.sign(&crate::verdict::commit_bytes(vault, round, commitment, version));
+    world.contract.commit_round(vault.to_string(), commitment, version, opens_at, signature);
 }
 
 pub fn deposit(world: &mut World, vault: &str, sender: &AccountId, amount: u128, now: u64) -> u128 {

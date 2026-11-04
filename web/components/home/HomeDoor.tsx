@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Countdown } from "@/components/Countdown";
 import { Money, NetworkTag } from "@/components/bits";
 import { DoorScene } from "@/components/DoorScene";
+import { cardLook, type Card } from "@/lib/card";
 import { SceneLife } from "@/components/SceneLife";
 import { doorShut } from "@/lib/door";
 import { formatAtomic } from "@/lib/units";
@@ -40,12 +41,18 @@ export function HomeDoor({
   decimals,
   networkTag,
   notice,
+  card = null,
+  base = "",
 }: {
   vault: VaultView | null;
   currency?: string;
   decimals?: number;
   networkTag?: string;
   notice?: string;
+  /** A sponsor's public card. Null for a built-in door. */
+  card?: Card | null;
+  /** Where this door's pages live: empty for the default vault, `/v/<id>` for a sponsor's. */
+  base?: string;
 }) {
   const shut = vault ? doorShut(vault, Date.now()) : false;
   const phase = !vault ? "closed" : shut ? "closed" : vault.crackCount > 0 ? "cracked" : "open";
@@ -74,7 +81,8 @@ export function HomeDoor({
       <section className="relative h-[46dvh] min-h-[280px] bg-[#1a1424] sm:h-[70dvh] sm:min-h-[420px]">
         <SceneLife className="absolute inset-0">
           <DoorScene
-            sign="THE VELVET"
+            sign={card?.sign ?? "THE VELVET"}
+            look={card ? cardLook(card) : undefined}
             neighbors={false}
             open={phase === "cracked"}
             p="home"
@@ -121,7 +129,7 @@ export function HomeDoor({
       <section id="door" tabIndex={-1} className="relative z-10 mx-auto -mt-6 max-w-lg scroll-mt-6 px-4 outline-none">
         <div className="rounded-3xl border border-white/10 bg-night-2 p-5 shadow-2xl">
           <div className="flex items-center justify-between gap-3">
-            <span className="shrink-0 whitespace-nowrap rounded bg-chalk px-1.5 py-0.5 font-sign text-[10px] text-ink">BIG SAM</span>
+            <span className="shrink-0 whitespace-nowrap rounded bg-chalk px-1.5 py-0.5 font-sign text-[10px] text-ink">{card ? card.name.toUpperCase() : "BIG SAM"}</span>
             {vault ? <span className="text-right font-mono text-xs uppercase tracking-[0.2em] text-chalk/80">Round {vault.round}</span> : null}
           </div>
           <div className="mt-3 flex items-end justify-between gap-3">
@@ -138,10 +146,10 @@ export function HomeDoor({
               </div>
             ) : null}
           </div>
-          <p className="mt-3 font-sign text-xl leading-tight sm:text-2xl">{notice ?? phaseCopy[phase].line}</p>
+          <p className="mt-3 font-sign text-xl leading-tight sm:text-2xl">{notice ?? (card ? card.pitch : phaseCopy[phase].line)}</p>
           {vault && !shut ? (
             <a
-              href="/play"
+              href={`${base}/play`}
               className="chalk-focus mt-5 block rounded-2xl bg-chalk py-4 text-center font-sign text-xl text-ink shadow-[0_6px_0_#9c9483] transition hover:bg-[#f4efe4] active:translate-y-1 active:shadow-[0_2px_0_#9c9483]"
             >
               Join the queue
@@ -153,13 +161,14 @@ export function HomeDoor({
           )}
           <p className="mt-3 text-center text-sm text-chalk/60">{vault ? phaseCopy[phase].note : "Nothing on this door was filled in."}</p>
           <p className="mt-2 text-center text-sm">
-            <Link href="/reveal" className="chalk-focus inline-flex min-h-11 items-center text-chalk/80 underline decoration-white/20">
+            <Link href={`${base}/reveal`} className="chalk-focus inline-flex min-h-11 items-center text-chalk/80 underline decoration-white/20">
               Last night&apos;s door
             </Link>
           </p>
         </div>
       </section>
 
+      {card ? null : (
       <div className="mx-auto mt-8 grid min-w-0 max-w-5xl gap-8 px-4 lg:grid-cols-2">
         <section className="min-w-0">
           <h2 className="font-sign text-lg">Down the street</h2>
@@ -203,6 +212,7 @@ export function HomeDoor({
           </div>
         </section>
       </div>
+      )}
 
       <footer className="mx-auto mt-8 max-w-5xl px-4 font-mono text-[11px] text-chalk/50">
         {vault && shut ? null : commitment ? (

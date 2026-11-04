@@ -1,5 +1,7 @@
 use crate::payout::Payout;
+use crate::events;
 use crate::state::*;
+use crate::verdict::commit_bytes;
 use crate::{VaultContract, VaultContractExt};
 use near_sdk::json_types::U128;
 use near_sdk::{env, near, require, AccountId, PromiseOrValue};
@@ -57,9 +59,12 @@ impl VaultContract {
     }
 
     pub fn set_cap(&mut self, vault_id: String, cap: u128) {
-        self.assert_owner();
-        require!(cap > 0, "cap");
         let mut vault = self.take_vault(&vault_id);
+        let owner = self.require_owner_or_sponsor(&vault);
+        require!(cap > 0, "cap");
+        if !owner {
+            require!(cap <= self.v1_ref().limits.max_cap, "cap");
+        }
         require!(!vault.open, "door open");
         if vault.rule == PayoutRule::PayTheBill {
             let _ = u128::from(vault.max_cracks)
@@ -71,30 +76,56 @@ impl VaultContract {
     }
 
     pub fn set_lock(&mut self, vault_id: String, lock_ns: u64) {
-        self.assert_owner();
         require_lock(lock_ns);
         let mut vault = self.take_vault(&vault_id);
+        let owner = self.require_owner_or_sponsor(&vault);
+        if !owner {
+            let limits = &self.v1_ref().limits;
+            require!(lock_ns >= limits.min_lock_ns && lock_ns <= limits.max_lock_ns, "lock");
+        }
         require!(!vault.open, "door open");
         vault.lock_ns = lock_ns;
         self.put_vault(&vault_id, vault);
     }
 
+    /// Opens the next round. The guard must have signed the commitment and the `guard_version`, so
+    /// a sponsor or keeper cannot commit a value the guard did not produce.
     pub fn commit_round(
         &mut self,
         vault_id: String,
         commitment: [u8; 32],
         guard_version: [u8; 32],
         opens_at: u64,
+        guard_signature: Vec<u8>,
     ) {
         let mut vault = self.take_vault(&vault_id);
         let pred = env::predecessor_account_id();
-        require!(pred == self.v1_ref().owner || pred == vault.sponsor, "not sponsor");
+        let owner = pred == self.v1_ref().owner;
+        require!(owner || pred == vault.sponsor || vault.keeper.as_ref() == Some(&pred), "not sponsor");
         require!(!vault.open, "door open");
-        require!(vault.guard_pk.is_some(), "no guard");
+        require!(!vault.suspended, "suspended");
+        let guard_pk = vault.guard_pk.unwrap_or_else(|| env::panic_str("no guard"));
         if vault.closed_pending_bump {
             vault.round = vault.round.checked_add(1).unwrap_or_else(|| env::panic_str("overflow"));
             vault.closed_pending_bump = false;
         }
+        if !owner {
+            require!(vault.spec_hash.is_some(), "no spec");
+            let latest = env::block_timestamp()
+                .checked_add(self.v1_ref().limits.max_open_lead_ns)
+                .unwrap_or_else(|| env::panic_str("overflow"));
+            require!(opens_at <= latest, "opens at");
+        }
+        if let Some(spec_hash) = vault.spec_hash {
+            require!(guard_version == spec_guard_version(&spec_hash), "guard version");
+        }
+        require!(guard_signature.len() == 64, "bad signature");
+        let mut sig = [0u8; 64];
+        sig.copy_from_slice(&guard_signature);
+        require!(
+            env::ed25519_verify(&sig, commit_bytes(&vault_id, vault.round, commitment, guard_version), &guard_pk),
+            "bad signature"
+        );
         let budget = match vault.rule {
             PayoutRule::PayTheBill => u128::from(vault.max_cracks)
                 .checked_mul(vault.cap)
@@ -114,6 +145,8 @@ impl VaultContract {
         vault.closes_at = closes_at;
         vault.open = true;
         vault.crack_count = 0;
+        vault.spec_locked = true;
+        events::round_committed(&vault_id, vault.round, closes_at);
         self.put_vault(&vault_id, vault);
     }
 
@@ -138,25 +171,38 @@ impl VaultContract {
 
     pub fn end_challenge(&mut self, vault_id: String) {
         self.require_payout_gas();
-        let mut vault = self.take_vault(&vault_id);
+        let vault = self.take_vault(&vault_id);
         require!(env::predecessor_account_id() == vault.sponsor, "not sponsor");
         require!(!vault.open, "door open");
         require!(vault.reserved == 0, "reserved remains");
         require!(vault.refund_in_flight == 0, "refund pending");
         let end = vault.challenge_end.unwrap_or_else(|| env::panic_str("no challenge end"));
         require!(env::block_timestamp() >= end, "too early");
+        self.refund_pot(&vault_id, vault);
+    }
+}
+
+impl VaultContract {
+    /// Both owner and sponsor may call a setter. Only the owner is free of the sponsor limits.
+    /// Returns whether the caller is the owner.
+    fn require_owner_or_sponsor(&self, vault: &Vault) -> bool {
+        let pred = env::predecessor_account_id();
+        let owner = pred == self.v1_ref().owner;
+        require!(owner || pred == vault.sponsor, "not owner");
+        owner
+    }
+
+    pub(crate) fn refund_pot(&mut self, vault_id: &str, mut vault: Vault) {
         let amount = add(vault.pot, vault.day_pot);
         require!(amount > 0, "empty");
         vault.pot = 0;
         vault.day_pot = 0;
         vault.refund_in_flight = amount;
         let sponsor = vault.sponsor.clone();
-        self.put_vault(&vault_id, vault);
-        self.payout().transfer(sponsor, amount, Outflow::Refund { vault_id }).detach();
+        self.put_vault(vault_id, vault);
+        self.payout().transfer(sponsor, amount, Outflow::Refund { vault_id: vault_id.to_string() }).detach();
     }
-}
 
-impl VaultContract {
     fn settle_split(&mut self, vault_id: &str, vault: &mut Vault, now: u64) {
         let mut recorded = Vec::new();
         for index in 0..vault.crack_count {

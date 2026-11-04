@@ -5,19 +5,19 @@ use serde_json::Value;
 
 use crate::chat::{leaks, APPROVED, FALLBACK, REFUSAL};
 use crate::door_view::door_from_reports;
-use crate::host::{Budget, Chain, DoorView, Host, Model, Random, Signer};
+use crate::host::{Budget, Chain, DoorView, Host, Model, Random, Sealer, Signer};
 use crate::ledger::{generate, match_bill, Draft, Hit, Line, Venue, DEMO_BUILDERS};
 use crate::manifest::{check_manifest, MODEL_ID, MAX_TOKENS, NETWORK_HOST, TEMPERATURE_MILLI};
 use crate::verdict::{verdict_bytes, VerdictBody, GENERATOR};
 use crate::handle;
 
-struct Key {
+pub(crate) struct Key {
     inner: SigningKey,
-    signed: Vec<Vec<u8>>,
+    pub(crate) signed: Vec<Vec<u8>>,
 }
 
 impl Key {
-    fn new(seed: [u8; 32]) -> Self {
+    pub(crate) fn new(seed: [u8; 32]) -> Self {
         Self { inner: SigningKey::from_bytes(&seed), signed: Vec::new() }
     }
 }
@@ -33,21 +33,23 @@ impl Signer for Key {
     }
 }
 
-struct Script {
-    replies: Vec<Result<String, ()>>,
-    calls: usize,
-    last_user: String,
+pub(crate) struct Script {
+    pub(crate) replies: Vec<Result<String, ()>>,
+    pub(crate) calls: usize,
+    pub(crate) last_user: String,
+    pub(crate) last_system: String,
 }
 
 impl Model for Script {
-    fn complete(&mut self, _system: &str, user: &str) -> Result<String, ()> {
+    fn complete(&mut self, system: &str, user: &str) -> Result<String, ()> {
         self.calls += 1;
+        self.last_system = system.to_string();
         self.last_user = user.to_string();
         self.replies.pop().unwrap_or(Ok("Evening.".into()))
     }
 }
 
-struct Door {
+pub(crate) struct Door {
     view: Result<DoorView, ()>,
 }
 
@@ -57,7 +59,7 @@ impl Chain for Door {
     }
 }
 
-struct Nonces(u8);
+pub(crate) struct Nonces(u8);
 
 impl Random for Nonces {
     fn nonce(&mut self) -> [u8; 12] {
@@ -68,7 +70,7 @@ impl Random for Nonces {
     }
 }
 
-struct Mem(HashMap<String, u8>);
+pub(crate) struct Mem(pub(crate) HashMap<String, u8>, pub(crate) HashMap<String, (String, String)>, pub(crate) bool);
 
 impl Budget for Mem {
     fn seen(&self, key: &str) -> u8 {
@@ -78,24 +80,61 @@ impl Budget for Mem {
     fn record(&mut self, key: &str, used: u8) {
         self.0.insert(key.to_string(), used);
     }
-}
 
-fn host(replies: Vec<Result<String, ()>>, view: Result<DoorView, ()>) -> Host<Script, Key, Door, Nonces, Mem> {
-    Host {
-        seed: [9u8; 32],
-        model: Script { replies, calls: 0, last_user: String::new() },
-        signer: Key::new([4u8; 32]),
-        chain: Door { view },
-        random: Nonces(0),
-        budget: Mem(HashMap::new()),
+    fn last(&self, key: &str) -> Option<(String, String)> {
+        self.1.get(key).cloned()
+    }
+
+    fn keep(&mut self, key: &str, hash: &str, response: &str) -> Result<(), ()> {
+        if self.2 {
+            return Err(());
+        }
+        self.1.insert(key.to_string(), (hash.to_string(), response.to_string()));
+        Ok(())
     }
 }
 
-fn closed() -> Result<DoorView, ()> {
+pub(crate) fn host(replies: Vec<Result<String, ()>>, view: Result<DoorView, ()>) -> Host<Script, Key, Door, Nonces, Mem> {
+    Host {
+        seed: [9u8; 32],
+        model: Script { replies, calls: 0, last_user: String::new(), last_system: String::new() },
+        signer: Key::new([4u8; 32]),
+        chain: Door { view },
+        random: Nonces(0),
+        budget: Mem(HashMap::new(), HashMap::new(), false),
+        sealer: Box::new(TestSealer),
+    }
+}
+
+/// A stand-in for the host's encryption key, so no live call is needed. 0x01, nonce, ciphertext.
+pub(crate) struct TestSealer;
+
+impl Sealer for TestSealer {
+    fn seal(&self, aad: &[u8], plain: &[u8]) -> Result<Vec<u8>, ()> {
+        use chacha20poly1305::aead::{Aead, KeyInit, Payload};
+        let cipher = chacha20poly1305::ChaCha20Poly1305::new((&[3u8; 32]).into());
+        let nonce = [5u8; 12];
+        let mut out = vec![1u8];
+        out.extend(nonce);
+        out.extend(cipher.encrypt((&nonce).into(), Payload { msg: plain, aad }).map_err(|_| ())?);
+        Ok(out)
+    }
+
+    fn open(&self, aad: &[u8], ct: &[u8]) -> Result<Vec<u8>, ()> {
+        use chacha20poly1305::aead::{Aead, KeyInit, Payload};
+        if ct.len() < 13 + 16 || ct[0] != 1 {
+            return Err(());
+        }
+        let cipher = chacha20poly1305::ChaCha20Poly1305::new((&[3u8; 32]).into());
+        cipher.decrypt((&ct[1..13]).into(), Payload { msg: &ct[13..], aad }).map_err(|_| ())
+    }
+}
+
+pub(crate) fn closed() -> Result<DoorView, ()> {
     Ok(DoorView { open: false, closes_at: 10, now: 11 })
 }
 
-fn json(text: &str) -> Value {
+pub(crate) fn json(text: &str) -> Value {
     serde_json::from_str(text).unwrap()
 }
 
@@ -180,7 +219,7 @@ fn manifest_names_only_the_model_host() {
 #[test]
 fn commit_is_the_generator_and_seed() {
     let mut host = host(vec![], closed());
-    let out = json(&handle(r#"{"op":"commit"}"#, &mut host));
+    let out = json(&handle(r#"{"op":"commit","vault_id":"velvet-1","round":2}"#, &mut host));
     let commitment = out["commitment"].as_str().unwrap();
     let mut hasher = sha2::Sha256::new();
     use sha2::Digest;
@@ -188,7 +227,8 @@ fn commit_is_the_generator_and_seed() {
     hasher.update([9u8; 32]);
     assert_eq!(commitment, hex::encode(hasher.finalize()));
     assert!(!out.to_string().contains(&hex::encode([9u8; 32])));
-    assert!(host.signer.signed.is_empty());
+    assert_eq!(out["guard_version"].as_str().unwrap(), hex::encode(GENERATOR));
+    assert!(out["signature"].as_str().is_some());
 }
 
 #[test]
@@ -259,7 +299,7 @@ fn tampered_blob_and_replay_are_refused() {
     flipped[20] ^= 0xff;
     let bad = say(&mut host, &hex::encode(flipped), "hello there");
     assert_eq!(bad["error"], "bad blob");
-    let replay = say(&mut host, &first, "hello there");
+    let replay = say(&mut host, &first, "a different line");
     assert_eq!(replay["error"], "replay");
     let swapped = json(&handle(
         &serde_json::json!({"op":"say","vault_id":"velvet-1","round":1,"player_id":"bob","blob":next["blob"],"text":"hello there"}).to_string(),

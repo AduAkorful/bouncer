@@ -270,3 +270,8 @@ pub(crate) fn claim_bytes(vault_id: &str, round: u64, raid_id: &str, payout: &st
         },
     )
 }
+
+/// What the guard signs for a round. `round` is the round that will open.
+pub(crate) fn commit_bytes(vault_id: &str, round: u64, commitment: [u8; 32], guard_version: [u8; 32]) -> Vec<u8> {
+    domain_bytes(COMMIT_DOMAIN, &CommitMessage { vault_id: vault_id.to_string(), round, commitment, guard_version })
+}

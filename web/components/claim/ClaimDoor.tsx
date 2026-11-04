@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { apiPost } from "@/lib/api";
 import { Countdown } from "@/components/Countdown";
 import { Money, NetworkTag } from "@/components/bits";
 import { unlockDevice, deriveSecrets } from "@/lib/device-pass";
@@ -68,12 +69,8 @@ export function ClaimDoor({
         return;
       }
       if (!cancel) setRaidId(raid.raidId);
-      const response = await fetch("/api/crack", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ raid_id: raid.raidId }),
-      });
-      const body = (await response.json().catch(() => null)) as {
+      const sent = await apiPost("/crack", { raid_id: raid.raidId, vault_id: vaultId });
+      const body = (sent.ok ? sent.body : null) as {
         ok?: boolean;
         error?: string;
         crack?: CrackView | null;
@@ -104,12 +101,8 @@ export function ClaimDoor({
     let cancel = false;
     const look = async () => {
       if (cancel || !raidId) return;
-      const response = await fetch("/api/crack", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ raid_id: raidId }),
-      });
-      const body = (await response.json().catch(() => null)) as { ok?: boolean; crack?: CrackView | null } | null;
+      const sent = await apiPost("/crack", { raid_id: raidId, vault_id: vaultId });
+      const body = (sent.ok ? sent.body : null) as { ok?: boolean; crack?: CrackView | null } | null;
       if (cancel || !body?.ok || !body.crack) return;
       setCrack(body.crack);
       if (body.crack.status === "Paid") setPhase("paid");
@@ -127,12 +120,8 @@ export function ClaimDoor({
   }, [phase, raidId]);
 
   async function readCrack(id: string) {
-    const response = await fetch("/api/crack", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ raid_id: id }),
-    });
-    const body = (await response.json().catch(() => null)) as {
+    const sent = await apiPost("/crack", { raid_id: id, vault_id: vaultId });
+    const body = (sent.ok ? sent.body : null) as {
       ok?: boolean;
       crack?: CrackView | null;
       nowMs?: number;

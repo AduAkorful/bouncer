@@ -51,7 +51,7 @@ fn before_opens_at() {
     door.world.at(OWNER, 0);
     door.world.contract.close_round(door.vault_id.clone());
     door.world.at(OWNER, 0);
-    door.world.contract.commit_round(door.vault_id.clone(), hash(3), hash(8), DAY_NS);
+    commit(&mut door.world, &door.guard, &door.vault_id.clone(), hash(3), hash(8), DAY_NS);
     door.submit("r1", "p1", 10, 1, 1);
 }
 

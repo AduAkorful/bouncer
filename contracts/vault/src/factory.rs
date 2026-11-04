@@ -41,31 +41,9 @@ impl VaultContract {
                 .unwrap_or_else(|| env::panic_str("day budget"));
         }
         require!(self.v1().vaults.get(&vault_id).is_none(), "vault exists");
-        self.v1().vaults.insert(
-            vault_id,
-            Vault {
-                sponsor,
-                pot: 0,
-                day_pot: 0,
-                reserved: 0,
-                cap,
-                lock_ns,
-                rule,
-                guard_pk: None,
-                commitment: None,
-                guard_version: None,
-                round: 1,
-                opens_at: 0,
-                closes_at: 0,
-                open: false,
-                challenge_end,
-                max_cracks,
-                ticketed,
-                closed_pending_bump: false,
-                refund_in_flight: 0,
-                crack_count: 0,
-            },
-        );
+        let vault = blank_vault(sponsor, rule, cap, lock_ns, max_cracks, challenge_end, ticketed);
+        self.v1().vault_ids.push(vault_id.clone());
+        self.v1().vaults.insert(vault_id, vault);
     }
 
     pub fn publish_wasm(&mut self, code: Base64VecU8) {
@@ -118,4 +96,42 @@ fn child_account(sponsor_name: &str) -> AccountId {
     let full = format!("{sponsor_name}.{parent}");
     require!(full.len() <= 64, "bad account");
     full.parse().unwrap_or_else(|_| env::panic_str("bad account"))
+}
+
+pub(crate) fn blank_vault(
+    sponsor: AccountId,
+    rule: PayoutRule,
+    cap: u128,
+    lock_ns: u64,
+    max_cracks: u32,
+    challenge_end: Option<u64>,
+    ticketed: bool,
+) -> Vault {
+    Vault {
+        sponsor,
+        pot: 0,
+        day_pot: 0,
+        reserved: 0,
+        cap,
+        lock_ns,
+        rule,
+        guard_pk: None,
+        commitment: None,
+        guard_version: None,
+        round: 1,
+        opens_at: 0,
+        closes_at: 0,
+        open: false,
+        challenge_end,
+        max_cracks,
+        ticketed,
+        closed_pending_bump: false,
+        refund_in_flight: 0,
+        crack_count: 0,
+        keeper: None,
+        spec_hash: None,
+        card: None,
+        spec_locked: false,
+        suspended: false,
+    }
 }

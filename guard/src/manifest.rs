@@ -28,6 +28,10 @@ pub fn check_manifest(text: &str) -> Result<(), &'static str> {
     {
         return Err("signing key");
     }
+    let enc = value.get("encryption_keys").and_then(|v| v.as_array()).ok_or("encryption key")?;
+    if enc.len() != 1 || enc[0].as_object().map(|o| o.len()) != Some(1) || enc[0].get("path").and_then(|v| v.as_str()) != Some("spec") {
+        return Err("encryption key");
+    }
     let profile = value
         .pointer("/author_secrets/profile")
         .and_then(|v| v.as_str())

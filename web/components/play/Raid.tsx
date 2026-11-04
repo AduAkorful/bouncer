@@ -1,5 +1,8 @@
 "use client";
 
+import { cardLook, type Card } from "@/lib/card";
+import { apiPost, asObject } from "@/lib/api";
+
 import gsap from "gsap";
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "react";
 import { Countdown } from "@/components/Countdown";
@@ -46,6 +49,8 @@ export default function PlayFrame({
   storageName,
   messageBudget,
   venueId,
+  card = null,
+  specCt = null,
 }: {
   vaultId: string;
   vault: VaultView;
@@ -54,7 +59,15 @@ export default function PlayFrame({
   storageName: string;
   messageBudget: number;
   venueId: string;
+  /** A sponsor's public card. Null for a built-in door. */
+  card?: Card | null;
+  /** The sponsor's sealed story, sent with every guard call so the guard can open it. */
+  specCt?: string | null;
 }) {
+  const doorName = card ? card.name : "Big Sam";
+  const signText = card ? card.sign : venueId.toUpperCase();
+  const doorLook = card ? cardLook(card) : undefined;
+  const send = (body: Record<string, unknown>) => postGuard(specCt ? { ...body, spec_ct: specCt } : body);
   const root = useRef<HTMLDivElement>(null);
   const scene = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLElement>(null);
@@ -155,7 +168,7 @@ export default function PlayFrame({
       setDoorError("The door did not answer.");
       return;
     }
-    const payload = await postGuard({
+    const payload = await send({
       op: "open",
       vault_id: vaultId,
       round,
@@ -180,7 +193,7 @@ export default function PlayFrame({
     }
   }
 
-  const speaker = SPEAKER[gate];
+  const speaker = card && gate === "door" ? { ...SPEAKER.door, name: card.name.toUpperCase() } : SPEAKER[gate];
 
   // Idle life and the beat, rebuilt whenever the scene changes.
   useLayoutEffect(() => {
@@ -397,7 +410,7 @@ export default function PlayFrame({
     spend(() => {
       say("…");
       readPose(0.5);
-      void postGuard({
+      void send({
         op: "say",
         vault_id: vaultId,
         round: Number(vault.round),
@@ -422,7 +435,7 @@ export default function PlayFrame({
     setRefused(false);
     setYou(`BILL: ${b.payee} · ${b.reference} · ${b.item} · ${b.qty} × ${b.unit}`);
     spend(() => {
-      say(`${gate === "door" ? "Big Sam" : "Madam Efua"} reads your bill…`);
+      say(`${gate === "door" ? doorName : "Madam Efua"} reads your bill…`);
       readPose(1.7);
       sfx.paper();
       setTimeout(sfx.scratch, 450);
@@ -432,7 +445,7 @@ export default function PlayFrame({
         gsap.fromTo(".vignette", { opacity: 0 }, { opacity: 1, duration: 0.4, yoyo: true, repeat: 3, ease: "sine.inOut" });
         gsap.timeline().to(".spot", { opacity: 1, duration: 0.5, ease: E("settle") }).to(".spot", { opacity: 0, duration: 0.3 }, 1.9);
       });
-      void postGuard({
+      void send({
         op: "bill",
         vault_id: vaultId,
         round: Number(vault.round),
@@ -488,12 +501,8 @@ export default function PlayFrame({
     const verdict = payload.verdict;
     const signature = typeof payload.signature === "string" ? hexBytes(payload.signature) : null;
     if (!verdict || !signature) return "verdict";
-    const response = await fetch("/api/verdict", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ verdict: verdictWire(verdict), signature }),
-    });
-    const body = (await response.json().catch(() => null)) as { ok?: boolean; error?: string; transactionHash?: string } | null;
+    const sent = await apiPost("/verdict", { verdict: verdictWire(verdict), signature });
+    const body = (sent.ok ? sent.body : null) as { ok?: boolean; error?: string; transactionHash?: string } | null;
     if (!body?.ok) return body?.error ?? "rpc";
     const current = sessionRef.current;
     if (current && body.transactionHash) {
@@ -624,7 +633,7 @@ export default function PlayFrame({
       <main className="flex h-dvh flex-col bg-night text-chalk">
         <header className="px-4 pt-4 font-sign text-lg">BOUNCER</header>
         <div className="relative min-h-0 flex-1">
-          <DoorScene sign={venueId.toUpperCase()} neighbors={false} className="size-full" viewBox="66 -40 268 300" />
+          <DoorScene sign={signText} look={doorLook} neighbors={false} className="size-full" viewBox="66 -40 268 300" />
         </div>
         {needsKey ? (
           <div className="px-4 py-6 text-center">
@@ -687,7 +696,7 @@ export default function PlayFrame({
         <div ref={scroller} className={`absolute inset-0 overflow-y-hidden [scrollbar-width:none] ${swipe ? "overflow-x-auto" : "overflow-x-hidden"}`} onScroll={() => setBubble(null)}>
           <div ref={scene} key={gate} className="relative h-full" style={{ width: gate === "door" && streetW ? streetW : "100%" }}>
             {gate === "door" ? (
-              <DoorScene key={city} city={city} sign={venueId.toUpperCase()} gossip={Boolean(session?.street)} viewBox={narrow ? "66 -40 268 300" : doorView} className="absolute inset-0 size-full" />
+              <DoorScene key={city} city={city} sign={signText} look={doorLook} gossip={Boolean(session?.street)} viewBox={narrow ? "66 -40 268 300" : doorView} className="absolute inset-0 size-full" />
             ) : (
               <OfficeScene hints={stage === "play"} className="absolute inset-0 size-full" />
             )}
@@ -754,7 +763,7 @@ export default function PlayFrame({
                   maxLength={200}
                   onChange={(e) => setDraft(e.target.value)}
                   onKeyDown={() => sfx.key()}
-                  placeholder={`Say something to ${gate === "door" ? "Big Sam" : "Madam Efua"}…`}
+                  placeholder={`Say something to ${gate === "door" ? doorName : "Madam Efua"}…`}
                   className="min-w-0 flex-1 rounded-xl border border-white/15 bg-night px-3 py-3 text-[15px] outline-none focus:border-chalk/60"
                 />
                 <button disabled={!draft.trim() || busy || left === 0} className="shrink-0 rounded-xl bg-chalk px-4 font-sign text-ink disabled:opacity-40">
@@ -817,7 +826,7 @@ export default function PlayFrame({
               <BillBuilder
                 payees={session?.street?.payees ?? []}
                 payout="chosen when you claim"
-                venue={venueId}
+                venue={signText}
                 left={left}
                 onSubmit={handOver}
                 onClose={() => setSheet(null)}
@@ -884,7 +893,8 @@ export default function PlayFrame({
           grid={grid}
           signature={signedHex}
           round={vault.round}
-          venueId={venueId}
+          venueId={signText}
+          guardName={doorName}
           submitError={submitError}
           crackCount={vault.crackCount}
           closesAt={vault.closesAt}
@@ -902,6 +912,7 @@ function EndScreen({
   signature,
   round,
   venueId,
+  guardName,
   submitError,
   crackCount,
   closesAt,
@@ -913,6 +924,7 @@ function EndScreen({
   signature: string | null;
   round: string;
   venueId: string;
+  guardName: string;
   submitError: string | null;
   crackCount: number;
   closesAt: string;
@@ -959,7 +971,7 @@ function EndScreen({
       </div>
       {end === "out" ? (
         <p className="end-rest mt-3 max-w-xs text-sm text-chalk/65">
-          Big Sam&apos;s door closes in <Countdown endsAtNs={closesAt} className="text-chalk" />. Your desk notes stay. The practice room is open all night: no prize, no limit.
+          {guardName}&apos;s door closes in <Countdown endsAtNs={closesAt} className="text-chalk" />. Your desk notes stay. The practice room is open all night: no prize, no limit.
         </p>
       ) : (
         <div className="end-rest end-cut mt-4">
@@ -1016,17 +1028,7 @@ function Thinking() {
 }
 
 async function postGuard(body: Record<string, unknown>): Promise<Record<string, unknown>> {
-  try {
-    const response = await fetch("/api/guard", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const payload = (await response.json()) as unknown;
-    return payload && typeof payload === "object" ? (payload as Record<string, unknown>) : { ok: false, error: "guard" };
-  } catch {
-    return { ok: false, error: "guard" };
-  }
+  return asObject(await apiPost("/guard", body));
 }
 
 function hexBytes(hex: string): number[] | null {

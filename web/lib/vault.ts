@@ -21,6 +21,11 @@ export type VaultView = {
   closedPendingBump: boolean;
   refundInFlight: string;
   crackCount: number;
+  keeper: string | null;
+  specHash: string | null;
+  card: string | null;
+  specLocked: boolean;
+  suspended: boolean;
 };
 
 export type CrackView = {
@@ -126,6 +131,12 @@ export function parseVault(value: unknown): { ok: true; vault: VaultView } | { o
   const commitment = hash(row.commitment);
   const guardVersion = hash(row.guard_version);
   const challengeEnd = row.challenge_end === null ? null : digits(row.challenge_end);
+  // A vault made before the sponsor fields existed has none of them. Absent means the plain defaults.
+  const keeper = row.keeper === undefined || row.keeper === null ? null : text(row.keeper);
+  const specHash = row.spec_hash === undefined ? null : hash(row.spec_hash);
+  const card = row.card === undefined || row.card === null ? null : text(row.card);
+  const specLocked = row.spec_locked === undefined ? false : row.spec_locked;
+  const suspended = row.suspended === undefined ? false : row.suspended;
   if (
     !sponsor ||
     !pot ||
@@ -145,7 +156,12 @@ export function parseVault(value: unknown): { ok: true; vault: VaultView } | { o
     challengeEnd === undefined ||
     typeof row.open !== "boolean" ||
     typeof row.ticketed !== "boolean" ||
-    typeof row.closed_pending_bump !== "boolean"
+    typeof row.closed_pending_bump !== "boolean" ||
+    (row.keeper !== undefined && row.keeper !== null && keeper === null) ||
+    specHash === undefined ||
+    (row.card !== undefined && row.card !== null && card === null) ||
+    typeof specLocked !== "boolean" ||
+    typeof suspended !== "boolean"
   ) {
     return { ok: false, error: "vault" };
   }
@@ -172,6 +188,11 @@ export function parseVault(value: unknown): { ok: true; vault: VaultView } | { o
       closedPendingBump: row.closed_pending_bump,
       refundInFlight,
       crackCount,
+      keeper,
+      specHash,
+      card,
+      specLocked,
+      suspended,
     },
   };
 }

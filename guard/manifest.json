@@ -10,6 +10,11 @@
       "caller": "signer"
     }
   ],
+  "encryption_keys": [
+    {
+      "path": "spec"
+    }
+  ],
   "author_secrets": {
     "profile": "guard"
   }

@@ -23,6 +23,11 @@ test("a second open and a stale blob make no outbound request", async () => {
   const first = await runGuardTurn(env, marks, open, post);
   assert.equal(first.called, true);
   assert.equal(calls, 1);
+  const advance = await runGuardTurn(env, marks, { op: "say", vault_id: "velvet-1", round: "1", player_id: "player-1", blob: "blob-a" }, async () => {
+    calls += 1;
+    return { ok: true as const, body: { ok: true, blob: "blob-b" } };
+  });
+  assert.equal(advance.called, true);
   const second = await runGuardTurn(env, marks, open, post);
   assert.equal(second.called, false);
   assert.deepEqual(second.body, { ok: false, error: "second open" });
@@ -33,5 +38,5 @@ test("a second open and a stale blob make no outbound request", async () => {
     post,
   );
   assert.equal(stale.called, false);
-  assert.equal(calls, 1);
+  assert.equal(calls, 2);
 });

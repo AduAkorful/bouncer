@@ -2,10 +2,8 @@ import { Account, actions, type KeyPairString } from "near-api-js";
 import type { RelayEnv } from "./config";
 import { accountIdForPublicKey, signatureOutcome, signPayloadBytes, sponsorNear } from "./passkey-account";
 
-const CREATE_CAP = 8;
-const SIGN_CAP = 8;
-let creates = 0;
-let signs = 0;
+// Rate limits live in the server that calls these, per address and per day. A counter here would only
+// count for the life of one process and never reset.
 
 export async function createPasskeyAccount(
   env: RelayEnv,
@@ -20,8 +18,6 @@ export async function createPasskeyAccount(
   } catch {
     return { ok: false, error: "account" };
   }
-  if (creates >= CREATE_CAP) return { ok: false, error: "account" };
-  creates += 1;
   try {
     const sponsor = new Account(env.accountId, env.rpcUrl, env.privateKey as KeyPairString);
     const outcome = await sponsor.createAccount({
@@ -52,8 +48,6 @@ export async function signPasskeyTransaction(
   if (typeof guardId !== "string" || !guardId.startsWith("jwt#https://login.testnet.fast-auth.com/")) return { ok: false, error: "sign" };
   if (typeof verifyPayload !== "string" || verifyPayload.length === 0) return { ok: false, error: "sign" };
   if (algorithm !== "eddsa" || !payload) return { ok: false, error: "sign" };
-  if (signs >= SIGN_CAP) return { ok: false, error: "sign" };
-  signs += 1;
   try {
     const sponsor = new Account(env.accountId, env.rpcUrl, env.privateKey as KeyPairString);
     const outcome = await sponsor.signAndSendTransaction({

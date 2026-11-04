@@ -1,0 +1,5 @@
+# On-chain builds need `--cfg near`, which `cargo near build` sets. Without it near-sdk uses its local
+# fallbacks: a panic carries no message and hashing runs in the wasm. A plain build looks the same
+# and deploys, so set it here for every wasm build.
+[target.wasm32-unknown-unknown]
+rustflags = ["--cfg", "near"]

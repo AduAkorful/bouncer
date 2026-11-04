@@ -7,6 +7,7 @@ mod events;
 mod factory;
 mod migrate;
 mod payout;
+mod sponsor;
 mod state;
 mod tickets;
 mod verdict;

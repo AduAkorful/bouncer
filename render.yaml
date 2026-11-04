@@ -1,0 +1,49 @@
+# The operator creates this service in Render. Nothing here is applied by the repository.
+# An always-on instance type is required: a sleeping instance is a dead door.
+services:
+  - type: web
+    name: bouncer-server
+    runtime: node
+    region: oregon
+    plan: starter
+    buildCommand: cd server && npm ci
+    startCommand: cd server && npx tsx src/index.ts
+    healthCheckPath: /health
+    autoDeploy: false
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NEAR_RPC_URL
+        sync: false
+      - key: NEAR_NETWORK_ID
+        sync: false
+      - key: VAULT_CONTRACT_ID
+        sync: false
+      - key: VAULT_ID
+        sync: false
+      - key: RELAY_ACCOUNT_ID
+        sync: false
+      - key: RELAY_PRIVATE_KEY
+        sync: false
+      - key: OUTLAYER_CALL_URL
+        sync: false
+      - key: OUTLAYER_PAYMENT_KEY
+        sync: false
+      - key: OUTLAYER_VERSION_KEY
+        sync: false
+      - key: OUTLAYER_MAX_EXECUTION_SECONDS
+        sync: false
+      - key: OUTLAYER_MAX_MEMORY_MB
+        sync: false
+      - key: AUTH_CONTRACT_ID
+        sync: false
+      - key: SITE_ORIGIN
+        sync: false
+      - key: SPONSOR_DAILY_CALLS
+        sync: false
+      - key: VAULT_ROUND_BILLS
+        value: "5000"
+      - key: KEEPER_ACCOUNT_ID
+        sync: false
+      - key: KEEPER_PRIVATE_KEY
+        sync: false

@@ -1,4 +1,5 @@
 import { Account, actions, KeyPair, PublicKey, type KeyPairString } from "near-api-js";
+import { apiPost } from "./api";
 import { claimMessage } from "./claim";
 import { deriveSecrets, unlockDevice } from "./device-pass";
 import { accessMessage, accessOnAccount, testnetAccountId } from "./imported-account";
@@ -60,12 +61,8 @@ export async function sendClaim(input: {
 }
 
 async function relayAccount(publicKey: string): Promise<string | null> {
-  const created = await fetch("/api/passkey/create-account", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ publicKey }),
-  });
-  const account = (await created.json().catch(() => null)) as { ok?: boolean; accountId?: string } | null;
+  const created = await apiPost("/passkey/create-account", { publicKey });
+  const account = (created.ok ? created.body : null) as { ok?: boolean; accountId?: string } | null;
   if (!account?.ok || typeof account.accountId !== "string") return null;
   return account.accountId;
 }
