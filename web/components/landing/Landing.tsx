@@ -12,8 +12,8 @@ export function Landing() {
           <DoorScene sign="THE VELVET" queue p="land" viewBox="40 -160 340 430" className="size-full" label="The door at night, rope across it, a queue waiting" />
         </SceneLife>
 
-        <div className="pointer-events-none absolute inset-x-0 top-0 z-10 bg-gradient-to-b from-night from-30% via-night/75 to-transparent px-4 pb-24 pt-6 sm:px-8 sm:pt-8 lg:inset-y-0 lg:right-auto lg:flex lg:w-[min(22rem,34vw)] lg:flex-col lg:justify-center lg:bg-gradient-to-r lg:from-night lg:from-50% lg:via-night/80 lg:to-transparent lg:px-10 lg:pb-0 lg:pt-0">
-          <h1 className="font-sign text-[1.85rem] leading-none whitespace-nowrap min-[400px]:text-5xl sm:text-6xl lg:text-[3.25rem]">BOUNCER</h1>
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-10 bg-gradient-to-b from-night from-30% via-night/75 to-transparent px-4 pb-24 pt-6 sm:px-8 sm:pt-8 lg:inset-y-0 lg:right-auto lg:flex lg:w-[min(30rem,40vw)] lg:flex-col lg:justify-center lg:bg-gradient-to-r lg:from-night lg:from-60% lg:via-night/85 lg:to-transparent lg:px-10 lg:pb-0 lg:pt-0">
+          <h1 className="font-sign text-[1.85rem] leading-none whitespace-nowrap min-[400px]:text-5xl sm:text-6xl lg:text-[3rem]">BOUNCER</h1>
           <p className="mt-4 max-w-[16ch] font-sign text-2xl leading-none sm:text-3xl lg:max-w-[12ch]">Talk your way past the bouncer.</p>
           <Link
             href="/home"

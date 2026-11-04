@@ -59,16 +59,16 @@ export function HomeDoor({
       >
         Skip to the door
       </a>
-      <header className="relative z-20 flex flex-col gap-2 px-4 py-3 sm:absolute sm:inset-x-0 sm:top-0 sm:flex-row sm:items-center sm:justify-between">
-        <span className="font-sign text-lg drop-shadow">BOUNCER</span>
-        <div className="flex flex-wrap items-center gap-1.5 sm:flex-nowrap sm:justify-end sm:gap-2">
+      <header className="relative z-20 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 px-4 py-3 sm:absolute sm:inset-x-0 sm:top-0 sm:flex-nowrap">
+        <span className="order-1 font-sign text-lg drop-shadow">BOUNCER</span>
+        <div className="order-3 flex w-full flex-wrap items-center gap-1.5 sm:order-2 sm:ml-auto sm:w-auto sm:flex-nowrap sm:justify-end sm:gap-2">
           <NetworkTag label={networkTag} className="whitespace-nowrap bg-black/40 text-chalk/80 backdrop-blur" />
           <span className="cursor-default select-none font-mono text-xs text-chalk/80">Queue</span>
           {vault ? <span className="font-mono text-xs text-chalk/80">{vault.crackCount} in</span> : null}
-          <Link href="/profile" className="chalk-focus inline-flex min-h-11 items-center whitespace-nowrap rounded-full bg-black/50 px-3 font-mono text-xs backdrop-blur">
-            Profile
-          </Link>
         </div>
+        <Link href="/profile" className="chalk-focus order-2 inline-flex min-h-11 items-center whitespace-nowrap rounded-full bg-black/50 px-3 font-mono text-xs backdrop-blur sm:order-3">
+          Profile
+        </Link>
       </header>
 
       <section className="relative h-[46dvh] min-h-[280px] bg-[#1a1424] sm:h-[70dvh] sm:min-h-[420px]">
