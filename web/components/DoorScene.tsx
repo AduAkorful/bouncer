@@ -24,6 +24,12 @@ interface Props {
   viewBox?: string;
   className?: string;
   label?: string;
+  /** The next-door shop and the poster wall. Off when the frame would clip them. */
+  neighbors?: boolean;
+  /** Tube colour for this door. The default neon stays when this is omitted. */
+  ink?: { stroke: string; fill: string };
+  /** The sign is inside a link that already names the door. */
+  decorative?: boolean;
 }
 
 // The queue. The front four talk if you tap them (index → queueGossip); the rest are the crowd behind.
@@ -68,14 +74,24 @@ export function DoorScene({
   viewBox = "60 -90 280 350",
   className = "",
   label = "A bouncer at the door of the venue",
+  neighbors = true,
+  ink,
+  decorative = false,
 }: Props) {
-  const n = NEONS.find((x) => x.value === neon) ?? NEONS[0];
+  const n = ink ?? NEONS.find((x) => x.value === neon) ?? NEONS[0];
   const kit = CITIES[city];
   const london = city === "london";
   const fs = sign.length > 12 ? 14 : sign.length > 10 ? 17 : 22;
   const leaf = (hinge: number) => (open ? `translate(${hinge} 0) scale(0.14 1) translate(${-hinge} 0)` : undefined);
   return (
-    <svg viewBox={viewBox} preserveAspectRatio="xMidYMax meet" className={className} role="img" aria-label={label}>
+    <svg
+      viewBox={viewBox}
+      preserveAspectRatio="xMidYMax meet"
+      className={className}
+      role={decorative ? "presentation" : "img"}
+      aria-label={decorative ? undefined : label}
+      aria-hidden={decorative ? true : undefined}
+    >
       <defs>
         <pattern id={`${p}-brick`} width="24" height="12" patternUnits="userSpaceOnUse">
           <rect width="24" height="12" fill="#1a1422" />
@@ -187,8 +203,8 @@ export function DoorScene({
         <rect x="70" y="-1000" width="1.2" height="1222" fill={n.stroke} opacity="0.12" />
       </g>
 
-      <NextDoor x={372} p={p} ad={kit.ad} kiosk={kit.kiosk} hints={gossip} />
-      <PosterWall x={-30} hints={gossip} />
+      {neighbors ? <NextDoor x={372} p={p} ad={kit.ad} kiosk={kit.kiosk} hints={gossip} /> : null}
+      {neighbors ? <PosterWall x={-30} hints={gossip} /> : null}
 
       {/* Colour thrown on the brick by the sign */}
       <ellipse cx="200" cy="44" rx="190" ry="120" fill={`url(#${p}-wash)`} style={{ mixBlendMode: "screen" }} />

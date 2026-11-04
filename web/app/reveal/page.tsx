@@ -1,12 +1,17 @@
+import { screen } from "@/lib/screen";
 import { Suspense } from "react";
 import { Blocked } from "@/components/Blocked";
+import { NightShell } from "@/components/NightShell";
 import { RevealDoor } from "@/components/reveal/RevealDoor";
 import { httpRpc, readDoor } from "@/lib/chain";
 import { readPublicEnv, readRelayEnv } from "@/lib/config";
+import { doorShut, UNSET } from "@/lib/door";
+
+export const metadata = screen("Last night's door", "The ledger from the round that closed.");
 
 export default function RevealPage() {
   return (
-    <Suspense fallback={<main className="min-h-dvh bg-night" />}>
+    <Suspense fallback={<NightShell />}>
       <RevealGate />
     </Suspense>
   );
@@ -15,10 +20,7 @@ export default function RevealPage() {
 async function RevealGate() {
   const relay = readRelayEnv(process.env);
   const labels = readPublicEnv(process.env);
-  if (!relay.ok || !labels.ok) {
-    const missing = [...(relay.ok ? [] : relay.missing), ...(labels.ok ? [] : labels.missing)];
-    return <Blocked title="The ledger stays shut." detail={`Missing configuration: ${missing.join(", ")}`} />;
-  }
+  if (!relay.ok || !labels.ok) return <Blocked title="The ledger stays shut." detail={UNSET} />;
   const door = await readDoor(httpRpc(relay.env.rpcUrl), relay.env.contractId, relay.env.vaultId);
   if (!door.ok) return <Blocked title="The ledger stays shut." detail="The vault view failed." />;
   return (
@@ -30,6 +32,7 @@ async function RevealGate() {
       storageName={labels.env.storageName}
       venueId={labels.env.venue}
       networkTag={labels.env.networkTag}
+      shut={doorShut(door.vault, Date.now())}
     />
   );
 }

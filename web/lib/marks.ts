@@ -10,7 +10,11 @@ export function markKey(vaultId: string, round: string, playerId: string): strin
   return `${vaultId}\n${round}\n${playerId}`;
 }
 
-/** Refuse a second open, and a say or bill whose blob is not the latest hash. Reveal is not a session turn. */
+/**
+ * This process remembers players it has already called for.
+ * A different process, or a fresh one, has no row for them. The guard keeps that mark
+ * for every player, so a missing row is forwarded. A row that disagrees with the blob is refused here.
+ */
 export function admitTurn(
   marks: ReadonlyMap<string, Mark>,
   op: string,
@@ -24,9 +28,8 @@ export function admitTurn(
   }
   if (op === "reveal") return { ok: true };
   if (op !== "say" && op !== "bill") return { ok: false, error: "unknown" };
-  if (typeof blob !== "string" || blob.length === 0 || !current || blobHash(blob) !== current.hash) {
-    return { ok: false, error: "stale blob" };
-  }
+  if (typeof blob !== "string" || blob.length === 0) return { ok: false, error: "stale blob" };
+  if (current && blobHash(blob) !== current.hash) return { ok: false, error: "stale blob" };
   return { ok: true };
 }
 

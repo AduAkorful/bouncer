@@ -2,65 +2,143 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { deriveSecrets, unlockDevice } from "@/lib/device-pass";
+import { accessMessage, accessOnAccount, testnetAccountId, writePayoutAccount } from "@/lib/imported-account";
+
+type Step = "create" | "signing" | "add" | "done" | "error";
 
 export function PasskeySheet({
-  networkId,
-  authClientId,
   next,
+  rpcUrl,
+  networkId,
+  vaultId,
+  storageName,
 }: {
-  networkId: string;
-  rpcUrl: string;
-  authContractId: string;
-  mpcContractId: string;
-  authClientId: string;
   next: "claim" | "profile";
+  rpcUrl: string;
+  networkId: string;
+  vaultId: string;
+  storageName: string;
 }) {
-  const [step, setStep] = useState<"create" | "signing" | "done" | "error">("create");
+  const [step, setStep] = useState<Step>("create");
   const [detail, setDetail] = useState<string | null>(null);
+  const [accountDraft, setAccountDraft] = useState("");
+  const [accountId, setAccountId] = useState<string | null>(null);
+  const [publicKey, setPublicKey] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   async function create() {
-    if (networkId !== "testnet" && networkId !== "mainnet") {
+    setStep("signing");
+    setDetail(null);
+    const unlocked = await unlockDevice();
+    if ("error" in unlocked) {
       setStep("error");
-      setDetail("The passkey network is not one this provider can use.");
+      setDetail(unlocked.error);
+      return;
+    }
+    unlocked.ikm.fill(0);
+    writePayoutAccount(window.localStorage, storageName, null);
+    setAccountId(null);
+    setStep("done");
+  }
+
+  async function bind() {
+    const named = testnetAccountId(accountDraft);
+    if (networkId !== "testnet") {
+      setStep("error");
+      setDetail("The passkey network is not testnet.");
+      return;
+    }
+    if (!named) {
+      setStep("error");
+      setDetail("That account name cannot be used.");
       return;
     }
     setStep("signing");
     setDetail(null);
-    try {
-      const { JavascriptProvider } = await import("@fast-auth-near/javascript-provider");
-      const provider = new JavascriptProvider({ network: networkId, clientId: authClientId });
-      await provider.login();
-      const loggedIn = await provider.isLoggedIn();
-      if (!loggedIn) {
-        setStep("error");
-        setDetail("The passkey provider did not sign in.");
-        return;
-      }
-      setStep("done");
-    } catch (error) {
+    const unlocked = await unlockDevice();
+    if ("error" in unlocked) {
       setStep("error");
-      setDetail(error instanceof Error ? error.message : "passkey");
+      setDetail(unlocked.error);
+      return;
     }
+    const secrets = await deriveSecrets(unlocked.ikm, vaultId, "0");
+    unlocked.ikm.fill(0);
+    if ("error" in secrets) {
+      setStep("error");
+      setDetail("This phone cannot keep a key in the passkey.");
+      return;
+    }
+    setAccountId(named);
+    setPublicKey(secrets.accountPublicKey);
+    await look(named, secrets.accountPublicKey);
+  }
+
+  async function look(named: string, key: string) {
+    setBusy(true);
+    const check = await accessOnAccount(rpcUrl, named, key);
+    setBusy(false);
+    if (check === "full") {
+      writePayoutAccount(window.localStorage, storageName, named);
+      setStep("done");
+      return;
+    }
+    if (check === "missing" || check === "limited") {
+      setDetail(accessMessage(check));
+      setStep("add");
+      return;
+    }
+    setDetail(accessMessage(check));
+    setStep("error");
   }
 
   return (
     <main className="flex min-h-dvh items-end bg-night px-4 pb-24 pt-10 text-chalk sm:items-center sm:justify-center">
       <div className="mx-auto w-full max-w-md rounded-3xl border border-white/10 bg-night-2 p-6 shadow-2xl">
-        <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-chalk/50">Account</p>
-        <h1 className="mt-2 font-sign text-3xl leading-none">{step === "done" ? "Saved." : "Save your streak"}</h1>
+        <p className="font-mono text-xs uppercase tracking-[0.22em] text-chalk/80">Account</p>
+        <h1 className="mt-2 font-sign text-3xl leading-none">{step === "done" ? "Saved." : step === "add" ? "Add this key" : "Save your streak"}</h1>
         {step === "create" && (
           <>
-            <p className="mt-3 text-sm text-chalk/70">One passkey on this phone. No seed phrase, no password.</p>
+            <p className="mt-3 text-sm text-chalk/70">One passkey on this phone. No seed phrase, no password. Clearing this site does not remove it.</p>
             <button onClick={() => void create()} className="mt-6 w-full rounded-2xl bg-chalk py-4 font-sign text-lg text-ink shadow-[0_5px_0_#9c9483]">
               Create passkey
+            </button>
+            <p className="mt-6 text-sm text-chalk/70">Use an account you already have. A passkey will be created for it.</p>
+            <input
+              value={accountDraft}
+              onChange={(event) => setAccountDraft(event.target.value)}
+              placeholder="name.testnet"
+              className="mt-3 w-full rounded-2xl border border-white/10 bg-night px-3 py-3 font-mono text-sm"
+            />
+            <button onClick={() => void bind()} className="mt-3 w-full rounded-2xl border border-chalk/30 py-3 text-sm">
+              Create a passkey for it
             </button>
           </>
         )}
         {step === "signing" && (
           <div className="mt-8 mb-6 text-center">
             <div className="mx-auto size-16 animate-pulse rounded-full border-2 border-uv" />
-            <p className="mt-4 font-sign text-xl">Signing in</p>
+            <p className="mt-4 font-sign text-xl">Waiting for this phone</p>
           </div>
+        )}
+        {step === "add" && accountId && publicKey && (
+          <>
+            <p className="mt-3 text-sm text-chalk/70">
+              A passkey is on this phone for {accountId}. Add this public key in that wallet as a full-access key. The account pays the gas. Then check again.
+            </p>
+            {detail ? <p className="mt-3 text-sm text-chalk/70">{detail}</p> : null}
+            <p className="mt-4 break-all font-mono text-[12px] text-chalk/70">{publicKey}</p>
+            <button type="button" onClick={() => void navigator.clipboard.writeText(publicKey).catch(() => undefined)} className="mt-3 rounded-2xl border border-chalk/30 px-4 py-2 text-sm">
+              Copy key
+            </button>
+            <button
+              disabled={busy}
+              onClick={() => void look(accountId, publicKey)}
+              className="mt-3 w-full rounded-2xl bg-chalk py-4 font-sign text-lg text-ink disabled:opacity-40"
+            >
+              {busy ? "Reading the account" : "Check again"}
+            </button>
+          </>
         )}
         {step === "error" && (
           <>
@@ -71,10 +149,16 @@ export function PasskeySheet({
           </>
         )}
         {step === "done" && (
-          <Link href={next === "claim" ? "/claim" : "/profile"} className="mt-6 block rounded-2xl bg-chalk py-4 text-center font-sign text-lg text-ink">
-            Continue
-          </Link>
+          <>
+            {accountId ? <p className="mt-3 text-sm text-chalk/70">This phone can sign for {accountId}.</p> : null}
+            <Link href={next === "claim" ? "/claim" : "/profile"} className="mt-6 block rounded-2xl bg-chalk py-4 text-center font-sign text-lg text-ink">
+              Continue
+            </Link>
+          </>
         )}
+        <Link href="/" className="mt-6 inline-block text-sm text-chalk/70 underline decoration-white/20">
+          Back to the door
+        </Link>
       </div>
     </main>
   );

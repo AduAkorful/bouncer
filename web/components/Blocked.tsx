@@ -1,10 +1,15 @@
+import Link from "next/link";
+
 export function Blocked({ title, detail }: { title: string; detail: string }) {
   return (
-    <main className="min-h-dvh bg-night px-4 py-16 text-chalk">
-      <div className="mx-auto max-w-md rounded-3xl border border-white/10 bg-night-2 p-6">
-        <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-chalk/50">Unavailable</p>
+    <main className="min-h-dvh overflow-x-clip bg-night px-4 pb-24 pt-8 text-chalk">
+      <div className="mx-auto max-w-lg rounded-3xl border border-white/10 bg-night-2 p-6">
+        <p className="font-mono text-xs uppercase tracking-[0.22em] text-chalk/80">Unavailable</p>
         <h1 className="mt-2 font-sign text-3xl leading-none">{title}</h1>
         <p className="mt-3 text-sm text-chalk/70">{detail}</p>
+        <Link href="/" className="mt-6 inline-block text-sm text-chalk/70 underline decoration-white/20">
+          Back to the door
+        </Link>
       </div>
     </main>
   );

@@ -81,6 +81,29 @@ body {
   outline-offset: 2px;
 }
 
+/* Keyboard ring on the door controls. */
+.chalk-focus:focus-visible {
+  outline: 2px solid var(--chalk);
+  outline-offset: 2px;
+}
+
+.night-scroll {
+  scrollbar-color: #221b2d #0d0a12;
+}
+
+.night-scroll::-webkit-scrollbar {
+  height: 8px;
+}
+
+.night-scroll::-webkit-scrollbar-track {
+  background: #0d0a12;
+}
+
+.night-scroll::-webkit-scrollbar-thumb {
+  background: #221b2d;
+  border-radius: 999px;
+}
+
 .tnum {
   font-variant-numeric: tabular-nums;
 }

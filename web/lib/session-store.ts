@@ -1,3 +1,6 @@
+import { baseDecode } from "near-api-js";
+import { importClaimKey, type DeviceSecrets } from "./device-pass.ts";
+
 export type StoredNote = {
   id: string;
   text: string;
@@ -65,6 +68,31 @@ export async function signClaim(storageName: string, vaultId: string, round: str
     return new Uint8Array(signature);
   } catch {
     return { error: "claim key" };
+  }
+}
+
+export function mintRaid(): Promise<StoredRaid | { error: string }> {
+  return createRaid();
+}
+
+export async function raidFromDevice(secrets: DeviceSecrets): Promise<StoredRaid | { error: string }> {
+  try {
+    const seed = baseDecode(secrets.claimSecret.slice("ed25519:".length)).slice(0, 32);
+    const privateKey = await importClaimKey(seed);
+    seed.fill(0);
+    return {
+      privateKey,
+      publicKeyHex: secrets.claimPublicKeyHex,
+      playerId: secrets.claimPublicKeyHex,
+      raidId: secrets.raidId,
+      blob: null,
+      verdict: null,
+      street: null,
+      notes: [],
+      transactionHash: null,
+    };
+  } catch {
+    return { error: "passkey" };
   }
 }
 

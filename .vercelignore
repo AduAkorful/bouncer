@@ -1,0 +1,6 @@
+contracts/vault/target
+guard/target
+web/node_modules
+web/.next
+prototype/node_modules
+prototype/.next

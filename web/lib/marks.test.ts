@@ -12,3 +12,10 @@ test("a second open and a stale blob are refused", () => {
   assert.equal(admitTurn(marks, "bill", key, "blob-a").ok, true);
   assert.equal(marks.get(key)?.hash, blobHash("blob-a"));
 });
+
+test("a player this process has not seen is forwarded to the guard", () => {
+  const marks = new Map<string, Mark>();
+  const key = markKey("velvet-1", "1", "player-2");
+  assert.equal(admitTurn(marks, "say", key, "blob-a").ok, true);
+  assert.deepEqual(admitTurn(marks, "bill", key, ""), { ok: false, error: "stale blob" });
+});

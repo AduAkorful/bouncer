@@ -3,13 +3,14 @@ import { Countdown } from "@/components/Countdown";
 import { Money, NetworkTag } from "@/components/bits";
 import { DoorScene } from "@/components/DoorScene";
 import { SceneLife } from "@/components/SceneLife";
+import { doorShut } from "@/lib/door";
 import { formatAtomic } from "@/lib/units";
 import type { VaultView } from "@/lib/vault";
 
 const otherDoors = [
-  { name: "Accra Lions FC", kind: "Club treasurer", tone: "#2c6e49", href: "/venue/lions" },
-  { name: "Osu Builders", kind: "DAO treasury", tone: "#3b4a8f", href: "/venue/builders" },
-  { name: "Kofi's Corner", kind: "Practice room", tone: "#7a5a20", href: "/practice" },
+  { name: "Accra Lions FC", kind: "Club treasurer", tone: "#2c6e49", href: "/venue/lions", sign: "ACCRA LIONS", mark: "lions" },
+  { name: "Osu Builders", kind: "DAO treasury", tone: "#3b4a8f", href: "/venue/builders", sign: "OSU BUILDERS", mark: "builders" },
+  { name: "Kofi's Corner", kind: "Practice room", tone: "#7a5a20", href: "/practice", sign: "KOFI", mark: "kofi" },
 ];
 
 const wristbands = [
@@ -46,19 +47,25 @@ export function HomeDoor({
   networkTag?: string;
   notice?: string;
 }) {
-  const phase = !vault ? "closed" : !vault.open ? "closed" : vault.crackCount > 0 ? "cracked" : "open";
+  const shut = vault ? doorShut(vault, Date.now()) : false;
+  const phase = !vault ? "closed" : shut ? "closed" : vault.crackCount > 0 ? "cracked" : "open";
   const pot = vault && decimals !== undefined ? formatAtomic(phase === "cracked" ? vault.dayPot : vault.open ? vault.dayPot : vault.pot, decimals) : undefined;
   const commitment = vault?.commitment;
   return (
-    <main className="min-h-dvh bg-night pb-24 text-chalk">
-      <header className="absolute inset-x-0 top-0 z-20 flex items-center justify-between px-4 py-3">
+    <main className="min-h-dvh overflow-x-clip bg-night pb-24 text-chalk">
+      <a
+        href="#door"
+        className="chalk-focus sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-full focus:bg-night focus:px-4 focus:py-3 focus:text-sm focus:text-chalk"
+      >
+        Skip to the door
+      </a>
+      <header className="relative z-20 flex flex-col gap-2 px-4 py-3 sm:absolute sm:inset-x-0 sm:top-0 sm:flex-row sm:items-center sm:justify-between">
         <span className="font-sign text-lg drop-shadow">BOUNCER</span>
-        <div className="flex items-center gap-1.5 sm:gap-2">
-          <NetworkTag label={networkTag} className="bg-black/40 text-chalk/80 backdrop-blur" />
-          <span className="flex items-center gap-1.5 rounded-full bg-black/50 px-2.5 py-1 font-mono text-xs backdrop-blur">
-            <span className="h-2 w-4 rounded-sm bg-chalk" aria-hidden /> Queue
-          </span>
-          <Link href="/profile" className="whitespace-nowrap rounded-full bg-black/50 px-2.5 py-1 font-mono text-xs backdrop-blur">
+        <div className="flex flex-wrap items-center gap-1.5 sm:flex-nowrap sm:justify-end sm:gap-2">
+          <NetworkTag label={networkTag} className="whitespace-nowrap bg-black/40 text-chalk/80 backdrop-blur" />
+          <span className="cursor-default select-none font-mono text-xs text-chalk/80">Queue</span>
+          {vault ? <span className="font-mono text-xs text-chalk/80">{vault.crackCount} in</span> : null}
+          <Link href="/profile" className="chalk-focus inline-flex min-h-11 items-center whitespace-nowrap rounded-full bg-black/50 px-3 font-mono text-xs backdrop-blur">
             Profile
           </Link>
         </div>
@@ -68,8 +75,10 @@ export function HomeDoor({
         <SceneLife className="absolute inset-0">
           <DoorScene
             sign="THE VELVET"
+            neighbors={false}
             open={phase === "cracked"}
             p="home"
+            viewBox="80 0 292 244"
             className="size-full"
             back={
               <g aria-hidden>
@@ -106,39 +115,34 @@ export function HomeDoor({
             }
           />
         </SceneLife>
-        {vault ? (
-          <div className="absolute right-3 top-14 rounded-full bg-black/55 px-2.5 py-1 font-mono text-[11px] text-chalk/80 backdrop-blur">
-            {vault.crackCount} in
-          </div>
-        ) : null}
         <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-b from-transparent to-night" />
       </section>
 
-      <section className="relative z-10 mx-auto -mt-6 max-w-xl px-4">
+      <section id="door" tabIndex={-1} className="relative z-10 mx-auto -mt-6 max-w-lg scroll-mt-6 px-4 outline-none">
         <div className="rounded-3xl border border-white/10 bg-night-2 p-5 shadow-2xl">
           <div className="flex items-center justify-between gap-3">
             <span className="shrink-0 whitespace-nowrap rounded bg-chalk px-1.5 py-0.5 font-sign text-[10px] text-ink">BIG SAM</span>
-            {vault ? <span className="text-right font-mono text-[10px] uppercase tracking-[0.2em] text-chalk/50">Round {vault.round}</span> : null}
+            {vault ? <span className="text-right font-mono text-xs uppercase tracking-[0.2em] text-chalk/80">Round {vault.round}</span> : null}
           </div>
           <div className="mt-3 flex items-end justify-between gap-3">
             <div>
-              <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-chalk/50">
+              <div className="font-mono text-xs uppercase tracking-[0.2em] text-chalk/80">
                 {vault ? (phase === "cracked" ? "Splitting now" : phase === "closed" ? "Closed" : "Tonight's pot") : "No vault"}
               </div>
               {pot && currency ? <Money text={pot} currency={currency} className="text-2xl text-brass" /> : <p className="text-sm text-chalk/60">No pot is stored.</p>}
             </div>
-            {vault ? (
+            {vault && !shut ? (
               <div className="text-right">
-                <div className="font-mono text-[10px] uppercase tracking-wider text-chalk/45">Closes</div>
+                <div className="font-mono text-xs uppercase tracking-wider text-chalk/80">Closes</div>
                 <Countdown endsAtNs={vault.closesAt} className="text-chalk" />
               </div>
             ) : null}
           </div>
           <p className="mt-3 font-sign text-xl leading-tight sm:text-2xl">{notice ?? phaseCopy[phase].line}</p>
-          {vault?.open ? (
+          {vault && !shut ? (
             <a
               href="/play"
-              className="mt-5 block rounded-2xl bg-chalk py-4 text-center font-sign text-xl text-ink shadow-[0_6px_0_#9c9483] transition active:translate-y-1 active:shadow-[0_2px_0_#9c9483]"
+              className="chalk-focus mt-5 block rounded-2xl bg-chalk py-4 text-center font-sign text-xl text-ink shadow-[0_6px_0_#9c9483] transition hover:bg-[#f4efe4] active:translate-y-1 active:shadow-[0_2px_0_#9c9483]"
             >
               Join the queue
             </a>
@@ -149,24 +153,29 @@ export function HomeDoor({
           )}
           <p className="mt-3 text-center text-sm text-chalk/60">{vault ? phaseCopy[phase].note : "Nothing on this door was filled in."}</p>
           <p className="mt-2 text-center text-sm">
-            <Link href="/reveal" className="text-chalk/70 underline decoration-white/20">
+            <Link href="/reveal" className="chalk-focus inline-flex min-h-11 items-center text-chalk/80 underline decoration-white/20">
               Last night&apos;s door
             </Link>
           </p>
         </div>
       </section>
 
-      <div className="mx-auto mt-8 grid max-w-5xl gap-8 px-4 lg:grid-cols-2">
-        <section>
+      <div className="mx-auto mt-8 grid min-w-0 max-w-5xl gap-8 px-4 lg:grid-cols-2">
+        <section className="min-w-0">
           <h2 className="font-sign text-lg">Down the street</h2>
-          <div className="mt-3 flex gap-3 overflow-x-auto pb-2">
+          <div className="night-scroll mt-3 flex gap-3 overflow-x-auto pb-2">
             {otherDoors.map((door) => (
-              <Link key={door.name} href={door.href} className="w-40 shrink-0 overflow-hidden rounded-2xl border border-white/10 bg-night-2">
-                <svg viewBox="0 0 160 100" className="block w-full bg-[#1a1424]" aria-hidden>
-                  <rect y="84" width="160" height="16" fill="#120e18" />
-                  <rect x="56" y="22" width="48" height="62" rx="2" fill="#0a0810" stroke={door.tone} strokeWidth="2" />
-                  <rect x="58" y="24" width="44" height="58" fill={door.tone} opacity="0.25" />
-                </svg>
+              <Link key={door.name} href={door.href} className="chalk-focus w-40 shrink-0 overflow-hidden rounded-2xl border border-white/10 bg-night-2">
+                <DoorScene
+                  sign={door.sign}
+                  neighbors={false}
+                  queue={false}
+                  p={door.mark}
+                  ink={{ stroke: door.tone, fill: door.tone }}
+                  viewBox="104 8 192 62"
+                  className="block h-16 w-full bg-[#1a1424]"
+                  decorative
+                />
                 <div className="p-3">
                   <div className="font-sign text-sm leading-tight">{door.name}</div>
                   <div className="mt-0.5 text-xs text-chalk/60">{door.kind}</div>
@@ -182,7 +191,7 @@ export function HomeDoor({
               <Link
                 key={band.name}
                 href={band.href}
-                className={`flex items-center gap-3 rounded-2xl border px-4 py-3 ${band.here ? "border-chalk/40 bg-night-2" : "border-white/10"}`}
+                className={`chalk-focus flex min-h-11 items-center gap-3 rounded-2xl border px-4 py-3 ${band.here ? "border-chalk/40 bg-night-2" : "border-white/10"}`}
               >
                 <span className="h-3.5 w-10 rounded-sm" style={{ background: band.color }} />
                 <div className="flex-1">
@@ -196,7 +205,7 @@ export function HomeDoor({
       </div>
 
       <footer className="mx-auto mt-8 max-w-5xl px-4 font-mono text-[11px] text-chalk/50">
-        {commitment ? (
+        {vault && shut ? null : commitment ? (
           <span>
             <span className="text-uv-glow">●</span> Tonight&apos;s ledger committed before the door opened · {commitment}
           </span>

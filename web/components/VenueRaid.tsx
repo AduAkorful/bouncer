@@ -8,13 +8,14 @@ import { SAM, type Look } from "@/lib/look";
 export function VenueDoor({ sign, name, kind, look = SAM }: { sign: string; name: string; kind: string; look?: Look }) {
   return (
     <main className="relative min-h-dvh bg-night text-chalk">
-      <SceneLife className="absolute inset-0 h-dvh min-h-[640px]">
+      <SceneLife className="absolute inset-0 h-dvh">
         <DoorScene
           sign={sign}
           look={look}
           queue={false}
+          neighbors={false}
           p="venue"
-          viewBox="100 -40 200 290"
+          viewBox="88 0 224 250"
           className="size-full"
           label={`${look.name} at the door of ${name}`}
         />
@@ -27,6 +28,7 @@ export function VenueDoor({ sign, name, kind, look = SAM }: { sign: string; name
       <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-night via-night/70 to-transparent px-5 pb-8 pt-24">
         <h1 className="font-sign text-4xl leading-none sm:text-5xl">{name}</h1>
         <p className="mt-2 text-sm text-chalk/70">{kind}</p>
+        <p className="mt-1 text-sm text-chalk">This door is not taking a queue.</p>
       </div>
     </main>
   );

@@ -1,11 +1,15 @@
+import { screen } from "@/lib/screen";
 import { Suspense } from "react";
 import { HomeDoor } from "@/components/home/HomeDoor";
+import { NightShell } from "@/components/NightShell";
 import { readPublicEnv, readRelayEnv } from "@/lib/config";
 import { httpRpc, readDoor } from "@/lib/chain";
 
+export const metadata = screen("The Velvet", "The door at The Velvet for this round.");
+
 export default function HomePage() {
   return (
-    <Suspense fallback={<main className="min-h-dvh bg-night" />}>
+    <Suspense fallback={<NightShell door />}>
       <HomeFrame />
     </Suspense>
   );

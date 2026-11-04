@@ -1,6 +1,7 @@
 "use client";
 
 import gsap from "gsap";
+import Link from "next/link";
 import { useRef, useState } from "react";
 import { DemoBadge } from "@/components/bits";
 import { DoorScene } from "@/components/DoorScene";
@@ -83,7 +84,10 @@ export default function CreatorFrame() {
         <header className="absolute inset-x-0 top-0 z-10 flex items-center justify-between px-4 py-3">
           <div className="leading-none">
             <div className="font-sign text-lg">Bouncer studio</div>
-            <div className="mt-1 font-mono text-[10px] uppercase tracking-[0.2em] text-chalk/60">Design your bouncer</div>
+            <div className="mt-1 font-mono text-xs uppercase tracking-[0.2em] text-chalk/80">Design your bouncer</div>
+            <Link href="/home" className="chalk-focus mt-2 inline-flex min-h-11 items-center text-sm text-chalk/80 underline decoration-white/20">
+              The door
+            </Link>
           </div>
           <button
             onClick={() => {
@@ -219,7 +223,7 @@ export default function CreatorFrame() {
                     </button>
                   ))}
                 </div>
-                <p className="mt-2 text-xs text-chalk/50">The street around your door. Same rules everywhere; more cities come with the seasons.</p>
+                <p className="mt-2 text-xs text-chalk/80">The street around your door. Same rules everywhere; more cities come with the seasons.</p>
               </Group>
               <Group label="Neon">
                 <div className="flex gap-2">
@@ -255,7 +259,7 @@ export default function CreatorFrame() {
                   onChange={(e) => set("catchphrase", e.target.value)}
                   className="w-full rounded-xl border border-white/15 bg-night px-3 py-2.5"
                 />
-                <p className="mt-2 text-xs text-chalk/50">
+                <p className="mt-2 text-xs text-chalk/80">
                   Shown in the queue and on share cards. Names and lines are checked: nothing offensive, no real people.
                 </p>
               </Group>
@@ -293,7 +297,7 @@ export default function CreatorFrame() {
 function Group({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.25em] text-chalk/50">{label}</div>
+      <div className="mb-2 font-mono text-xs uppercase tracking-[0.25em] text-chalk/80">{label}</div>
       {children}
     </div>
   );

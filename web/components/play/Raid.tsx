@@ -13,10 +13,12 @@ import type { DraftBill } from "@/lib/bill";
 
 type Decision = "ask" | "refused" | "approved" | "none";
 import { Blocked } from "@/components/Blocked";
+import { playableRaid, playerDetail } from "@/lib/door";
 import type { VaultView } from "@/lib/vault";
 import { guardRule } from "@/lib/rules";
 import { decimalToAtomic, formatAtomic } from "@/lib/units";
-import { loadOrCreateRaid, saveRaid, type StoredRaid } from "@/lib/session-store";
+import { deriveSecrets, unlockDevice } from "@/lib/device-pass";
+import { loadRaid, raidFromDevice, saveRaid, type StoredRaid } from "@/lib/session-store";
 import { readStreet } from "@/lib/street";
 import { CITIES, type CityId } from "@/lib/cities";
 import { beatGlow, parallax, startIdle } from "@/lib/idle";
@@ -96,29 +98,61 @@ export default function PlayFrame({
   const [swipe, setSwipe] = useState(false);
   const [narrow, setNarrow] = useState(true);
   const [doorView, setDoorView] = useState("66 -40 268 300");
+  const [needsKey, setNeedsKey] = useState(false);
 
   useEffect(() => {
     let cancel = false;
-    loadOrCreateRaid(storageName, vaultId, vault.round).then((loaded) => {
+    loadRaid(storageName, vaultId, vault.round).then(async (loaded) => {
       if (cancel) return;
-      if (!("playerId" in loaded)) {
-        setDoorError(loaded.error);
+      const ready = playableRaid(loaded);
+      if (ready && "error" in ready) {
+        setDoorError(playerDetail(ready.error));
         return;
       }
-      sessionRef.current = loaded;
-      setSession(loaded);
-      setNotes(loaded.notes);
-      if (!loaded.blob || !loaded.street) void openDoor(loaded);
+      if (ready && "playerId" in ready) {
+        sessionRef.current = ready;
+        setSession(ready);
+        setNotes(ready.notes);
+        return;
+      }
+      setNeedsKey(true);
     });
     return () => {
       cancel = true;
     };
   }, [storageName, vaultId, vault.round]);
 
+  async function startWithPasskey() {
+    setBusy(true);
+    const unlocked = await unlockDevice();
+    if ("error" in unlocked) {
+      setBusy(false);
+      setDoorError(unlocked.error);
+      return;
+    }
+    const secrets = await deriveSecrets(unlocked.ikm, vaultId, vault.round);
+    unlocked.ikm.fill(0);
+    if ("error" in secrets) {
+      setBusy(false);
+      setDoorError("This phone cannot keep a key in the passkey.");
+      return;
+    }
+    const minted = await raidFromDevice(secrets);
+    if (!("playerId" in minted)) {
+      setBusy(false);
+      setDoorError("This phone cannot keep a key in the passkey.");
+      return;
+    }
+    setNeedsKey(false);
+    sessionRef.current = minted;
+    await openDoor(minted);
+    setBusy(false);
+  }
+
   async function openDoor(current: StoredRaid) {
     const round = Number(vault.round);
     if (!Number.isSafeInteger(round)) {
-      setDoorError("round");
+      setDoorError("The door did not answer.");
       return;
     }
     const payload = await postGuard({
@@ -132,7 +166,7 @@ export default function PlayFrame({
       claim_pk: current.publicKeyHex,
     });
     if (payload.ok !== true || typeof payload.blob !== "string") {
-      if (!current.blob) setDoorError(typeof payload.error === "string" ? payload.error : "guard");
+      if (!current.blob) setDoorError(playerDetail(typeof payload.error === "string" ? payload.error : "guard"));
       return;
     }
     const next = { ...current, blob: payload.blob, street: readStreet(payload.street) ?? current.street };
@@ -441,7 +475,7 @@ export default function PlayFrame({
       });
       return;
     }
-    const reply = typeof payload.reply === "string" ? payload.reply : typeof payload.error === "string" ? payload.error : "guard";
+    const reply = typeof payload.reply === "string" ? payload.reply : playerDetail(typeof payload.error === "string" ? payload.error : "guard");
     if (bill && reply === "Not approved.") refuse();
     else {
       say(reply);
@@ -585,6 +619,35 @@ export default function PlayFrame({
   const unread = notes.length - seen;
 
   if (doorError) return <Blocked title="The raid did not start." detail={doorError} />;
+  if (!session?.blob) {
+    return (
+      <main className="flex h-dvh flex-col bg-night text-chalk">
+        <header className="px-4 pt-4 font-sign text-lg">BOUNCER</header>
+        <div className="relative min-h-0 flex-1">
+          <DoorScene sign={venueId.toUpperCase()} neighbors={false} className="size-full" viewBox="66 -40 268 300" />
+        </div>
+        {needsKey ? (
+          <div className="px-4 py-6 text-center">
+            <p className="text-sm text-chalk/70">This phone keeps the key. Clearing this site does not remove it.</p>
+            <button
+              disabled={busy}
+              onClick={() => void startWithPasskey()}
+              className="mt-4 w-full rounded-2xl bg-chalk py-4 font-sign text-lg text-ink disabled:opacity-40"
+            >
+              {busy ? "Waiting for this phone" : "Use this phone's passkey"}
+            </button>
+          </div>
+        ) : (
+          <p className="px-4 py-6 text-center text-sm text-chalk/70">Opening the door.</p>
+        )}
+        <p className="px-4 pb-6 text-center">
+          <a href="/home" className="text-sm text-chalk/80 underline decoration-white/20">
+            The door
+          </a>
+        </p>
+      </main>
+    );
+  }
 
   return (
     <div ref={root} className="relative flex h-dvh flex-col overflow-hidden bg-night text-chalk">
@@ -592,7 +655,7 @@ export default function PlayFrame({
       <header className="z-20 flex items-center justify-between gap-2 px-3 pb-2 pt-3 sm:gap-3 sm:px-4">
         <div className="min-w-0 leading-none">
           <div className="font-sign text-sm">BOUNCER</div>
-          <div className="truncate font-mono text-[10px] uppercase tracking-wider text-chalk/50 sm:tracking-[0.2em]">
+          <div className="truncate font-mono text-xs uppercase tracking-wider text-chalk/80 sm:tracking-[0.2em]">
             #{vault.round} · {gate === "door" ? "The door" : "Back office"}
           </div>
         </div>
@@ -642,8 +705,7 @@ export default function PlayFrame({
         </div>
         {stage === "play" && notes.length === 0 && !bubble && (
           <div className="pointer-events-none absolute bottom-3 left-1/2 w-max max-w-[calc(100%-1.5rem)] -translate-x-1/2 rounded-full bg-chalk px-3 py-1.5 text-center text-[12px] font-semibold text-ink shadow-lg">
-            {gate === "door" ? "The street talks. Tap someone to listen." : "Look around. Tap what's glowing."}
-            {gate === "door" && swipe && <span> Swipe to look around.</span>}
+            {gate === "door" ? "The street talks. Tap someone to listen. Swipe to look around." : "Look around. Tap what's glowing."}
           </div>
         )}
         {bubble && (
@@ -784,7 +846,7 @@ export default function PlayFrame({
       {stage === "choice" && (
         <div className="absolute inset-0 z-30 flex flex-col items-center justify-end bg-[linear-gradient(to_bottom,rgb(13_10_18/0)_0%,rgb(13_10_18/0.6)_35%,rgb(13_10_18/0.97)_60%)] px-6 pb-8 text-center">
           <h1 className="font-sign text-5xl leading-none">You got in.</h1>
-          <div className="mt-3 font-mono text-[10px] uppercase tracking-[0.25em] text-chalk/50">Door cut, yours whatever happens next</div>
+          <div className="mt-3 font-mono text-xs uppercase tracking-[0.25em] text-chalk/80">Door cut, yours whatever happens next</div>
           {cutText ? <Money text={cutText} currency={currency} className="neon-brass text-3xl" /> : <p className="mt-3 text-sm text-chalk/60">No signed amount yet.</p>}
           <div className="mt-5 w-full max-w-sm rounded-2xl border border-white/10 bg-night-2 p-4 text-left">
             <div className="flex items-center justify-between">
@@ -901,7 +963,7 @@ function EndScreen({
         </p>
       ) : (
         <div className="end-rest end-cut mt-4">
-          <div className="font-mono text-[10px] uppercase tracking-[0.25em] text-chalk/50">Signed amount</div>
+          <div className="font-mono text-xs uppercase tracking-[0.25em] text-chalk/80">Signed amount</div>
           {cutText ? <Money text={cutText} currency={currency} className="neon-brass text-4xl" /> : <p className="text-sm text-chalk/60">No signed amount.</p>}
           <p className="mt-2 max-w-xs text-sm text-chalk/60">
             {submitError

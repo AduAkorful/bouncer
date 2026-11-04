@@ -1,12 +1,17 @@
+import { screen } from "@/lib/screen";
 import { Suspense } from "react";
 import { Blocked } from "@/components/Blocked";
 import { ClaimDoor } from "@/components/claim/ClaimDoor";
+import { NightShell } from "@/components/NightShell";
 import { httpRpc, readDoor } from "@/lib/chain";
 import { readPublicEnv, readRelayEnv } from "@/lib/config";
+import { UNSET } from "@/lib/door";
+
+export const metadata = screen("Your cut", "The payout for a raid on this device.");
 
 export default function ClaimPage() {
   return (
-    <Suspense fallback={<main className="min-h-dvh bg-night" />}>
+    <Suspense fallback={<NightShell />}>
       <ClaimGate />
     </Suspense>
   );
@@ -15,10 +20,7 @@ export default function ClaimPage() {
 async function ClaimGate() {
   const relay = readRelayEnv(process.env);
   const labels = readPublicEnv(process.env);
-  if (!relay.ok || !labels.ok) {
-    const missing = [...(relay.ok ? [] : relay.missing), ...(labels.ok ? [] : labels.missing)];
-    return <Blocked title="The claim is shut." detail={`Missing configuration: ${missing.join(", ")}`} />;
-  }
+  if (!relay.ok || !labels.ok) return <Blocked title="The claim is shut." detail={UNSET} />;
   const door = await readDoor(httpRpc(relay.env.rpcUrl), relay.env.contractId, relay.env.vaultId);
   if (!door.ok) return <Blocked title="The claim is shut." detail="The vault view failed." />;
   return (
@@ -32,9 +34,6 @@ async function ClaimGate() {
       rpcUrl={labels.env.rpcUrl}
       contractId={labels.env.contractId}
       networkId={labels.env.networkId}
-      authClientId={labels.env.authClientId}
-      authContractId={labels.env.authContractId}
-      mpcContractId={labels.env.mpcContractId}
     />
   );
 }

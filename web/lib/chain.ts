@@ -28,11 +28,13 @@ export async function readDoor(
   contractId: string,
   vaultId: string,
 ): Promise<{ ok: true; vault: VaultView; owner: string } | { ok: false; error: string }> {
-  const vaultResult = await rpc(viewRequest(contractId, "get_vault", { vault_id: vaultId }));
+  const [vaultResult, ownerResult] = await Promise.all([
+    rpc(viewRequest(contractId, "get_vault", { vault_id: vaultId })),
+    rpc(viewRequest(contractId, "get_owner", {})),
+  ]);
   if (!vaultResult.ok) return vaultResult;
   const vault = parseVault(vaultResult.value);
   if (!vault.ok) return vault;
-  const ownerResult = await rpc(viewRequest(contractId, "get_owner", {}));
   if (!ownerResult.ok) return ownerResult;
   const owner = parseOwner(ownerResult.value);
   if (!owner.ok) return owner;
