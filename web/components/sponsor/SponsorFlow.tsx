@@ -123,6 +123,7 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
   const decimals = chain?.token.decimals ?? 6;
   const symbol = chain?.token.symbol ?? "";
   const nothing = !funds;
+  const builtCard = chain ? buildCard(card, chain.limits.maxCard) : null;
   const hasHint = (() => {
     try {
       return (JSON.parse(specText) as { hint?: unknown }).hint !== undefined;
@@ -191,8 +192,7 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
       if (!chain || !funds || !sponsor || !vault) return "Create the vault first.";
       const spec = parsedSpec();
       if (!spec) return "The story is not valid JSON.";
-      const builtCard = buildCard(card, chain.limits.maxCard);
-      if (!builtCard.ok) return builtCard.error;
+      if (!builtCard?.ok) return builtCard?.error ?? "The card could not be checked.";
       const capUnits = toBaseUnits(capText, decimals);
       if (capUnits === null || capUnits <= 0n) return "Enter a cap above zero.";
       if (spec.hint !== undefined && !ackHint) return "Confirm the hint first.";
@@ -293,7 +293,7 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
               </p>
               <p className="text-chalk/60">You need {symbol} for the pot and a little NEAR for storage. This site does not send you either.</p>
               {networkId === "testnet" && symbol.toUpperCase() === "USDC" && (
-                <p className="text-chalk/70">For test USDC, open the <a className="underline chalk-focus" href="https://faucet.circle.com/" target="_blank" rel="noreferrer">Circle faucet</a>, select NEAR Testnet, and enter the account name above. Refresh balances after the transfer.</p>
+                <p className="text-chalk/70">For test USDC, open the <a className="underline chalk-focus" href="https://faucet.circle.com/" target="_blank" rel="noreferrer">Circle faucet</a>, set Network to NEAR Testnet, and paste the account name above. Complete the faucet verification, then refresh balances after the transfer.</p>
               )}
             </div>
           )}
@@ -314,8 +314,9 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
               <p className="mt-2 text-xs text-chalk/60">Amounts are in whole {symbol}. References can use {"{d2} {d3} {d4}"} and {"{n:1-99}"}.</p>
               <div className="mt-4 grid grid-cols-2 gap-3">
                 <div>
-                  <label className={label} htmlFor="sign">Sign</label>
-                  <input id="sign" className={input} maxLength={MAX_SIGN} value={card.sign} onChange={(e) => setCard({ ...card, sign: e.target.value.toUpperCase() })} />
+                  <label className={label} htmlFor="sign">Sign (required to seal)</label>
+                  <input id="sign" aria-describedby="sign-rules" className={input} maxLength={MAX_SIGN} value={card.sign} onChange={(e) => setCard({ ...card, sign: e.target.value.toUpperCase() })} />
+                  <p id="sign-rules" className="mt-1 text-xs text-chalk/70">Start with a letter or digit. Use up to {MAX_SIGN} characters: uppercase letters, digits, spaces, or . &apos; &amp; -</p>
                 </div>
                 <div>
                   <label className={label} htmlFor="gname">Guard&apos;s name</label>
@@ -405,7 +406,8 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
                       <span>The hint tells every player one bill that will be paid. I want that.</span>
                     </label>
                   ) : null}
-                  <button className={button} disabled={busy || !report?.pass || (hasHint && !ackHint)} onClick={() => void seal()}>
+                  {builtCard?.ok === false && <p id="seal-card-error" className="mt-2 text-xs text-chalk/80">{builtCard.error}</p>}
+                  <button className={button} aria-describedby={builtCard?.ok === false ? "seal-card-error" : undefined} disabled={busy || !report?.pass || !builtCard?.ok || (hasHint && !ackHint)} onClick={() => void seal()}>
                     Seal the story onto the vault
                   </button>
                 </>

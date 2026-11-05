@@ -6,6 +6,9 @@ const nextConfig: NextConfig = {
   agentRules: false,
   cacheComponents: true,
   partialPrefetching: true,
+  async redirects() {
+    return [{ source: "/v/:vault/home", destination: "/v/:vault", permanent: true }];
+  },
   turbopack: {
     rules: {
       "*.css": {
