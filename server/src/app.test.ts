@@ -191,3 +191,32 @@ test("/status shows no secret", async () => {
   for (const secret of SECRETS) assert.equal(body.includes(secret), false);
   assert.ok(body.includes("anchor"));
 });
+
+test("server-generated drafts require authentication and guard schema acceptance", async () => {
+  const { deps } = testDeps();
+  const path = "/sponsor/draft";
+  const input = { story: "A club.", decimals: 6 };
+  const spec = { v: 1, decimals: 6, salt: "00".repeat(16) };
+  let generated = 0;
+  let accepted = false;
+  const app = createApp({
+    ...deps,
+    generateDraft: async () => {
+      generated++;
+      return spec;
+    },
+    post: async (call) => {
+      assert.equal(call.body.input.op, "check_spec");
+      assert.deepEqual(call.body.input.spec, spec);
+      return { ok: true, body: accepted ? { ok: true, spec_hash: "0".repeat(64) } : { ok: false } };
+    },
+  });
+
+  assert.equal((await app.request(path, post(path, input))).status, 401);
+  assert.equal(generated, 0);
+  assert.equal((await app.request(path, signed(path, input))).status, 422);
+  accepted = true;
+  const response = await app.request(path, signed(path, input));
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { ok: true, spec });
+});

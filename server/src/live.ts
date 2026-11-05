@@ -1,3 +1,4 @@
+import { generateSponsorDraft } from "./sponsor-draft.ts";
 import { Account, actions, type KeyPairString } from "near-api-js";
 import { httpRpc, type Rpc } from "../../web/lib/chain.ts";
 import { parseOwner, parseVault, viewRequest } from "../../web/lib/vault.ts";
@@ -31,10 +32,12 @@ export async function chainNowMs(rpcUrl: string): Promise<{ ok: true; nowMs: num
 
 export function liveDeps(env: ServerEnv, status: () => unknown): Deps {
   const now = () => Date.now();
+  const modelKey = process.env.NEAR_AI_KEY?.trim();
   return {
     env,
     rpc: httpRpc(env.relay.rpcUrl),
     post: createGuardPost(),
+    generateDraft: modelKey ? (story, decimals) => generateSponsorDraft(modelKey, story, decimals) : undefined,
     now,
     limiter: createLimiter(now),
     budget: createBudget(now, env.dailyCalls),

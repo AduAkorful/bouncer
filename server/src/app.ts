@@ -16,6 +16,7 @@ export type Deps = {
   env: ServerEnv;
   rpc: Rpc;
   post: Post;
+  generateDraft?: (story: string, decimals: number) => Promise<unknown>;
   now: () => number;
   limiter: Limiter;
   budget: Budget;
@@ -145,6 +146,19 @@ export function createApp(deps: Deps) {
     if (!who.ok) return c.json({ ok: false, error: "unauthorized" }, 401);
     if (!deps.limiter.take(`quota:${op}:${who.account}`, QUOTAS[op], DAY)) return c.json({ ok: false, error: "You have used today's allowance for this." }, 429);
     if (!deps.budget.take()) return c.json({ ok: false, error: "busy" }, 429);
+    if (op === "draft_spec" && deps.generateDraft) {
+      const spec = await deps.generateDraft(input.story as string, input.decimals as number);
+      if (!specFits(spec)) return c.json({ ok: false, error: "model" }, 422);
+      // This call checks the schema. The sponsor separately checks their actual payout cap.
+      const cap = ((1n << 128n) - 1n).toString();
+      const checked = await deps.post(sponsorCall(env.guard, "check_spec", { spec, cap }));
+      if (!checked.ok) return c.json({ ok: false, error: "guard" }, 502);
+      const report = checked.body as { ok?: boolean; spec_hash?: string } | null;
+      if (report?.ok !== true || typeof report.spec_hash !== "string") {
+        return c.json({ ok: false, error: "spec" }, 422);
+      }
+      return c.json({ ok: true, spec });
+    }
     const posted = await deps.post(sponsorCall(env.guard, op, input));
     if (!posted.ok) return c.json({ ok: false, error: "guard" }, 502);
     const out = posted.body as Record<string, unknown> | null;
@@ -157,7 +171,7 @@ export function createApp(deps: Deps) {
     const body = await bodyOf(c);
     const story = body?.story;
     const decimals = body?.decimals;
-    if (typeof story !== "string" || story.trim().length === 0 || story.length > 2000 || !Number.isInteger(decimals)) {
+    if (typeof story !== "string" || story.trim().length === 0 || story.length > 2000 || typeof decimals !== "number" || !Number.isInteger(decimals) || decimals < 2 || decimals > 18) {
       return c.json({ ok: false, error: "bad request" }, 400);
     }
     return sponsor(c, "draft_spec", "/sponsor/draft", { story, decimals });
