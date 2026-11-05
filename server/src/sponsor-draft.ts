@@ -2,8 +2,10 @@ import { randomBytes } from "node:crypto";
 
 const PROMPT = [
   "Turn the venue story into one JSON door spec object.",
-  "Use guard.voice (up to 600 characters), lines (3 to 8), chips (up to 4 objects with ask and reply), and an optional hint.",
-  "Each line needs payee (at least four letters), item, reference (a pattern such as CD-{d4}), qty (integer lo and hi), unit (decimal string lo and hi), and paid (boolean).",
+  'Use this nested JSON shape: {"guard":{"voice":"Speak plainly."},"lines":[{"payee":"Coastline Drinks","item":"Delivery","reference":"CD-{d4}","qty":{"lo":1,"hi":1},"unit":{"lo":"4","hi":"12"},"paid":false}],"chips":[]}.',
+  "Use 3 to 8 lines. The voice is at most 600 characters. Chips are optional and have ask and reply strings.",
+  "If including a hint, use a single sentence containing only these placeholders: {payee}, {reference}, {amount}.",
+  "Each line needs payee (at least four letters), item, reference (an uppercase letter prefix, a dash, then the literal token {d4}, such as CD-{d4}. Never use another token), qty (integer lo and hi), unit (decimal string lo and hi), and paid (boolean).",
   "Include at least one paid line. Give unpaid references at least 100 possible values. Keep unpaid amounts small.",
   "Chip replies must never reveal a payee, reference or amount. Omit v, salt and decimals.",
 ].join(" ");
@@ -18,6 +20,7 @@ export async function generateSponsorDraft(key: string, story: string, decimals:
       body: JSON.stringify({
         model: "z-ai/glm-5.3-flash",
         messages: [{ role: "system", content: PROMPT }, { role: "user", content: story }],
+        chat_template_kwargs: { reasoning_effort: "low" },
         max_tokens: 4096,
         stream: false,
       }),
