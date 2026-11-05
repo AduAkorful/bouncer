@@ -10,13 +10,14 @@ import { requestCommit } from "./commit-flow.ts";
 import type { ServerEnv } from "./env.ts";
 import { sponsorCall, type Post, type SponsorOp } from "./guard-client.ts";
 import type { Budget, Counter, Limiter } from "./limits.ts";
+import { draftFitsCap } from "./sponsor-draft.ts";
 import { createAuthenticator } from "./auth.ts";
 
 export type Deps = {
   env: ServerEnv;
   rpc: Rpc;
   post: Post;
-  generateDraft?: (story: string, decimals: number) => Promise<unknown>;
+  generateDraft?: (story: string, decimals: number, cap?: string) => Promise<unknown>;
   now: () => number;
   limiter: Limiter;
   budget: Budget;
@@ -35,6 +36,7 @@ const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 const MAX_BODY = 96 * 1024;
 const MAX_SPEC_JSON = 8192;
+const MAX_CAP = (1n << 128n) - 1n;
 const BUSY = "The door is busy. Try again tomorrow.";
 const OPENS_PER_HOUR = 30;
 const QUOTAS: Record<string, number> = { draft_spec: 10, check_spec: 60, seal_spec: 20, commit: 30 };
@@ -146,16 +148,22 @@ export function createApp(deps: Deps) {
     if (!who.ok) return c.json({ ok: false, error: "unauthorized" }, 401);
     if (!deps.limiter.take(`quota:${op}:${who.account}`, QUOTAS[op], DAY)) return c.json({ ok: false, error: "You have used today's allowance for this." }, 429);
     if (!deps.budget.take()) return c.json({ ok: false, error: "busy" }, 429);
+    if (op === "draft_spec" && input.cap !== undefined && !deps.generateDraft) {
+      return c.json({ ok: false, error: "model" }, 422);
+    }
     if (op === "draft_spec" && deps.generateDraft) {
-      const spec = await deps.generateDraft(input.story as string, input.decimals as number);
+      const requestedCap = input.cap as string | undefined;
+      const spec = await deps.generateDraft(input.story as string, input.decimals as number, requestedCap);
       if (!specFits(spec)) return c.json({ ok: false, error: "model" }, 422);
-      // This call checks the schema. The sponsor separately checks their actual payout cap.
-      const cap = ((1n << 128n) - 1n).toString();
+      const cap = requestedCap ?? MAX_CAP.toString();
       const checked = await deps.post(sponsorCall(env.guard, "check_spec", { spec, cap }));
       if (!checked.ok) return c.json({ ok: false, error: "guard" }, 502);
-      const report = checked.body as { ok?: boolean; spec_hash?: string } | null;
+      const report = checked.body as { ok?: boolean; spec_hash?: string; pass?: boolean } | null;
       if (report?.ok !== true || typeof report.spec_hash !== "string") {
         return c.json({ ok: false, error: "spec" }, 422);
+      }
+      if (requestedCap !== undefined && (report.pass !== true || !draftFitsCap(spec, BigInt(requestedCap), input.decimals as number))) {
+        return c.json({ ok: false, error: "spec", detail: "The draft did not pass the fairness check for your cap. Try again or edit the spec by hand." }, 422);
       }
       return c.json({ ok: true, spec });
     }
@@ -174,7 +182,11 @@ export function createApp(deps: Deps) {
     if (typeof story !== "string" || story.trim().length === 0 || story.length > 2000 || typeof decimals !== "number" || !Number.isInteger(decimals) || decimals < 2 || decimals > 18) {
       return c.json({ ok: false, error: "bad request" }, 400);
     }
-    return sponsor(c, "draft_spec", "/sponsor/draft", { story, decimals });
+    const cap = body?.cap;
+    if (cap !== undefined && (typeof cap !== "string" || !/^[1-9][0-9]{0,38}$/.test(cap) || BigInt(cap) > MAX_CAP)) {
+      return c.json({ ok: false, error: "bad cap" }, 400);
+    }
+    return sponsor(c, "draft_spec", "/sponsor/draft", { story, decimals, ...(cap === undefined ? {} : { cap }) });
   });
 
   app.post("/sponsor/check", async (c) => {

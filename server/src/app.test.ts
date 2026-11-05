@@ -220,3 +220,24 @@ test("server-generated drafts require authentication and guard schema acceptance
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { ok: true, spec });
 });
+
+test("cap-aware drafting rejects an unpaid maximum above the selected cap even if sampled ledgers pass", async () => {
+  const { deps } = testDeps();
+  const path = "/sponsor/draft";
+  const input = { story: "A club.", decimals: 6, cap: "20000000" };
+  let unit = "13";
+  const app = createApp({
+    ...deps,
+    generateDraft: async (_story, _decimals, cap) => {
+      assert.equal(cap, input.cap);
+      return { lines: [{ paid: false, reference: "NG-{d4}", qty: { hi: 2 }, unit: { hi: unit } }] };
+    },
+    post: async (call) => {
+      assert.equal(call.body.input.cap, input.cap);
+      return { ok: true, body: { ok: true, pass: true, spec_hash: "0".repeat(64) } };
+    },
+  });
+  assert.equal((await app.request(path, signed(path, input))).status, 422);
+  unit = "10";
+  assert.equal((await app.request(path, signed(path, input))).status, 200);
+});

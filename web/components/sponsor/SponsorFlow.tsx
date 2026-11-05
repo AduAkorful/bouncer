@@ -133,10 +133,13 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
 
   async function draft() {
     await run(async () => {
-      const answer = await apiPost("/sponsor/draft", { story, decimals }, sponsor?.authHeaders("/sponsor/draft"));
+      const cap = toBaseUnits(capText, decimals);
+      if (cap === null || cap <= 0n) return "Enter a cap above zero before drafting.";
+      const answer = await apiPost("/sponsor/draft", { story, decimals, cap: cap.toString() }, sponsor?.authHeaders("/sponsor/draft"));
       const body = (answer.ok ? answer.body : null) as { ok?: boolean; spec?: unknown; detail?: string; error?: string } | null;
       if (!body?.ok || !body.spec || typeof body.spec !== "object" || Array.isArray(body.spec)) return sponsorDetail(body, "The draft did not come back. Write it by hand or try again.");
       setSpecText(JSON.stringify(body.spec, null, 2));
+      setAckHint(false);
       setReport(null);
       return "Draft ready. Read it, edit it, then run the test.";
     });
@@ -302,11 +305,12 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
               <h2 className="font-sign text-lg">2 · Your story</h2>
               <label className={label} htmlFor="story">Describe the place and who it owes</label>
               <textarea id="story" className={input} rows={3} maxLength={2000} value={story} onChange={(e) => setStory(e.target.value)} />
+              <p className="mt-2 text-xs text-chalk/70">Draft uses your <a className="underline" href="#cap">cap per crack</a> and includes an editable street hint.</p>
               <button className={button} disabled={busy || story.trim().length === 0} onClick={() => void draft()}>
                 Draft it
               </button>
               <label className={`${label} mt-4`} htmlFor="spec">The door spec. Edit it or write your own.</label>
-              <textarea id="spec" className={`${input} font-mono text-xs`} rows={14} value={specText} onChange={(e) => { setSpecText(e.target.value); setReport(null); }} spellCheck={false} />
+              <textarea id="spec" className={`${input} font-mono text-xs`} rows={14} value={specText} onChange={(e) => { setSpecText(e.target.value); setReport(null); setAckHint(false); }} spellCheck={false} />
               <p className="mt-2 text-xs text-chalk/60">Amounts are in whole {symbol}. References can use {"{d2} {d3} {d4}"} and {"{n:1-99}"}.</p>
               <div className="mt-4 grid grid-cols-2 gap-3">
                 <div>

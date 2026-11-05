@@ -37,7 +37,7 @@ export function liveDeps(env: ServerEnv, status: () => unknown): Deps {
     env,
     rpc: httpRpc(env.relay.rpcUrl),
     post: createGuardPost(),
-    generateDraft: modelKey ? (story, decimals) => generateSponsorDraft(modelKey, story, decimals) : undefined,
+    generateDraft: modelKey ? (story, decimals, cap) => generateSponsorDraft(modelKey, story, decimals, cap) : undefined,
     now,
     limiter: createLimiter(now),
     budget: createBudget(now, env.dailyCalls),
