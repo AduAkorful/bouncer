@@ -150,3 +150,26 @@ function putRecord(db: IDBDatabase, key: string, value: StoredRaid) {
     request.onerror = () => reject(request.error);
   });
 }
+
+/** Transcript uses a separate record so note and raid state writes cannot overwrite it. */
+export async function loadTranscript(name: string, vault: string, round: string): Promise<import("./raid-transcript.ts").Exchange[]> {
+  const { parseTranscript } = await import("./raid-transcript.ts");
+  const db = await openDb(name);
+  const value = await new Promise<unknown>((resolve, reject) => {
+    const request = db.transaction("raids").objectStore("raids").get(`transcript:${vault}:${round}`);
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+  return parseTranscript(value ?? []);
+}
+
+export async function saveTranscript(name: string, vault: string, round: string, transcript: import("./raid-transcript.ts").Exchange[]): Promise<void> {
+  const db = await openDb(name);
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction("raids", "readwrite");
+    tx.objectStore("raids").put(transcript, `transcript:${vault}:${round}`);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
+}

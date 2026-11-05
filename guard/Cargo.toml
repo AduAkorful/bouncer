@@ -27,6 +27,8 @@ sha2 = "0.10"
 getrandom = "0.2"
 outlayer = { version = "0.2.1", features = ["signing-keys", "encryption-keys"] }
 wasi-http-client = "0.2.1"
+wasi = "0.13.0"
 
 [dev-dependencies]
+wasi = "0.13.0"
 ed25519-dalek = "2"

@@ -14,6 +14,10 @@ pub trait Signer {
 
 pub trait Model {
     fn complete(&mut self, system: &str, user: &str) -> Result<String, ()>;
+    /// Sponsor drafts may return a fixed failure category; other callers keep the flat error.
+    fn complete_draft(&mut self, system: &str, user: &str) -> Result<String, crate::model_diagnostic::ModelFailure> {
+        self.complete(system, user).map_err(|_| crate::model_diagnostic::ModelFailure::Unknown)
+    }
 }
 
 pub trait Chain {

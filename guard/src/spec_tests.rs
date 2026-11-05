@@ -435,7 +435,9 @@ fn a_draft_is_parsed_strictly_and_given_a_salt_and_decimals() {
 fn a_draft_that_is_not_a_spec_is_an_error() {
     assert_eq!(draft(Ok("I cannot do that.".into()))["error"], "spec");
     assert_eq!(draft(Ok(r#"{"lines": []}"#.into()))["error"], "spec");
-    assert_eq!(draft(Err(()))["error"], "model");
+    let failed = draft(Err(()));
+    assert_eq!(failed["error"], "model");
+    assert_eq!(failed["stage"], "model:unknown");
     let mut h = host(vec![], closed());
     assert_eq!(send(&mut h, json!({"op": "draft_spec", "story": "", "decimals": 6}))["error"], "bad story");
     assert_eq!(send(&mut h, json!({"op": "draft_spec", "story": "x", "decimals": 1}))["error"], "bad decimals");
@@ -462,4 +464,19 @@ fn the_spec_guard_version_is_pinned_for_the_vault() {
         hex::encode(spec_guard_version(&GENERATOR, &[1u8; 32])),
         "e5c6d557967eac9c8244e54c495e25acf486289322d8a3ec95c5cce442a06eaf"
     );
+}
+
+#[test]
+fn draft_exposes_only_the_fixed_model_stage() {
+    struct Failed;
+    impl crate::host::Model for Failed {
+        fn complete(&mut self, _: &str, _: &str) -> Result<String, ()> { Err(()) }
+        fn complete_draft(&mut self, _: &str, _: &str) -> Result<String, crate::model_diagnostic::ModelFailure> {
+            Err(crate::model_diagnostic::ModelFailure::EmptyContent)
+        }
+    }
+    let h = host(vec![], closed());
+    let mut h = crate::host::Host { seed: h.seed, model: Failed, signer: h.signer, chain: h.chain, random: h.random, budget: h.budget, sealer: h.sealer };
+    let response: Value = serde_json::from_str(&crate::handle(&json!({"op":"draft_spec","story":"private story","decimals":6}).to_string(), &mut h)).unwrap();
+    assert_eq!(response, json!({"ok": false, "error": "model", "stage": "model:empty_content"}));
 }

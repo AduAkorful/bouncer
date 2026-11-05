@@ -110,9 +110,9 @@ where
         Some(d) if (MIN_DECIMALS..=MAX_DECIMALS).contains(&d) => d,
         _ => return error("bad decimals"),
     };
-    let answer = match host.model.complete(DRAFT_SYSTEM, story) {
+    let answer = match host.model.complete_draft(DRAFT_SYSTEM, story) {
         Ok(answer) => answer,
-        Err(()) => return error("model"),
+        Err(stage) => return json!({"ok": false, "error": "model", "stage": stage.label()}).to_string(),
     };
     let mut object: Map<String, Value> = match extract_object(&answer).and_then(|t| serde_json::from_str(t).ok()) {
         Some(object) => object,

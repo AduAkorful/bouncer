@@ -21,7 +21,8 @@ import type { VaultView } from "@/lib/vault";
 import { guardRule } from "@/lib/rules";
 import { decimalToAtomic, formatAtomic } from "@/lib/units";
 import { deriveSecrets, unlockDevice } from "@/lib/device-pass";
-import { loadRaid, raidFromDevice, saveRaid, type StoredRaid } from "@/lib/session-store";
+import { loadRaid, raidFromDevice, saveRaid, loadTranscript, saveTranscript, type StoredRaid } from "@/lib/session-store";
+import type { Exchange } from "@/lib/raid-transcript";
 import { readStreet } from "@/lib/street";
 import { CITIES, type CityId } from "@/lib/cities";
 import { beatGlow, parallax, startIdle } from "@/lib/idle";
@@ -77,11 +78,16 @@ export default function PlayFrame({
   const muted = useRef(false);
   const leftRef = useRef(messageBudget);
   const sessionRef = useRef<StoredRaid | null>(null);
+  const transcriptRef = useRef<Exchange[]>([]);
+  const transcriptWrites = useRef<Promise<void>>(Promise.resolve());
+  const [transcript, setTranscript] = useState<Exchange[]>([]);
+  const [transcriptError, setTranscriptError] = useState(false);
 
   const [gate, setGate] = useState<Gate>("door");
   const [stage, setStage] = useState<Stage>("play");
   const [end, setEnd] = useState<End>("door");
   const [left, setLeft] = useState(messageBudget);
+  const [confirmedLeft, setConfirmedLeft] = useState<number | null>(null);
   const [session, setSession] = useState<StoredRaid | null>(null);
   const [doorError, setDoorError] = useState<string | null>(null);
   const [signedAmount, setSignedAmount] = useState<string | null>(null);
@@ -123,6 +129,15 @@ export default function PlayFrame({
         return;
       }
       if (ready && "playerId" in ready) {
+        try {
+          const history = await loadTranscript(storageName, vaultId, vault.round);
+          if (cancel) return;
+          transcriptRef.current = history;
+          setTranscript(history);
+          const last = history.at(-1);
+          if (last) { setYou(last.player); setLine(last.guard); setTyped(last.guard.length); }
+        } catch { if (!cancel) setTranscriptError(true); }
+        if (cancel) return;
         sessionRef.current = ready;
         setSession(ready);
         setNotes(ready.notes);
@@ -190,6 +205,7 @@ export default function PlayFrame({
       const remain = Math.max(0, messageBudget - payload.used);
       leftRef.current = remain;
       setLeft(remain);
+      setConfirmedLeft(remain);
     }
   }
 
@@ -338,13 +354,13 @@ export default function PlayFrame({
   function place(el: Element) {
     const box = stageRef.current?.getBoundingClientRect();
     const r = el.getBoundingClientRect();
-    if (!box) return { x: 16, y: 16 };
+    if (!box || !stageRef.current?.contains(el)) return { x: 16, y: 16 };
     return { x: Math.min(Math.max(8, r.left - box.left + r.width / 2 - 110), box.width - 248), y: Math.max(8, r.top - box.top - 70) };
   }
 
   function listen(i: number, el: Element) {
     const g = gate === "door" ? session?.street?.queue[i] : undefined;
-    if (!g) return;
+    if (!g || g.lines.length === 0) { setBubble(null); return; }
     const k = `${gate}${i}`;
     const n = heard[k] ?? 0;
     const l = g.lines[n % g.lines.length];
@@ -417,7 +433,7 @@ export default function PlayFrame({
         player_id: current.playerId,
         blob: current.blob,
         text: text.trim(),
-      }).then((payload) => applyGuard(current, payload, false));
+      }).then((payload) => applyGuard(current, payload, false, text.trim()));
     });
   }
 
@@ -457,11 +473,17 @@ export default function PlayFrame({
         item: b.item,
         qty,
         unit,
-      }).then((payload) => applyGuard(current, payload, true));
+      }).then((payload) => applyGuard(current, payload, true, `BILL: ${b.payee} · ${b.reference} · ${b.item} · ${b.qty} × ${b.unit}`));
     });
   }
 
-  function applyGuard(current: StoredRaid, payload: Record<string, unknown>, bill: boolean) {
+  function applyGuard(current: StoredRaid, payload: Record<string, unknown>, bill: boolean, playerText: string) {
+    if (payload.ok === true && typeof payload.reply === "string" && payload.reply && typeof payload.blob === "string") {
+      const history = [...transcriptRef.current, { player: playerText, guard: payload.reply }].slice(-12);
+      transcriptRef.current = history;
+      setTranscript(history);
+      transcriptWrites.current = transcriptWrites.current.catch(() => {}).then(() => saveTranscript(storageName, vaultId, vault.round, history)).catch(() => { setTranscriptError(true); });
+    }
     if (typeof payload.blob === "string") {
       const next = { ...current, blob: payload.blob, verdict: payload.verdict ?? current.verdict };
       sessionRef.current = next;
@@ -472,6 +494,7 @@ export default function PlayFrame({
       const remain = Math.max(0, messageBudget - payload.used);
       leftRef.current = remain;
       setLeft(remain);
+      setConfirmedLeft(remain);
     }
     if (payload.ok === true && payload.signature && payload.verdict) {
       const amount = verdictAmount(payload.verdict);
@@ -739,6 +762,8 @@ export default function PlayFrame({
         {fade && <div className="absolute inset-0 z-20 animate-[fadeIn_.3s_ease-out] bg-night" />}
       </section>
 
+      {stage === "play" && gate === "door" && session?.street?.queue.length ? <div className="flex gap-2 overflow-x-auto bg-night-2 px-4 py-2" aria-label="People on the street">{session.street.queue.map((person, i) => <button key={i} type="button" className="chalk-focus min-h-11 shrink-0 rounded-full border border-white/20 px-3 text-xs" onClick={(event) => listen(i, event.currentTarget)}>Listen to {person.who}</button>)}</div> : null}
+
       {/* Dialogue and actions */}
       <section className="z-20 rounded-t-3xl border-t border-white/10 bg-night-2 px-4 pb-5 pt-4">
         <div className="flex items-start gap-3">
@@ -747,8 +772,11 @@ export default function PlayFrame({
             {line === "…" ? <Thinking /> : line.slice(0, typed)}
           </p>
           {refused && !busy && <RefusedStamp className="shrink-0" />}
+          {busy && <span role="status" className="text-xs text-chalk/70">Waiting for the guard…</span>}
         </div>
         {you && <div className="mt-1 truncate font-mono text-[11px] text-chalk/45">You: {you}</div>}
+        {transcriptError && <p role="status" className="mt-2 text-xs text-chalk/70">Conversation could not be saved or loaded on this device.</p>}
+        {transcript.length > 0 && <details className="mt-2 text-xs text-chalk/70"><summary className="cursor-pointer">Conversation on this device</summary><ol className="mt-2 max-h-40 space-y-2 overflow-y-auto">{transcript.map((turn, i) => <li key={i}><p>You: {turn.player}</p><p>Guard: {turn.guard}</p></li>)}</ol></details>}
 
         {stage === "play" &&
           (saying ? (
@@ -795,7 +823,7 @@ export default function PlayFrame({
                 className="rounded-2xl border border-chalk/25 py-3 text-sm transition active:scale-95 disabled:opacity-40"
               >
                 Say
-                <span className="block font-mono text-[10px] text-chalk/45">1 message</span>
+                <span className="block font-mono text-[10px] text-chalk/45">Costs 1 message</span>
               </button>
               <button
                 disabled={busy || left === 0}
@@ -803,7 +831,7 @@ export default function PlayFrame({
                 className="rounded-2xl bg-chalk py-3 font-sign text-ink shadow-[0_5px_0_#9c9483] transition active:translate-y-1 active:shadow-[0_2px_0_#9c9483] disabled:opacity-40"
               >
                 Write a bill
-                <span className="block font-mono text-[10px] font-normal text-ink/50">1 message</span>
+                <span className="block font-mono text-[10px] font-normal text-ink/50">Costs 1 message</span>
               </button>
               <button
                 onClick={() => {
@@ -821,6 +849,10 @@ export default function PlayFrame({
             </div>
           ))}
       </section>
+
+      {stage === "play" && !busy && confirmedLeft === 0 && (
+        <p role="status" className="mx-auto mt-3 max-w-lg px-4 text-sm text-chalk/80">No messages left. You can still check your desk.</p>
+      )}
 
       {sheet && (
         <div className="absolute inset-0 z-40 flex flex-col justify-end bg-black/60" onClick={() => setSheet(null)}>

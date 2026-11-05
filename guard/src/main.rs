@@ -68,7 +68,7 @@ mod entry {
 
     impl Model for Cloud {
         fn complete(&mut self, system: &str, user: &str) -> Result<String, ()> {
-            match complete_cloud(system, user) {
+            match complete_cloud(system, user, None) {
                 Ok(text) => Ok(text),
                 Err(stage) => {
                     eprintln!("{}", stage.label());
@@ -76,9 +76,12 @@ mod entry {
                 }
             }
         }
+        fn complete_draft(&mut self, system: &str, user: &str) -> Result<String, guard::model_diagnostic::ModelFailure> {
+            complete_cloud(system, user, Some(std::time::Duration::from_secs(50)))
+        }
     }
 
-    fn complete_cloud(system: &str, user: &str) -> Result<String, guard::model_diagnostic::ModelFailure> {
+    fn complete_cloud(system: &str, user: &str, connect_timeout: Option<std::time::Duration>) -> Result<String, guard::model_diagnostic::ModelFailure> {
         use guard::model_diagnostic::{completion_content, ModelFailure as F};
         let key = std::env::var("NEAR_AI_KEY").map_err(|_| F::Key)?;
         if key.is_empty() { return Err(F::Key); }
@@ -89,11 +92,18 @@ mod entry {
         });
         let payload = serde_json::to_vec(&body).map_err(|_| F::Encode)?;
         if payload.windows(key.len()).any(|window| window == key.as_bytes()) { return Err(F::SensitivePayload); }
-        let response = wasi_http_client::Client::new()
+        let request = wasi_http_client::Client::new()
             .post(COMPLETIONS)
             .header("Content-Type", "application/json")
             .header("Authorization", format!("Bearer {key}"))
-            .body(&payload).send().map_err(|_| F::Transport)?;
+            .body(&payload);
+        let request = match connect_timeout {
+            Some(timeout) => request.connect_timeout(timeout),
+            None => request,
+        };
+        let response = request.send().map_err(|error| {
+                guard::model_diagnostic::transport_category(error.downcast_ref::<wasi::http::types::ErrorCode>())
+            })?;
         if !(200..300).contains(&response.status()) { return Err(F::Http); }
         let bytes = response.body().map_err(|_| F::Body)?;
         completion_content(&bytes, &key)

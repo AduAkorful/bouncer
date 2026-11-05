@@ -24,7 +24,7 @@ const SAMPLE_SPEC = {
   decimals: 6,
   guard: { voice: "Dry and tired. Polite, and never says why." },
   lines: [
-    { payee: "Coastline Drinks", reference: "CD-{d4}", item: "bar delivery", qty: { lo: 1, hi: 1 }, unit: { lo: "40", hi: "120" }, paid: false },
+    { payee: "Coastline Drinks", reference: "CD-{d4}", item: "bar delivery", qty: { lo: 1, hi: 1 }, unit: { lo: "4", hi: "12" }, paid: false },
     { payee: "Tunde Adeyemi", reference: "", item: "security shifts", qty: { lo: 1, hi: 3 }, unit: { lo: "60", hi: "60" }, paid: true },
   ],
   chips: [{ ask: "Who is on the list?", reply: "The list stays with me." }],
@@ -289,6 +289,9 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
                 {nothing ? (readNotice ? "Balances unavailable." : "Reading balances…") : `${fromBaseUnits(funds.nearYocto, 24)} NEAR · ${fromBaseUnits(funds.tokenUnits, decimals)} ${symbol}`}
               </p>
               <p className="text-chalk/60">You need {symbol} for the pot and a little NEAR for storage. This site does not send you either.</p>
+              {networkId === "testnet" && symbol.toUpperCase() === "USDC" && (
+                <p className="text-chalk/70">For test USDC, open the <a className="underline chalk-focus" href="https://faucet.circle.com/" target="_blank" rel="noreferrer">Circle faucet</a>, select NEAR Testnet, and enter the account name above. Refresh balances after the transfer.</p>
+              )}
             </div>
           )}
         </section>
