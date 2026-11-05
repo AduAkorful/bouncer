@@ -19,7 +19,7 @@ const EATER: GoerLook = { skin: "#6b4430", top: "#3b4a8f", bottom: "#2a2234", ha
 const WATER: GoerLook = { skin: "#3b2417", top: "#b3243a", bottom: "#2a2234", hair: "bald", hairColor: "#1c120c", outfit: "tee", pose: "basin", accent: "#efe8da" };
 
 /** Suya stand: a cart, a grill of glowing coals, smoke, one bare bulb, the vendor and a customer. */
-export function SuyaStand({ x, p, rim, gossip, index }: { x: number; p: string; rim: string; gossip: boolean; index: number }) {
+export function SuyaStand({ x, p, rim, gossip, speaks, index }: { x: number; p: string; rim: string; gossip: boolean; speaks: boolean; index: number }) {
   return (
     <g transform={`translate(${x} 0)`}>
       <defs>
@@ -43,7 +43,7 @@ export function SuyaStand({ x, p, rim, gossip, index }: { x: number; p: string; 
       <ellipse cx="0" cy="225" rx="64" ry="7" fill="#ffb060" opacity="0.14" />
 
       <g clipPath={`url(#${p}-vendor-upper)`}>
-        <Goer x={4} y={208} s={0.8} look={VENDOR} rim="#ffb060" dark={0.15} index={index} gossip={gossip} />
+        <Goer x={4} y={208} s={0.8} look={VENDOR} rim="#ffb060" dark={0.15} index={index} gossip={speaks} />
       </g>
 
       {/* Cart */}
@@ -276,7 +276,7 @@ export function NextDoor({ x, p, ad, kiosk, hints }: { x: number; p: string; ad:
 }
 
 /** An Accra taxi at the kerb, engine running, driver's elbow resting at the window. */
-export function Taxi({ x, p, rim, gossip, index }: { x: number; p: string; rim: string; gossip: boolean; index: number }) {
+export function Taxi({ x, p, rim, gossip, speaks, index }: { x: number; p: string; rim: string; gossip: boolean; speaks: boolean; index: number }) {
   return (
     <g transform={`translate(${x} 0)`}>
       <defs>
@@ -309,14 +309,14 @@ export function Taxi({ x, p, rim, gossip, index }: { x: number; p: string; rim: 
       </g>
       <LearnBadge x={40} y={228} show={gossip} />
       {/* Driver */}
-      <g data-person={index} style={gossip ? { cursor: "pointer" } : undefined}>
+      <g data-person={index} style={speaks ? { cursor: "pointer" } : undefined}>
         <g data-taxi-driver clipPath={`url(#${p}-driver-window)`}>
           <circle cx="-22" cy="205" r="5.5" fill="#3b2417" />
           <path d="M-29,216 Q-29,210 -22,209 Q-15,210 -15,216 Z" fill="#efe8da" />
           <path d="M-24,212 L-35,212" stroke="#3b2417" strokeWidth="3" strokeLinecap="round" />
         </g>
-        {gossip && <rect x="-46" y="190" width="34" height="26" fill="transparent" />}
-        {gossip && (
+        {speaks && <rect x="-46" y="190" width="34" height="26" fill="transparent" />}
+        {speaks && (
           <g className="gossip-hint" transform="translate(-22 180)">
             <path d="M-8,-6 h16 a3,3 0 0 1 3,3 v6 a3,3 0 0 1 -3,3 h-9 l-4,4 v-4 h-3 a3,3 0 0 1 -3,-3 v-6 a3,3 0 0 1 3,-3 Z" fill="#efe8da" />
             <g fill="#17141c">
@@ -360,7 +360,7 @@ const KEBAB_MAN: GoerLook = { skin: "#c99a72", top: "#efe8da", bottom: "#1d1727"
 const ROSES: GoerLook = { skin: "#a8754f", top: "#2a2234", bottom: "#1d1727", hair: "bun", hairColor: "#2a1a10", outfit: "jacket", pose: "hold", accent: "#b3243a" };
 
 /** A kebab van: serving hatch, lit menu, the doner turning, steam, someone at the hatch. */
-export function KebabVan({ x, p, gossip, index }: { x: number; p: string; gossip: boolean; index: number }) {
+export function KebabVan({ x, p, gossip, speaks, index }: { x: number; p: string; gossip: boolean; speaks: boolean; index: number }) {
   return (
     <g transform={`translate(${x} 0)`}>
       <defs>
@@ -390,7 +390,7 @@ export function KebabVan({ x, p, gossip, index }: { x: number; p: string; gossip
           DALSTON GRILL
         </text>
       </g>
-      <Goer x={6} y={232} s={0.62} look={KEBAB_MAN} rim="#fff1c8" dark={0.05} index={index} gossip={gossip} />
+      <Goer x={6} y={232} s={0.62} look={KEBAB_MAN} rim="#fff1c8" dark={0.05} index={index} gossip={speaks} />
       {/* counter and lower body in front of him */}
       <rect x="-62" y="186" width="94" height="7" fill="#c9c3cf" />
       <path d="M-70,193 L72,193 L72,212 L-70,212 Z" fill="#e8e4dc" />
@@ -426,7 +426,7 @@ export function RoseSeller({ x, rim, gossip, index }: { x: number; rim: string; 
 }
 
 /** A black cab at the kerb, its TAXI light on. */
-export function BlackCab({ x, rim, gossip, index }: { x: number; rim: string; gossip: boolean; index: number }) {
+export function BlackCab({ x, rim, gossip, speaks, index }: { x: number; rim: string; gossip: boolean; speaks: boolean; index: number }) {
   return (
     <g transform={`translate(${x} 0)`}>
       <ellipse cx="0" cy="256" rx="80" ry="5" fill="#000" opacity="0.6" />
@@ -449,12 +449,12 @@ export function BlackCab({ x, rim, gossip, index }: { x: number; rim: string; go
         <circle cx="48" cy="249" r="4.5" fill="#9c9483" />
       </g>
       <LearnBadge x={40} y={226} show={gossip} />
-      <g data-person={index} style={gossip ? { cursor: "pointer" } : undefined}>
+      <g data-person={index} style={speaks ? { cursor: "pointer" } : undefined}>
         <circle cx="-20" cy="203" r="6.5" fill="#c99a72" />
         <path d="M-26,199 Q-20,192 -14,199 Z" fill="#2a2234" />
         <path d="M-27,214 Q-27,209 -20,208 Q-13,209 -13,214 Z" fill="#3b4a8f" />
-        {gossip && <rect x="-44" y="190" width="34" height="26" fill="transparent" />}
-        {gossip && (
+        {speaks && <rect x="-44" y="190" width="34" height="26" fill="transparent" />}
+        {speaks && (
           <g className="gossip-hint" transform="translate(-20 178)">
             <path d="M-8,-6 h16 a3,3 0 0 1 3,3 v6 a3,3 0 0 1 -3,3 h-9 l-4,4 v-4 h-3 a3,3 0 0 1 -3,-3 v-6 a3,3 0 0 1 3,-3 Z" fill="#efe8da" />
             <g fill="#17141c">

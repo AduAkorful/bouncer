@@ -649,6 +649,8 @@ export default function PlayFrame({
   const potText = formatAtomic(vault.dayPot, decimals);
   const cutText = signedAmount ? formatAtomic(signedAmount, decimals) : null;
   const unread = notes.length - seen;
+  const streetQueue = session?.street?.queue ?? [];
+  const speakingSlots = streetQueue.map((person) => person.lines.length > 0);
 
   if (doorError) return <Blocked title="The raid did not start." detail={doorError} />;
   if (!session?.blob) {
@@ -722,7 +724,7 @@ export default function PlayFrame({
         <div ref={scroller} className={`absolute inset-0 overflow-y-hidden [scrollbar-width:none] ${swipe ? "overflow-x-auto" : "overflow-x-hidden"}`} onScroll={() => setBubble(null)}>
           <div ref={scene} key={gate} className="relative h-full" style={{ width: gate === "door" && streetW ? streetW : "100%" }}>
             {gate === "door" ? (
-              <DoorScene key={city} city={city} sign={signText} look={doorLook} gossip={Boolean(session?.street)} viewBox={narrow ? "66 -40 268 300" : doorView} className="absolute inset-0 size-full" />
+              <DoorScene key={city} city={city} sign={signText} look={doorLook} gossip={Boolean(session?.street)} speakingSlots={stage === "play" ? speakingSlots : undefined} viewBox={narrow ? "66 -40 268 300" : doorView} className="absolute inset-0 size-full" />
             ) : (
               <OfficeScene hints={stage === "play"} className="absolute inset-0 size-full" />
             )}
@@ -740,7 +742,9 @@ export default function PlayFrame({
         </div>
         {stage === "play" && notes.length === 0 && !bubble && (
           <div className="pointer-events-none absolute bottom-3 left-1/2 w-max max-w-[calc(100%-1.5rem)] -translate-x-1/2 rounded-full bg-chalk px-3 py-1.5 text-center text-[12px] font-semibold text-ink shadow-lg">
-            {gate === "door" ? "The street talks. Tap someone to listen. Swipe to look around." : "Look around. Tap what's glowing."}
+            {gate === "office" ? "Look around. Tap what's glowing." : speakingSlots.some(Boolean)
+              ? "Tap a speech bubble or use Listen. Swipe to look around."
+              : "Nobody in this queue has a hint to share."}
           </div>
         )}
         {bubble && (
@@ -762,7 +766,16 @@ export default function PlayFrame({
         {fade && <div className="absolute inset-0 z-20 animate-[fadeIn_.3s_ease-out] bg-night" />}
       </section>
 
-      {stage === "play" && gate === "door" && session?.street?.queue.length ? <div className="flex gap-2 overflow-x-auto bg-night-2 px-4 py-2" aria-label="People on the street">{session.street.queue.map((person, i) => <button key={i} type="button" className="chalk-focus min-h-11 shrink-0 rounded-full border border-white/20 px-3 text-xs" onClick={(event) => listen(i, event.currentTarget)}>Listen to {person.who}</button>)}</div> : null}
+      {stage === "play" && gate === "door" && speakingSlots.some(Boolean) && (
+        <div className="flex items-center gap-2 overflow-x-auto bg-night-2 px-4 py-2" role="group" aria-label="People on the street">
+          <span className="shrink-0 font-mono text-xs uppercase text-chalk/75">Street hints</span>
+          {streetQueue.map((person, i) => speakingSlots[i] && (
+            <button key={i} type="button" className="chalk-focus min-h-11 shrink-0 rounded-full border border-chalk/60 px-3 text-xs text-chalk" onClick={(event) => listen(i, event.currentTarget)}>
+              Listen to {person.who}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Dialogue and actions */}
       <section className="z-20 rounded-t-3xl border-t border-white/10 bg-night-2 px-4 pb-5 pt-4">
