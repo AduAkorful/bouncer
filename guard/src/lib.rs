@@ -9,6 +9,7 @@ mod host;
 mod ids;
 mod ledger;
 mod manifest;
+pub mod model_diagnostic;
 mod rules;
 mod session;
 mod spec;

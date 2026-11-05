@@ -8,6 +8,7 @@ import { httpRpc } from "@/lib/chain";
 import { PARTS, SKINS } from "@/lib/look";
 import { preflightCommit, preflightCreate, preflightFund, preflightKeeper, preflightReclaim, preflightSetSpec, validVaultId, type Check, type Funds } from "@/lib/preflight";
 import { chainNowNs, connectSponsor, readChain, readFunds, readVault, vaultRegistered, type Chain, type Sponsor } from "@/lib/sponsor-client";
+import { sponsorAvailability, type SponsorAvailability } from "@/lib/sponsor-availability";
 import { sponsorStep } from "@/lib/sponsor-state";
 import { runSponsorAction, sponsorDetail } from "@/lib/sponsor-action";
 import { createBytes, depositFor, specBytes } from "@/lib/storage-cost";
@@ -34,6 +35,8 @@ const randomSalt = () => [...crypto.getRandomValues(new Uint8Array(16))].map((b)
 
 export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeperAccount }: Props) {
   const rpc = useMemo(() => httpRpc(rpcUrl), [rpcUrl]);
+  const [availability, setAvailability] = useState<SponsorAvailability | "loading">("loading");
+  const [availabilityCheck, setAvailabilityCheck] = useState(0);
   const [sponsor, setSponsor] = useState<Sponsor | null>(null);
   const [chain, setChain] = useState<Chain | null>(null);
   const [funds, setFunds] = useState<Funds | null>(null);
@@ -43,6 +46,12 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
   const [notice, setNotice] = useState<{ text: string } | null>(null);
   const [readNotice, setReadNotice] = useState<string | null>(null);
   const noticeRef = useRef<HTMLParagraphElement>(null);
+
+  useEffect(() => {
+    let active = true;
+    void sponsorAvailability(rpc, contractId).then((result) => { if (active) setAvailability(result); });
+    return () => { active = false; };
+  }, [rpc, contractId, availabilityCheck]);
 
   useEffect(() => {
     if (notice) noticeRef.current?.scrollIntoView({ block: "nearest", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
@@ -254,6 +263,12 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
         <p className="text-sm text-chalk/70">
           You write the story, fund a pot, and the guard runs your door every night. The story passes through this site&apos;s server and the guard in plaintext, and the draft uses a model. Testnet only.
         </p>
+        {availability !== "open" ? (
+          <div role="status" className="rounded-xl border border-white/20 px-4 py-3 text-sm text-chalk/90">
+            {availability === "loading" ? "Checking whether new sponsor doors are open…" : availability === "closed" ? "New sponsor doors are not open yet. Existing sponsors can still connect to manage their doors." : "We could not check whether new sponsor doors are open. Existing sponsors can still connect to manage their doors."}
+            {availability !== "loading" ? <button className="chalk-focus ml-2 min-h-11 underline" onClick={() => { setAvailability("loading"); setAvailabilityCheck((n) => n + 1); }}>Check again</button> : null}
+          </div>
+        ) : null}
         {busy ? <p role="status" className="text-sm text-chalk/80">Working on this step…</p> : null}
         {notice ? <p ref={noticeRef} role="status" className="rounded-xl border border-white/15 px-4 py-3 text-sm">{notice.text}</p> : null}
         {readNotice ? <p role="status" className="text-sm text-chalk/70">{readNotice}</p> : null}

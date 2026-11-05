@@ -1,5 +1,6 @@
 import { screen } from "@/lib/screen";
 import Link from "next/link";
+import { ProfileIdentity } from "@/components/profile/ProfileIdentity";
 
 export const metadata = screen("Profile", "The account stored on this device.");
 
@@ -8,8 +9,7 @@ export default function ProfilePage() {
     <main className="min-h-dvh overflow-x-clip bg-night px-4 pb-24 pt-8 text-chalk">
       <div className="mx-auto max-w-lg">
         <p className="font-mono text-xs uppercase tracking-[0.22em] text-chalk/80">Profile</p>
-        <h1 className="mt-1 font-sign text-3xl leading-none">No account</h1>
-        <p className="mt-2 text-sm text-chalk/60">A passkey on this device is what this page can read. None is stored.</p>
+        <ProfileIdentity storageName={process.env.NEXT_PUBLIC_STORAGE_NAME ?? ""} />
 
         <div className="mt-5 grid grid-cols-3 gap-2">
           <Stat k="Streak" v="—" />
@@ -19,12 +19,12 @@ export default function ProfilePage() {
 
         <section className="mt-5 rounded-3xl border border-white/10 bg-night-2 p-5">
           <h2 className="font-sign text-lg">History</h2>
-          <p className="mt-2 text-sm text-chalk/70">No raids are stored.</p>
+          <p className="mt-2 text-sm text-chalk/70">Raid history is not available here yet.</p>
         </section>
 
         <section className="mt-4 rounded-3xl border border-white/10 bg-night-2 p-5">
           <h2 className="font-sign text-lg">Case notes</h2>
-          <p className="mt-2 text-sm text-chalk/70">No notes are stored.</p>
+          <p className="mt-2 text-sm text-chalk/70">Case notes are not available here yet.</p>
         </section>
         <Link href="/home" className="chalk-focus mt-6 inline-flex min-h-11 items-center text-sm text-chalk/80 underline decoration-white/20">
           The door

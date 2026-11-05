@@ -68,45 +68,35 @@ mod entry {
 
     impl Model for Cloud {
         fn complete(&mut self, system: &str, user: &str) -> Result<String, ()> {
-            let key = std::env::var("NEAR_AI_KEY").map_err(|_| ())?;
-            if key.is_empty() {
-                return Err(());
+            match complete_cloud(system, user) {
+                Ok(text) => Ok(text),
+                Err(stage) => {
+                    eprintln!("{}", stage.label());
+                    Err(())
+                }
             }
-            let body = serde_json::json!({
-                "model": MODEL_ID,
-                "messages": [
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user}
-                ],
-                "max_tokens": MAX_TOKENS,
-                "temperature": 0.7,
-                "stream": false
-            });
-            let payload = serde_json::to_vec(&body).map_err(|_| ())?;
-            if payload.windows(key.len()).any(|window| window == key.as_bytes()) {
-                return Err(());
-            }
-            let response = wasi_http_client::Client::new()
-                .post(COMPLETIONS)
-                .header("Content-Type", "application/json")
-                .header("Authorization", format!("Bearer {key}"))
-                .body(&payload)
-                .send()
-                .map_err(|_| ())?;
-            if !(200..300).contains(&response.status()) {
-                return Err(());
-            }
-            let bytes = response.body().map_err(|_| ())?;
-            let parsed: serde_json::Value = serde_json::from_slice(&bytes).map_err(|_| ())?;
-            let text = parsed
-                .pointer("/choices/0/message/content")
-                .and_then(|value| value.as_str())
-                .ok_or(())?;
-            if text.is_empty() || text.contains(&key) {
-                return Err(());
-            }
-            Ok(text.to_string())
         }
+    }
+
+    fn complete_cloud(system: &str, user: &str) -> Result<String, guard::model_diagnostic::ModelFailure> {
+        use guard::model_diagnostic::{completion_content, ModelFailure as F};
+        let key = std::env::var("NEAR_AI_KEY").map_err(|_| F::Key)?;
+        if key.is_empty() { return Err(F::Key); }
+        let body = serde_json::json!({
+            "model": MODEL_ID,
+            "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
+            "max_tokens": MAX_TOKENS, "temperature": 0.7, "stream": false
+        });
+        let payload = serde_json::to_vec(&body).map_err(|_| F::Encode)?;
+        if payload.windows(key.len()).any(|window| window == key.as_bytes()) { return Err(F::SensitivePayload); }
+        let response = wasi_http_client::Client::new()
+            .post(COMPLETIONS)
+            .header("Content-Type", "application/json")
+            .header("Authorization", format!("Bearer {key}"))
+            .body(&payload).send().map_err(|_| F::Transport)?;
+        if !(200..300).contains(&response.status()) { return Err(F::Http); }
+        let bytes = response.body().map_err(|_| F::Body)?;
+        completion_content(&bytes, &key)
     }
 
     struct ProjectKey;
