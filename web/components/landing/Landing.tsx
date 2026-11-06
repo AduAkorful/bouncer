@@ -3,53 +3,102 @@
 import Link from "next/link";
 import { DoorScene } from "@/components/DoorScene";
 import { SceneLife } from "@/components/SceneLife";
+import { RefusedStamp } from "@/components/Stamp";
 
+const beats = [
+  { title: "Listen.", text: "People on the street drop clues. That is free." },
+  { title: "Talk.", text: "Six messages. The bill counts as one." },
+  { title: "Send the bill.", text: "Payee, reference, and total." },
+] as const;
+
+/** The first screen is the game. A pot and an unpaid line stay off this page. */
 export function Landing() {
   return (
     <main className="overflow-x-clip bg-night text-chalk">
-      <section className="relative h-dvh overflow-hidden">
-        <SceneLife className="absolute inset-0 lg:left-[34%] lg:after:absolute lg:after:inset-y-0 lg:after:left-0 lg:after:w-12 lg:after:bg-gradient-to-r lg:after:from-night lg:after:to-transparent lg:after:content-['']">
-          <DoorScene sign="THE VELVET" queue p="land" viewBox="40 -160 340 430" className="size-full" label="The door at night, rope across it, a queue waiting" />
-        </SceneLife>
+      <section className="mx-auto flex min-h-dvh max-w-6xl flex-col px-4 pb-8 pt-5 lg:grid lg:min-h-dvh lg:grid-cols-[minmax(0,1.1fr)_minmax(20rem,0.9fr)] lg:items-center lg:gap-10 lg:px-10">
+        <div className="relative h-[30vh] min-h-[190px] overflow-hidden rounded-3xl bg-[#1a1424] lg:h-[70vh] lg:min-h-[420px]">
+          <SceneLife className="absolute inset-0">
+            <DoorScene
+              sign=""
+              queue={false}
+              neighbors={false}
+              p="land"
+              viewBox="108 48 184 196"
+              className="size-full"
+              label="A bouncer standing behind the rope"
+            />
+          </SceneLife>
+          <p className="absolute bottom-3 left-3 max-w-[16rem] rounded-2xl bg-night/85 px-3 py-2 font-sign text-lg leading-none text-chalk shadow-lg">
+            Send the bill.
+          </p>
+        </div>
 
-        <div className="pointer-events-none absolute inset-x-0 top-0 z-10 bg-gradient-to-b from-night from-30% via-night/75 to-transparent px-4 pb-16 pt-6 sm:px-8 sm:pt-8 lg:inset-y-0 lg:right-auto lg:flex lg:w-[34%] lg:flex-col lg:justify-center lg:bg-gradient-to-r lg:from-night lg:from-60% lg:via-night/85 lg:to-transparent lg:px-10 lg:pb-0 lg:pt-0">
-          <h1 className="font-sign text-[1.85rem] leading-none whitespace-nowrap min-[400px]:text-5xl sm:text-6xl lg:text-[clamp(2rem,3.75vw,3rem)]">BOUNCER</h1>
-          <p className="mt-4 max-w-[16ch] font-sign text-2xl leading-none sm:text-3xl lg:max-w-[12ch]">Talk your way past the bouncer.</p>
-          <p className="mt-3 max-w-[28ch] text-sm leading-relaxed text-chalk/80 sm:text-base">A free game of chat and forged bills.</p>
-          <div className="pointer-events-auto mt-4 flex flex-wrap items-center gap-x-5 gap-y-2">
-            <Link
-              href="/home"
-              className="chalk-focus inline-flex min-h-11 w-fit items-center rounded-2xl bg-chalk px-6 py-3 font-sign text-ink shadow-[0_6px_0_#9c9483] transition hover:bg-[#f4efe4] active:translate-y-1 active:shadow-[0_2px_0_#9c9483]"
-            >
-              Step up
-            </Link>
-            <a href="#how-to-play" className="chalk-focus inline-flex min-h-11 w-fit items-center text-sm text-chalk/80 underline decoration-white/30">
-              How to play
-            </a>
+        <div className="mt-4 flex flex-col lg:mt-0">
+          <h1 className="font-sign text-3xl leading-none sm:text-4xl">Get a bill past the door.</h1>
+          <div className="mt-4 rounded-3xl bg-paper p-4 text-on-paper shadow-xl">
+            <ol className="space-y-3">
+              {beats.map((beat, index) => (
+                <li key={beat.title} className="flex gap-3">
+                  <span className="grid size-7 shrink-0 place-items-center rounded-full bg-ink font-sign text-sm text-chalk">{index + 1}</span>
+                  <span>
+                    <span className="block font-sign text-lg leading-none">{beat.title}</span>
+                    <span className="mt-1 block text-sm leading-snug">{beat.text}</span>
+                  </span>
+                </li>
+              ))}
+            </ol>
+            <div className="mt-4 space-y-2 border-t border-ink/15 pt-3 font-mono text-xs uppercase tracking-wider">
+              {["Payee", "Reference", "Total"].map((label) => (
+                <div key={label} className="flex items-end gap-3">
+                  <span className="w-20 shrink-0">{label}</span>
+                  <span className="h-5 flex-1 border-b border-ink/30" />
+                </div>
+              ))}
+            </div>
           </div>
-          <p className="mt-2 font-mono text-[11px] text-chalk/70">Free to play · Test tokens only</p>
+          <Link
+            href="/home"
+            className="chalk-focus mt-4 block w-full rounded-2xl bg-chalk py-4 text-center font-sign text-xl text-ink shadow-[0_6px_0_#9c9483] transition hover:bg-[#f4efe4] active:translate-y-1 active:shadow-[0_2px_0_#9c9483]"
+          >
+            Play tonight&apos;s door
+          </Link>
+          <div className="mt-5 text-center">
+            <p className="mx-auto inline-block -rotate-2 border-4 border-rope px-4 py-3 font-sign text-3xl leading-none text-rope">Not approved.</p>
+            <p className="mt-3 text-sm text-chalk/80">A wrong bill says only this.</p>
+          </div>
         </div>
       </section>
 
-      <section id="how-to-play" aria-labelledby="how-to-play-title" className="mx-auto max-w-5xl scroll-mt-8 px-5 py-16 sm:px-10 sm:py-24">
-        <h2 id="how-to-play-title" className="font-sign text-3xl leading-tight sm:text-4xl">How to play</h2>
-        <p className="mt-4 max-w-2xl text-base leading-relaxed text-chalk/80">The venue owes money to people on a hidden list. Work out what it owes, then submit a bill: a payee, a reference and a total that match an unpaid line.</p>
-        <div className="mt-10 grid items-start gap-10 lg:grid-cols-3">
-          <div>
-            <h3 className="font-sign text-2xl leading-tight">Listen first.</h3>
-            <p className="mt-4 text-base leading-relaxed text-chalk/80">Tap people on the street for clues. Keep notes at the Desk. Both are free; some gossip is only a rumour.</p>
-          </div>
-          <div>
-            <h3 className="font-sign text-2xl leading-tight">Six messages.</h3>
-            <p className="mt-4 text-base leading-relaxed text-chalk/80">Chat with the guard and write a bill. Each message or bill uses one of your six. A wrong bill gets one answer, with no field hints.</p>
-            <p className="mt-6 -rotate-3 border-4 border-rope px-3 py-3 text-center font-sign text-2xl leading-none text-rope">Not approved.</p>
-          </div>
-          <div className="lg:text-right">
-            <h3 className="font-sign text-2xl leading-tight">Learn the next day.</h3>
-            <p className="mt-4 text-base leading-relaxed text-chalk/80">After the round closes, your ledger can be revealed. See what you missed, then try another round.</p>
-          </div>
+      <section aria-labelledby="beats-title" className="mx-auto max-w-6xl px-4 py-16 sm:px-10">
+        <h2 id="beats-title" className="font-sign text-3xl leading-none">The same three moves.</h2>
+        <div className="mt-8 grid gap-6 lg:grid-cols-3">
+          <article className="overflow-hidden rounded-3xl border border-white/10 bg-night-2">
+            <div className="relative h-44 bg-[#1a1424]">
+              <DoorScene sign="" queue neighbors={false} p="listen" viewBox="-20 70 180 150" className="size-full" decorative />
+            </div>
+            <div className="p-4">
+              <h3 className="font-sign text-2xl leading-none">Listen.</h3>
+              <p className="mt-2 text-sm text-chalk/80">People on the street drop clues. That is free.</p>
+            </div>
+          </article>
+          <article className="rounded-3xl bg-paper p-5 text-on-paper">
+            <h3 className="font-sign text-2xl leading-none">Send the bill.</h3>
+            <div className="mt-4 space-y-3 font-mono text-xs uppercase tracking-wider">
+              {["Payee", "Reference", "Total"].map((label) => (
+                <div key={label}>
+                  <div>{label}</div>
+                  <div className="mt-1 h-6 border-b border-ink/30" />
+                </div>
+              ))}
+            </div>
+          </article>
+          <article className="flex flex-col items-center justify-center rounded-3xl border border-white/10 bg-night-2 p-6 text-center">
+            <RefusedStamp className="h-16 w-auto" />
+            <p className="mt-4 font-sign text-3xl leading-none text-rope">Not approved.</p>
+            <p className="mt-3 text-sm text-chalk/80">A wrong bill says only this.</p>
+          </article>
         </div>
-        <p className="mt-10 border-t border-white/10 pt-5 text-sm leading-relaxed text-chalk/70">Prizes use test tokens with no cash value. An approval still has to pass the vault contract’s checks and time lock before a payout.</p>
+        <p className="mt-10 text-sm leading-relaxed text-chalk/70">Prizes are test tokens. They have no cash value.</p>
       </section>
     </main>
   );
