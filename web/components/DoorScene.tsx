@@ -2,7 +2,8 @@ import type { ReactNode } from "react";
 import { SAM, NEONS, type Look, type Neon } from "@/lib/look";
 import { Bouncer } from "./Bouncer";
 import { Goer, type GoerLook } from "./Goer";
-import { CITIES, type CityId } from "@/lib/cities";
+import { type CityId } from "@/lib/cities";
+import { citySetting, posterLines, shopCopy, streetPieces, type StreetSetting } from "@/lib/street-setting";
 import { BlackCab, KebabVan, NextDoor, NightBus, Okada, PosterWall, Rain, RoseSeller, SuyaStand, Taxi, VipWindow, WaterSeller } from "./Street";
 
 interface Props {
@@ -16,8 +17,10 @@ interface Props {
   gossip?: boolean;
   /** Queue slots that have lines to overhear. */
   speakingSlots?: readonly boolean[];
-  /** Which city's street surrounds the door */
+  /** Which city's street surrounds the door, when no setting is passed. */
   city?: CityId;
+  /** The sponsor's mix of street pieces. Omitted streets stay Accra, or the city above. */
+  setting?: StreetSetting;
   /** Extra SVG drawn behind the bouncer (on the wall) and in front of everything (street props). */
   back?: ReactNode;
   front?: ReactNode;
@@ -73,6 +76,7 @@ export function DoorScene({
   gossip = false,
   speakingSlots,
   city = "accra",
+  setting,
   back,
   front,
   p = "s",
@@ -85,8 +89,10 @@ export function DoorScene({
   lampFigureX = 318,
 }: Props) {
   const n = ink ?? NEONS.find((x) => x.value === neon) ?? NEONS[0];
-  const kit = CITIES[city];
-  const london = city === "london";
+  const street = setting ?? citySetting(city);
+  const pieces = streetPieces(street);
+  const shop = shopCopy(street);
+  const slips = posterLines(street, sign);
   const speaks = (slot: number) => speakingSlots?.[slot] ?? false;
   const fs = sign.length > 12 ? 14 : sign.length > 10 ? 17 : 22;
   const leaf = (hinge: number) => (open ? `translate(${hinge} 0) scale(0.14 1) translate(${-hinge} 0)` : undefined);
@@ -95,6 +101,13 @@ export function DoorScene({
       viewBox={viewBox}
       preserveAspectRatio="xMidYMax meet"
       className={className}
+      data-stall={pieces.stall}
+      data-ride={pieces.ride}
+      data-passer={pieces.passer}
+      data-seller={pieces.seller}
+      data-shop={pieces.shop}
+      data-weather={pieces.weather}
+      data-posters={pieces.posters}
       role={decorative ? "presentation" : "img"}
       aria-label={decorative ? undefined : label}
       aria-hidden={decorative ? true : undefined}
@@ -210,8 +223,8 @@ export function DoorScene({
         <rect x="70" y="-1000" width="1.2" height="1222" fill={n.stroke} opacity="0.12" />
       </g>
 
-      {neighbors ? <NextDoor x={372} p={p} ad={kit.ad} kiosk={kit.kiosk} hints={gossip} /> : null}
-      {neighbors ? <PosterWall x={-30} hints={gossip} /> : null}
+      {neighbors ? <NextDoor x={372} p={p} ad={shop.ad} kiosk={shop.kiosk} shutter={shop.shutter} hints={gossip} /> : null}
+      {neighbors ? <PosterWall x={-30} hints={gossip} slips={slips} /> : null}
 
       {/* Colour thrown on the brick by the sign */}
       <ellipse cx="200" cy="44" rx="190" ry="120" fill={`url(#${p}-wash)`} style={{ mixBlendMode: "screen" }} />
@@ -338,14 +351,14 @@ export function DoorScene({
 
       {queue && (
         <g id="queue">
-          {london ? <KebabVan x={-176} p={p} gossip={gossip} speaks={speaks(4)} index={4} /> : <SuyaStand x={-170} p={p} rim={n.stroke} gossip={gossip} speaks={speaks(4)} index={4} />}
+          {pieces.stall === "kebab" ? <KebabVan x={-176} p={p} gossip={gossip} speaks={speaks(4)} index={4} /> : <SuyaStand x={-170} p={p} rim={n.stroke} gossip={gossip} speaks={speaks(4)} index={4} />}
           {CROWD.map((c, i) => (
             <Goer key={i} x={c.x} y={216} s={c.s} look={c.look} rim={n.stroke} dark={c.dark} />
           ))}
           <Goer x={66} s={0.78} look={P.yellow} rim={n.stroke} dark={0.22} index={0} gossip={speaks(0)} />
           <Goer x={90} s={0.78} look={P.puff} rim={n.stroke} dark={0.2} index={1} gossip={speaks(1)} />
           <Goer x={114} s={0.8} look={P.cap} rim={n.stroke} dark={0.18} index={2} gossip={speaks(2)} />
-          {london ? <RoseSeller x={-96} rim={n.stroke} gossip={speaks(6)} index={6} /> : <WaterSeller x={-96} rim={n.stroke} gossip={speaks(6)} index={6} />}
+          {pieces.seller === "roses" ? <RoseSeller x={-96} rim={n.stroke} gossip={speaks(6)} index={6} /> : <WaterSeller x={-96} rim={n.stroke} gossip={speaks(6)} index={6} />}
           {/* Visitors by the shutter, clear of the kiosk's service window. */}
           <g className="street-pair">
             <Goer x={560} s={0.74} look={{ skin: "#4a2e1f", top: "#2a2234", bottom: "#17141c", hair: "low", hairColor: "#1c120c", outfit: "jacket", pose: "still", accent: "#e9b52a", broad: true }} rim={n.stroke} dark={0.3} flip />
@@ -382,11 +395,11 @@ export function DoorScene({
 
       <rect x="-1000" y="160" width="2400" height="100" fill={`url(#${p}-haze)`} pointerEvents="none" />
       <g id="near">
-        {queue && (london ? <BlackCab x={520} rim={n.stroke} gossip={gossip} speaks={speaks(5)} index={5} /> : <Taxi x={520} p={p} rim={n.stroke} gossip={gossip} speaks={speaks(5)} index={5} />)}
-        {london ? <NightBus /> : <Okada />}
+        {queue && (pieces.ride === "cab" ? <BlackCab x={520} rim={n.stroke} gossip={gossip} speaks={speaks(5)} index={5} /> : <Taxi x={520} p={p} rim={n.stroke} gossip={gossip} speaks={speaks(5)} index={5} />)}
+        {pieces.passer === "bus" ? <NightBus /> : <Okada />}
       </g>
       {front}
-      {kit.rain && <Rain />}
+      {pieces.weather === "rain" && <Rain />}
 
       {/* A passing car's headlights, swept across now and then */}
       <g id="headlights" opacity="0" style={{ mixBlendMode: "screen" }} pointerEvents="none">

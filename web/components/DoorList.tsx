@@ -48,6 +48,7 @@ export function DoorList({
                 <DoorScene
                   sign={door.sign}
                   look={cardLook(door.card)}
+                  setting={door.card.setting}
                   neighbors={false}
                   queue={false}
                   p={`listed-${index}`}

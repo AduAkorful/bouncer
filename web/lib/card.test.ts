@@ -2,7 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { buildCard, cardLook, parseCard } from "./card.ts";
 
-const card = { sign: "THE RUSTY ANCHOR", name: "Auntie Ama", pitch: "We owe the fishermen. Prove it.", look: { build: 1, skin: 2, head: 3, outfit: 1, eyewear: 2 } };
+const card = {
+  sign: "THE RUSTY ANCHOR",
+  name: "Auntie Ama",
+  pitch: "We owe the fishermen. Prove it.",
+  look: { build: 1, skin: 2, head: 3, outfit: 1, eyewear: 2 },
+  setting: { stall: 0, ride: 0, passer: 0, seller: 0, shop: 0, weather: 0, posters: 0, sound: 0 },
+};
 
 test("a card round trips", () => {
   const built = buildCard(card, 600);

@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiPost } from "@/lib/api";
-import { buildCard, MAX_NAME, MAX_PITCH, MAX_SIGN, type Card } from "@/lib/card";
+import { buildCard, cardLook, MAX_NAME, MAX_PITCH, MAX_SIGN, type Card } from "@/lib/card";
+import { ACCRA_SETTING, SETTING_FIELDS, STREET_VIEW } from "@/lib/street-setting";
+import { DoorScene } from "@/components/DoorScene";
 import { httpRpc } from "@/lib/chain";
 import { PARTS, SKINS } from "@/lib/look";
 import { preflightCommit, preflightCreate, preflightFund, preflightKeeper, preflightReclaim, preflightSetSpec, validVaultId, type Check, type Funds } from "@/lib/preflight";
@@ -63,7 +65,7 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
 
   const [story, setStory] = useState("");
   const [specText, setSpecText] = useState(() => JSON.stringify({ ...SAMPLE_SPEC, salt: "" }, null, 2));
-  const [card, setCard] = useState<Card>({ sign: "", name: "", pitch: "", look: { build: 0, skin: 1, head: 0, outfit: 0, eyewear: 0 } });
+  const [card, setCard] = useState<Card>({ sign: "", name: "", pitch: "", look: { build: 0, skin: 1, head: 0, outfit: 0, eyewear: 0 }, setting: { ...ACCRA_SETTING } });
   const [capText, setCapText] = useState("20");
   const [lockMinutes, setLockMinutes] = useState("10");
   const [maxCracks, setMaxCracks] = useState("1");
@@ -367,25 +369,59 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
               </div>
               <label className={`${label} mt-3`} htmlFor="pitch">Pitch (what players read at the door)</label>
               <input id="pitch" className={input} maxLength={MAX_PITCH} value={card.pitch} onChange={(e) => setCard({ ...card, pitch: e.target.value })} />
-              <div className="mt-3 grid grid-cols-2 gap-3">
-                {(
-                  [
-                    ["build", "Build", PARTS.build.map((p) => p.label)],
-                    ["head", "Head", PARTS.head.map((p) => p.label)],
-                    ["eyewear", "Eyewear", PARTS.eyewear.map((p) => p.label)],
-                    ["outfit", "Outfit", PARTS.outfit.filter((p) => !p.locked).map((p) => p.label)],
-                    ["skin", "Skin", SKINS.map((_, i) => `Tone ${i + 1}`)],
-                  ] as const
-                ).map(([key, name, options]) => (
-                  <div key={key}>
-                    <label className={label} htmlFor={`look-${key}`}>{name}</label>
-                    <select id={`look-${key}`} className={input} value={card.look[key]} onChange={(e) => setCard({ ...card, look: { ...card.look, [key]: Number(e.target.value) } })}>
-                      {options.map((o, i) => (
-                        <option key={o} value={i}>{o}</option>
-                      ))}
-                    </select>
+              <div className="mt-4 grid items-start gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(16rem,0.85fr)]">
+                <div className="overflow-hidden rounded-2xl bg-[#1a1424]">
+                  <DoorScene
+                    sign={card.sign || "YOUR DOOR"}
+                    look={cardLook({ ...card, name: card.name || "Guard" })}
+                    setting={card.setting}
+                    p="sponsor"
+                    viewBox={STREET_VIEW}
+                    className="h-64 w-full sm:h-80"
+                    label="This door's street"
+                  />
+                </div>
+                <div>
+                  <div className="grid grid-cols-2 gap-3">
+                    {(
+                      [
+                        ["build", "Build", PARTS.build.map((p) => p.label)],
+                        ["head", "Head", PARTS.head.map((p) => p.label)],
+                        ["eyewear", "Eyewear", PARTS.eyewear.map((p) => p.label)],
+                        ["outfit", "Outfit", PARTS.outfit.filter((p) => !p.locked).map((p) => p.label)],
+                        ["skin", "Skin", SKINS.map((_, i) => `Tone ${i + 1}`)],
+                      ] as const
+                    ).map(([key, name, options]) => (
+                      <div key={key}>
+                        <label className={label} htmlFor={`look-${key}`}>{name}</label>
+                        <select id={`look-${key}`} className={input} value={card.look[key]} onChange={(e) => setCard({ ...card, look: { ...card.look, [key]: Number(e.target.value) } })}>
+                          {options.map((o, i) => (
+                            <option key={o} value={i}>{o}</option>
+                          ))}
+                        </select>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                  <h3 className="mt-4 font-sign text-base">Setting</h3>
+                  <p className="mt-1 text-xs text-chalk/70">Each piece is a choice. They can mix. A door saved before this stays the Accra street.</p>
+                  <div className="mt-3 grid grid-cols-2 gap-3">
+                    {SETTING_FIELDS.map((field) => (
+                      <div key={field.key}>
+                        <label className={label} htmlFor={`setting-${field.key}`}>{field.label}</label>
+                        <select
+                          id={`setting-${field.key}`}
+                          className={input}
+                          value={card.setting[field.key]}
+                          onChange={(e) => setCard({ ...card, setting: { ...card.setting, [field.key]: Number(e.target.value) } })}
+                        >
+                          {field.options.map((option, i) => (
+                            <option key={option} value={i}>{option}</option>
+                          ))}
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             </section>
 

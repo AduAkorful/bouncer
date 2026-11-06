@@ -1,4 +1,5 @@
 // The street around the door: what's going on either side of the queue. Classes are hooks for lib/idle.ts.
+import type { PosterSlips } from "@/lib/street-setting";
 import { Goer, type GoerLook } from "./Goer";
 
 /** A small "i" on things you can tap to learn about. */
@@ -93,58 +94,58 @@ export function WaterSeller({ x, rim, gossip, index }: { x: number; rim: string;
 }
 
 /** Posters pasted on the club wall. The lineup poster can be read and pinned. */
-export function PosterWall({ x, hints }: { x: number; hints: boolean }) {
+export function PosterWall({ x, hints, slips }: { x: number; hints: boolean; slips: PosterSlips }) {
   return (
     <g transform={`translate(${x} 0)`}>
       <g transform="rotate(-4 -40 92)">
         <rect x="-58" y="70" width="32" height="44" fill="#4a2f8f" />
         <text x="-42" y="86" textAnchor="middle" fontFamily="var(--font-bungee)" fontSize="5.5" fill="#efe8da">
-          AFRO
+          {slips.purple[0]}
         </text>
         <text x="-42" y="94" textAnchor="middle" fontFamily="var(--font-bungee)" fontSize="5.5" fill="#efe8da">
-          BEATS
+          {slips.purple[1]}
         </text>
         <text x="-42" y="106" textAnchor="middle" fontFamily="var(--font-jetbrains)" fontSize="3.6" fill="#cbb8ff">
-          EVERY SAT
+          {slips.purple[2]}
         </text>
       </g>
       <g data-clue="poster" style={hints ? { cursor: "pointer" } : undefined}>
-        <g transform="rotate(2 0 86)">
-          <rect x="-18" y="60" width="36" height="52" fill="#efe8da" />
-          <rect x="-18" y="60" width="36" height="12" fill="#17141c" />
-          <text x="0" y="68.5" textAnchor="middle" fontFamily="var(--font-bungee)" fontSize="5" fill="#cbb8ff">
-            THE VELVET
+        <g transform="rotate(2 0 90)">
+          <rect x="-19" y="58" width="38" height="62" fill="#efe8da" />
+          <rect x="-19" y="58" width="38" height="11" fill="#17141c" />
+          <text x="0" y="66" textAnchor="middle" fontFamily="var(--font-bungee)" fontSize={slips.signSize} fill="#cbb8ff">
+            {slips.sign}
           </text>
-          <text x="0" y="80" textAnchor="middle" fontFamily="var(--font-bungee)" fontSize="4" fill="#17141c">
-            FRI · LADIES
+          <text x="0" y="78" textAnchor="middle" fontFamily="var(--font-bungee)" fontSize="3.2" fill="#17141c">
+            {slips.cream[0]}
           </text>
-          <text x="0" y="90" textAnchor="middle" fontFamily="var(--font-bungee)" fontSize="6" fill="#b3243a">
-            SAT
+          <text x="0" y="89" textAnchor="middle" fontFamily="var(--font-bungee)" fontSize="5" fill="#b3243a">
+            {slips.cream[1]}
           </text>
-          <text x="0" y="98" textAnchor="middle" fontFamily="var(--font-bungee)" fontSize="5.5" fill="#17141c">
-            K-NOVA
+          <text x="0" y="99" textAnchor="middle" fontFamily="var(--font-bungee)" fontSize="4.2" fill="#17141c">
+            {slips.cream[2]}
           </text>
-          <text x="0" y="106" textAnchor="middle" fontFamily="var(--font-jetbrains)" fontSize="3.4" fill="#17141c">
-            23:00 – 02:00
+          <text x="0" y="110" textAnchor="middle" fontFamily="var(--font-jetbrains)" fontSize="3.2" fill="#17141c">
+            {slips.cream[3]}
           </text>
         </g>
         {hints && (
-          <g className="clue-ring" style={{ transformOrigin: "0px 86px" }}>
-            <circle cx="0" cy="86" r="14" fill="none" stroke="#efe8da" strokeWidth="1.4" />
+          <g className="clue-ring" style={{ transformOrigin: "0px 89px" }}>
+            <circle cx="0" cy="89" r="16" fill="none" stroke="#efe8da" strokeWidth="1.4" />
           </g>
         )}
       </g>
       <g transform="rotate(-2 40 92)">
         <path d="M24,74 h30 v30 l-6,4 l-5,-3 l-6,5 l-5,-4 l-8,3 Z" fill="#b3243a" />
         <text x="39" y="88" textAnchor="middle" fontFamily="var(--font-bungee)" fontSize="5" fill="#efe8da">
-          LADIES
+          {slips.flag[0]}
         </text>
         <text x="39" y="96" textAnchor="middle" fontFamily="var(--font-bungee)" fontSize="5" fill="#efe8da">
-          NIGHT
+          {slips.flag[1]}
         </text>
       </g>
       <text x="-6" y="138" textAnchor="middle" fontFamily="var(--font-bungee-inline)" fontSize="16" fill="none" stroke="#8f6bff" strokeWidth="0.8" opacity="0.35" transform="rotate(-6 -6 132)">
-        OSU 4 LIFE
+        {slips.wall}
       </text>
     </g>
   );
@@ -186,7 +187,7 @@ export function VipWindow({ x, y, p, id }: { x: number; y: number; p: string; id
 /** Next door: a concrete block with a shuttered shop and a top-up kiosk under a flickering tube. */
 const KEEPER: GoerLook = { skin: "#6b4430", top: "#8f6bff", bottom: "#1d1727", hair: "bun", hairColor: "#1c120c", outfit: "tee", pose: "phone" };
 
-export function NextDoor({ x, p, ad, kiosk, hints }: { x: number; p: string; ad: [string, string, string]; kiosk: string; hints: boolean }) {
+export function NextDoor({ x, p, ad, kiosk, shutter, hints }: { x: number; p: string; ad: [string, string, string]; kiosk: string; shutter: string; hints: boolean }) {
   return (
     <g transform={`translate(${x} 0)`}>
       <defs>
@@ -237,7 +238,7 @@ export function NextDoor({ x, p, ad, kiosk, hints }: { x: number; p: string; ad:
         <line key={i} x1="30" x2="120" y1={143 + i * 5} y2={143 + i * 5} stroke="#1c1a22" strokeWidth="1.2" />
       ))}
       <text x="75" y="186" textAnchor="middle" fontFamily="var(--font-bungee-inline)" fontSize="13" fill="none" stroke="#5dffb0" strokeWidth="0.6" opacity="0.3" transform="rotate(-8 75 182)">
-        KOJO
+        {shutter}
       </text>
       <rect x="24" y="132" width="102" height="8" fill="#121016" />
       </g>
