@@ -4,3 +4,6 @@ plans/
 research/
 .claude/
 AGENTS.md
+history.txt
+*.pem
+.vercel

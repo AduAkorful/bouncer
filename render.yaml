@@ -47,3 +47,15 @@ services:
         sync: false
       - key: KEEPER_PRIVATE_KEY
         sync: false
+      - key: SURREAL_URL
+        sync: false
+      - key: SURREAL_USER
+        sync: false
+      - key: SURREAL_PASS
+        sync: false
+      - key: SURREAL_NS
+        sync: false
+      - key: SURREAL_DB
+        sync: false
+      - key: NEAR_AI_KEY
+        sync: false
