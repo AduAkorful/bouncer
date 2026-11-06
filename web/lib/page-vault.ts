@@ -6,7 +6,7 @@ import { parseSpecCt, parseTokenMeta } from "./sponsor-views.ts";
 import { metadataRequest } from "./token.ts";
 import { parseVault, viewRequest, type VaultView } from "./vault.ts";
 
-export type PageEnv = { contractId: string; defaultVaultId: string; venue: string };
+export type PageEnv = { contractId: string };
 
 export type TokenRead = { ok: true; symbol: string; decimals: number } | { ok: false };
 
@@ -15,7 +15,7 @@ export const TOKEN_LABEL_MS = 10 * 60 * 1000;
 export type PageVault = {
   vaultId: string;
   vault: VaultView;
-  /** `custom` for a sponsor's story. Otherwise the built-in venue named in env. */
+  /** `custom` when a sealed story is stored. Otherwise this vault's id. */
   venueId: string;
   card: Card | null;
   specCt: string | null;
@@ -67,27 +67,25 @@ async function loadToken(rpc: Rpc, contractId: string): Promise<{ ok: true; acco
   return { ok: true, account: account.value, symbol: parsed.value.symbol, decimals: parsed.value.decimals };
 }
 
-export async function readPageVault(rpc: Rpc, env: PageEnv, vaultId?: string): Promise<{ ok: true; page: PageVault } | { ok: false; error: string }> {
-  const id = vaultId ?? env.defaultVaultId;
-  if (!/^[A-Za-z0-9._-]{1,64}$/.test(id)) return { ok: false, error: "id" };
+export async function readPageVault(rpc: Rpc, env: PageEnv, vaultId: string): Promise<{ ok: true; page: PageVault } | { ok: false; error: string }> {
+  if (!/^[A-Za-z0-9._-]{1,64}$/.test(vaultId)) return { ok: false, error: "id" };
   const token = readTokenLabel(rpc, env.contractId);
-  const vaultResult = await rpc(viewRequest(env.contractId, "get_vault", { vault_id: id }));
+  const vaultResult = await rpc(viewRequest(env.contractId, "get_vault", { vault_id: vaultId }));
   if (!vaultResult.ok) return { ok: false, error: "vault" };
   const parsed = parseVault(vaultResult.value);
   if (!parsed.ok) return { ok: false, error: parsed.error === "missing vault" ? "missing vault" : "vault" };
   const vault = parsed.vault;
   if (!vault.specHash) {
-    if (id !== env.defaultVaultId) return { ok: false, error: "no story" };
-    return { ok: true, page: { vaultId: id, vault, venueId: env.venue, card: null, specCt: null, token } };
+    return { ok: true, page: { vaultId, vault, venueId: vaultId, card: null, specCt: null, token } };
   }
-  const spec = await rpc(viewRequest(env.contractId, "get_spec", { vault_id: id }));
+  const spec = await rpc(viewRequest(env.contractId, "get_spec", { vault_id: vaultId }));
   const ct = spec.ok ? parseSpecCt(spec.value) : null;
   if (!ct || !ct.ok || ct.value === null) return { ok: false, error: "spec" };
   const card = parseCard(vault.card);
   return {
     ok: true,
     page: {
-      vaultId: id,
+      vaultId,
       vault,
       venueId: "custom",
       card: card.ok ? card.card : null,

@@ -26,7 +26,6 @@ export type CrewEnv = {
 export type PublicEnv = {
   rpcUrl: string;
   contractId: string;
-  vaultId: string;
   currency: string;
   decimals: number;
   networkTag: string;
@@ -59,7 +58,6 @@ const RELAY_KEYS = [
 const PUBLIC_KEYS = [
   "NEXT_PUBLIC_RPC_URL",
   "NEXT_PUBLIC_VAULT_CONTRACT_ID",
-  "NEXT_PUBLIC_VAULT_ID",
   "NEXT_PUBLIC_CURRENCY",
   "NEXT_PUBLIC_CURRENCY_DECIMALS",
   "NEXT_PUBLIC_NETWORK_TAG",
@@ -135,7 +133,6 @@ export function readPublicEnv(source: EnvSource | undefined): Ready<PublicEnv> |
     env: {
       rpcUrl: read("NEXT_PUBLIC_RPC_URL"),
       contractId: read("NEXT_PUBLIC_VAULT_CONTRACT_ID"),
-      vaultId: read("NEXT_PUBLIC_VAULT_ID"),
       currency: read("NEXT_PUBLIC_CURRENCY"),
       decimals: decimals as number,
       networkTag: read("NEXT_PUBLIC_NETWORK_TAG"),

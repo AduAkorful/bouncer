@@ -10,7 +10,7 @@ export function NightShell({ door = false, href = "/home" }: { door?: boolean; h
       </header>
       {door ? (
         <section className="relative h-[46dvh] min-h-[280px] bg-[#1a1424]">
-          <DoorScene sign="THE VELVET" neighbors={false} p="wait" className="size-full" />
+          <DoorScene sign="" neighbors={false} p="wait" className="size-full" label="Checking the door" />
         </section>
       ) : null}
       <div className="mx-auto max-w-lg px-4 py-8">

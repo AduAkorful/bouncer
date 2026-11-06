@@ -5,6 +5,16 @@ const HIDDEN = new Set(["guard", "reveal", "crack", "rpc", "round", "seed", "mis
 /** A missing setting. The words never include an environment name. */
 export const UNSET = "Nothing on this door was filled in.";
 
+/** The name on a door. A card supplies it. With no card, the vault id is the only name, and there is no bouncer name. */
+export function doorTitle(card: { sign: string; name: string } | null | undefined, vaultId: string): { sign: string; name: string | null } {
+  const sign = card?.sign.trim() ?? "";
+  const name = card?.name.trim() ?? "";
+  return {
+    sign: sign.length > 0 ? sign : vaultId,
+    name: name.length > 0 ? name : null,
+  };
+}
+
 export function closesAtMs(closesAt: string): number | null {
   if (!/^[0-9]+$/.test(closesAt)) return null;
   try {

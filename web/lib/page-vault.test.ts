@@ -3,7 +3,7 @@ import { mock, test } from "node:test";
 import type { Rpc } from "./chain.ts";
 import { forgetTokenLabel, readPageVault, TOKEN_LABEL_MS, type PageEnv } from "./page-vault.ts";
 
-const env: PageEnv = { contractId: "vault.test", defaultVaultId: "velvet-1", venue: "velvet" };
+const env: PageEnv = { contractId: "vault.test" };
 const key = Array.from({ length: 32 }, (_, i) => i);
 const row = (over: Record<string, unknown> = {}) => ({
   sponsor: "s.test", pot: "1", day_pot: "0", reserved: "0", cap: "1", lock_ns: "1", rule: "PayTheBill", guard_pk: key, commitment: null,
@@ -26,15 +26,15 @@ test.beforeEach(() => {
   forgetTokenLabel();
 });
 
-test("the default vault loads without get_owner and uses the token symbol", async () => {
+test("a vault with no sealed story loads without get_owner and uses the token symbol", async () => {
   const seen: string[] = [];
   const out = await readPageVault(rpcFor({
     "get_vault:velvet-1": row(),
     get_usdc_account: "usdc.test", ft_metadata: { symbol: "USDC", decimals: 6 },
-  }, seen), env);
+  }, seen), env, "velvet-1");
   assert.ok(out.ok);
   if (out.ok) {
-    assert.equal(out.page.venueId, "velvet");
+    assert.equal(out.page.venueId, "velvet-1");
     assert.equal(out.page.card, null);
     assert.equal(out.page.specCt, null);
     assert.equal("owner" in out.page, false);
@@ -44,7 +44,7 @@ test("the default vault loads without get_owner and uses the token symbol", asyn
 });
 
 test("a failed token leaves the vault and omits the symbol", async () => {
-  const out = await readPageVault(rpcFor({ "get_vault:velvet-1": row() }), env);
+  const out = await readPageVault(rpcFor({ "get_vault:velvet-1": row() }), env, "velvet-1");
   assert.ok(out.ok);
   if (out.ok) {
     assert.equal(out.page.vault.round, "1");
@@ -80,11 +80,17 @@ test("a card that does not parse still loads the door with no card", async () =>
   assert.ok(out.ok && out.page.card === null);
 });
 
-test("a missing vault, a missing story, and a failed spec stay errors", async () => {
+test("a missing vault and a failed spec stay errors, and a vault with no story still loads", async () => {
   const base = { get_usdc_account: "u", ft_metadata: { symbol: "U", decimals: 6 } };
   assert.equal((await readPageVault(rpcFor({ ...base }), env, "ghost")).ok, false);
   assert.deepEqual(await readPageVault(rpcFor({ ...base, "get_vault:ghost": null }), env, "ghost"), { ok: false, error: "missing vault" });
-  assert.deepEqual(await readPageVault(rpcFor({ ...base, "get_vault:plain": row() }), env, "plain"), { ok: false, error: "no story" });
+  const plain = await readPageVault(rpcFor({ ...base, "get_vault:plain": row() }), env, "plain");
+  assert.ok(plain.ok);
+  if (plain.ok) {
+    assert.equal(plain.page.card, null);
+    assert.equal(plain.page.specCt, null);
+    assert.equal(plain.page.venueId, "plain");
+  }
   assert.deepEqual(await readPageVault(rpcFor({ ...base, "get_vault:anchor": row({ spec_hash: key }) }), env, "anchor"), { ok: false, error: "spec" });
   assert.deepEqual(await readPageVault(rpcFor(base), env, "bad id!"), { ok: false, error: "id" });
 });
@@ -147,21 +153,21 @@ test("a token label is kept for ten minutes, and a failed read is not", async ()
     if (method === "get_usdc_account" || method === "ft_metadata") calls += 1;
     return rpcFor(table)(request);
   };
-  const first = await readPageVault(counting(), env);
+  const first = await readPageVault(counting(), env, "velvet-1");
   assert.ok(first.ok);
   if (first.ok) await first.page.token;
   assert.equal(calls, 2);
-  const second = await readPageVault(counting(), env);
+  const second = await readPageVault(counting(), env, "velvet-1");
   assert.ok(second.ok);
   if (second.ok) assert.deepEqual(await second.page.token, { ok: true, symbol: "USDC", decimals: 6 });
   assert.equal(calls, 2);
 
   forgetTokenLabel();
   calls = 0;
-  const missed = await readPageVault(rpcFor({ "get_vault:velvet-1": row() }), env);
+  const missed = await readPageVault(rpcFor({ "get_vault:velvet-1": row() }), env, "velvet-1");
   assert.ok(missed.ok);
   if (missed.ok) assert.deepEqual(await missed.page.token, { ok: false });
-  const again = await readPageVault(counting(), env);
+  const again = await readPageVault(counting(), env, "velvet-1");
   assert.ok(again.ok);
   if (again.ok) await again.page.token;
   assert.equal(calls, 2);
@@ -170,7 +176,7 @@ test("a token label is kept for ten minutes, and a failed read is not", async ()
   mock.timers.enable({ apis: ["Date"], now: start });
   try {
     mock.timers.tick(TOKEN_LABEL_MS + 1);
-    const expired = await readPageVault(counting(), env);
+    const expired = await readPageVault(counting(), env, "velvet-1");
     assert.ok(expired.ok);
     if (expired.ok) await expired.page.token;
     assert.equal(calls, 4);
@@ -193,8 +199,8 @@ test("two vault reads share one token request", async () => {
     await metaHeld;
     return { ok: true, value: { symbol: "USDC", decimals: 6 } };
   };
-  const first = readPageVault(rpc, env);
-  const second = readPageVault(rpc, env);
+  const first = readPageVault(rpc, env, "velvet-1");
+  const second = readPageVault(rpc, env, "velvet-1");
   const [a, b] = await Promise.all([first, second]);
   assert.equal(accounts, 1);
   releaseMeta();

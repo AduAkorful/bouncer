@@ -46,7 +46,7 @@ cp env.example .env
 npm run dev
 ```
 
-Fill `web/.env` from `web/env.example`. Leave the values out of git. The names the hosted game uses are `NEXT_PUBLIC_RPC_URL=https://rpc.testnet.fastnear.com`, `NEXT_PUBLIC_VAULT_CONTRACT_ID=bouncer-vault.testnet`, `NEXT_PUBLIC_VAULT_ID=velvet-1`, and `NEXT_PUBLIC_NETWORK_ID=testnet`. Point `NEXT_PUBLIC_API_URL` at a running relay (`http://localhost:8787` on this machine). The door shows the token's own symbol when that read succeeds.
+Fill `web/.env` from `web/env.example`. Leave the values out of git. The names the hosted game uses are `NEXT_PUBLIC_RPC_URL=https://rpc.testnet.fastnear.com`, `NEXT_PUBLIC_VAULT_CONTRACT_ID=bouncer-vault.testnet`, and `NEXT_PUBLIC_NETWORK_ID=testnet`. Point `NEXT_PUBLIC_API_URL` at a running relay (`http://localhost:8787` on this machine). The door shows the token's own symbol when that read succeeds.
 
 `npm test` runs the unit tests. `npx tsc --noEmit` typechecks.
 

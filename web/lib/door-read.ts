@@ -16,6 +16,9 @@ export function unreadDoor(error: string, vaultId?: string): UnreadDoor {
   if (error === "unset") {
     return { label, kicker: "Unavailable", title: "This door is not connected.", detail: "This site has no vault connected.", retry: false };
   }
+  if (error === "empty") {
+    return { label: null, kicker: "Unavailable", title: "No door is listed.", detail: "The vault has no doors.", retry: true };
+  }
   if (ABSENT.has(error)) {
     return { label, kicker: "Missing", title: "There is no door with that id.", detail: "No vault uses that id.", retry: false };
   }

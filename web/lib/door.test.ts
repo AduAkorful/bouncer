@@ -1,8 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CLOSED_DOOR_NOTE, CLOSED_QUEUE, COMMITMENT_LINE, NO_COMMITMENT, closesAtMs, commitmentFooter, doorShut, playableRaid, playerDetail, playGateStatus, playStop } from "./door.ts";
+import { CLOSED_DOOR_NOTE, CLOSED_QUEUE, COMMITMENT_LINE, NO_COMMITMENT, closesAtMs, commitmentFooter, doorShut, doorTitle, playableRaid, playerDetail, playGateStatus, playStop } from "./door.ts";
 
 const OPEN = "1793577600000000000";
+
+test("a door with no card is named by its vault id", () => {
+  assert.deepEqual(doorTitle(null, "velvet-1"), { sign: "velvet-1", name: null });
+  assert.deepEqual(doorTitle({ sign: "  ", name: "  " }, "velvet-1"), { sign: "velvet-1", name: null });
+  assert.deepEqual(doorTitle({ sign: "COASTLINE NIGHT", name: "Kwame" }, "qa-coast-05"), { sign: "COASTLINE NIGHT", name: "Kwame" });
+});
 
 test("the close time is milliseconds when it fits", () => {
   assert.equal(closesAtMs(OPEN), 1_793_577_600_000);

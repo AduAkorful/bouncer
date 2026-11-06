@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Rpc } from "./chain.ts";
-import { readDoorIndex } from "./door-index.ts";
+import { frontDoor, readDoorIndex } from "./door-index.ts";
 
 const key = Array.from({ length: 32 }, (_, i) => i);
 const card = JSON.stringify({ v: 1, sign: "COASTLINE NIGHT", name: "Kwame", pitch: "We owe.", look: {} });
@@ -27,12 +27,12 @@ test("listed doors keep creation order and their own card", async () => {
     "list:0": ["velvet-1", "qa-coast-05", "bad id"],
     "get_vault:velvet-1": row({ open: false }),
     "get_vault:qa-coast-05": row({ spec_hash: key, card }),
-  }, seen), "vault.test", "velvet-1", 0);
+  }, seen), "vault.test", 0);
   assert.ok(index.ok);
   if (index.ok) {
     assert.equal(index.truncated, false);
     assert.deepEqual(index.doors.map((door) => [door.id, door.href, door.sign, door.name, door.line, door.sponsored]), [
-      ["velvet-1", "/home", "velvet-1", "velvet-1", "Closed", false],
+      ["velvet-1", "/v/velvet-1", "velvet-1", "velvet-1", "Closed", false],
       ["qa-coast-05", "/v/qa-coast-05", "COASTLINE NIGHT", "Kwame", "Open", true],
     ]);
   }
@@ -42,7 +42,7 @@ test("listed doors keep creation order and their own card", async () => {
 test("a vault that does not read stays an id", async () => {
   const index = await readDoorIndex(rpcFor({
     "list:0": ["qa-coast-05"],
-  }), "vault.test", "velvet-1", 0);
+  }), "vault.test", 0);
   assert.ok(index.ok);
   if (index.ok) {
     assert.deepEqual(index.doors[0], {
@@ -51,6 +51,7 @@ test("a vault that does not read stays an id", async () => {
       sign: "qa-coast-05",
       name: "qa-coast-05",
       line: "Could not be read",
+      shut: true,
       sponsored: false,
       read: false,
       card: null,
@@ -62,12 +63,12 @@ test("a suspended door says so before open or closed", async () => {
   const index = await readDoorIndex(rpcFor({
     "list:0": ["qa-coast-05"],
     "get_vault:qa-coast-05": row({ suspended: true }),
-  }), "vault.test", "velvet-1", 0);
-  assert.ok(index.ok && index.doors[0]?.line === "Suspended");
+  }), "vault.test", 0);
+  assert.ok(index.ok && index.doors[0]?.line === "Suspended" && index.doors[0]?.shut);
 });
 
 test("a failed list invents no doors", async () => {
-  const index = await readDoorIndex(rpcFor({}), "vault.test", "velvet-1", 0);
+  const index = await readDoorIndex(rpcFor({}), "vault.test", 0);
   assert.deepEqual(index, { ok: false });
 });
 
@@ -76,7 +77,18 @@ test("a full page says the list stopped and does not read the next id", async ()
   const table: Record<string, unknown> = { "list:0": ids, "list:100": ["door-100"] };
   for (const id of ids) table[`get_vault:${id}`] = row();
   const seen: string[] = [];
-  const index = await readDoorIndex(rpcFor(table, seen), "vault.test", "velvet-1", 0);
+  const index = await readDoorIndex(rpcFor(table, seen), "vault.test", 0);
   assert.ok(index.ok && index.truncated && index.doors.length === 100);
   assert.equal(seen.includes("get_vault:door-100"), false);
+});
+
+test("the front door is an open vault, not a configured id", () => {
+  const closed = { id: "velvet-1", href: "/v/velvet-1", sign: "velvet-1", name: "velvet-1", line: "Closed", shut: true, sponsored: false, read: true, card: null };
+  const open = { id: "qa-coast-05", href: "/v/qa-coast-05", sign: "COASTLINE NIGHT", name: "Kwame", line: "Open", shut: false, sponsored: true, read: true, card: null };
+  const unread = { ...open, id: "miss", read: false, shut: true, line: "Could not be read" };
+  assert.equal(frontDoor([closed, open])?.id, "qa-coast-05");
+  assert.equal(frontDoor([open, closed])?.id, "qa-coast-05");
+  assert.equal(frontDoor([closed, { ...closed, id: "later" }])?.id, "velvet-1");
+  assert.equal(frontDoor([unread]), null);
+  assert.equal(frontDoor([]), null);
 });

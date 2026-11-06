@@ -16,16 +16,23 @@ export type ListedDoor = {
   sign: string;
   name: string;
   line: string;
+  /** True when this vault is shut, suspended, or could not be read. */
+  shut: boolean;
   sponsored: boolean;
   /** False when this vault's own read failed. The id still came from the chain. */
   read: boolean;
   card: Card | null;
 };
 
+/** The door a plain URL should open. An open vault wins. A closed list keeps chain order. The env id is not consulted. */
+export function frontDoor(doors: ListedDoor[]): ListedDoor | null {
+  const readable = doors.filter((door) => door.read);
+  return readable.find((door) => !door.shut) ?? readable[0] ?? null;
+}
+
 export async function readDoorIndex(
   rpc: Rpc,
   contractId: string,
-  defaultVaultId: string,
   nowMs: number,
 ): Promise<{ ok: true; doors: ListedDoor[]; truncated: boolean } | { ok: false }> {
   const first = await rpc(viewRequest(contractId, "list_vaults", { from_index: 0, limit: PAGE }));
@@ -41,31 +48,34 @@ export async function readDoorIndex(
   const safe = ids.value.filter(isVaultId);
   for (let i = 0; i < safe.length; i += AT_ONCE) {
     const chunk = safe.slice(i, i + AT_ONCE);
-    doors.push(...await Promise.all(chunk.map((id) => readListed(rpc, contractId, id, defaultVaultId, nowMs))));
+    doors.push(...await Promise.all(chunk.map((id) => readListed(rpc, contractId, id, nowMs))));
   }
   return { ok: true, doors, truncated };
 }
 
-async function readListed(rpc: Rpc, contractId: string, id: string, defaultVaultId: string, nowMs: number): Promise<ListedDoor> {
-  const href = id === defaultVaultId ? "/home" : doorPaths(id).door;
+async function readListed(rpc: Rpc, contractId: string, id: string, nowMs: number): Promise<ListedDoor> {
+  const href = doorPaths(id).door;
   const result = await rpc(viewRequest(contractId, "get_vault", { vault_id: id }));
   const parsed = result.ok ? parseVault(result.value) : null;
-  if (!parsed || !parsed.ok) return { id, href, sign: id, name: id, line: "Could not be read", sponsored: false, read: false, card: null };
+  if (!parsed || !parsed.ok) return { id, href, sign: id, name: id, line: "Could not be read", shut: true, sponsored: false, read: false, card: null };
   const card = parseCard(parsed.vault.card);
   const known = card.ok ? card.card : null;
+  const state = doorState(parsed.vault, nowMs);
   return {
     id,
     href,
     sign: known?.sign ?? id,
     name: known?.name ?? id,
-    line: statusLine(parsed.vault, nowMs),
+    line: state.line,
+    shut: state.shut,
     sponsored: parsed.vault.specHash !== null,
     read: true,
     card: known,
   };
 }
 
-function statusLine(vault: VaultView, nowMs: number): string {
-  if (vault.suspended) return "Suspended";
-  return doorShut(vault, nowMs) ? "Closed" : "Open";
+function doorState(vault: VaultView, nowMs: number): { line: string; shut: boolean } {
+  if (vault.suspended) return { line: "Suspended", shut: true };
+  const shut = doorShut(vault, nowMs);
+  return { line: shut ? "Closed" : "Open", shut };
 }

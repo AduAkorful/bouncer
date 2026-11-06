@@ -3,10 +3,12 @@ import type { ReactNode } from "react";
 import { Countdown } from "@/components/Countdown";
 import { NetworkTag } from "@/components/bits";
 import { DoorScene } from "@/components/DoorScene";
+import { StreetScroll } from "@/components/home/StreetScroll";
 import { TokenAmount, TokenPotGlyph } from "@/components/TokenAmount";
+import { STREET_VIEW } from "@/lib/street-setting";
 import { cardLook, type Card } from "@/lib/card";
 import { SceneLife } from "@/components/SceneLife";
-import { CLOSED_DOOR_NOTE, COMMITMENT_LINE, NO_COMMITMENT, commitmentFooter, doorShut } from "@/lib/door";
+import { CLOSED_DOOR_NOTE, COMMITMENT_LINE, NO_COMMITMENT, commitmentFooter, doorShut, doorTitle } from "@/lib/door";
 import type { TokenRead } from "@/lib/page-vault";
 import type { VaultView } from "@/lib/vault";
 
@@ -27,6 +29,7 @@ const phaseCopy = {
 
 export function HomeDoor({
   vault,
+  vaultId,
   networkTag,
   notice,
   card = null,
@@ -35,16 +38,19 @@ export function HomeDoor({
   doors,
 }: {
   vault: VaultView | null;
+  /** This vault's id. It is the sign when the vault has no card. */
+  vaultId: string;
   networkTag?: string;
   notice?: string;
-  /** A sponsor's public card. Null for a built-in door. */
+  /** A sponsor's public card. Null when this vault has none. */
   card?: Card | null;
-  /** Where this door's pages live: empty for the default vault, `/v/<id>` for a sponsor's. */
+  /** This door's own URL, `/v/<id>`. Play, reveal, and claim hang off it. */
   base?: string;
   token: Promise<TokenRead>;
   /** The other-doors list, including its own loading state. */
   doors: ReactNode;
 }) {
+  const title = doorTitle(card, vaultId);
   const shut = vault ? doorShut(vault, Date.now()) : false;
   const phase = !vault ? "closed" : shut ? "closed" : vault.crackCount > 0 ? "cracked" : "open";
   const atomic = vault ? (phase === "cracked" || vault.open ? vault.dayPot : vault.pot) : null;
@@ -70,17 +76,19 @@ export function HomeDoor({
       </header>
 
       <section className="relative h-[46dvh] min-h-[280px] bg-[#1a1424] sm:h-[70dvh] sm:min-h-[420px]">
-        <SceneLife className="absolute inset-0">
-          <DoorScene
-            sign={card?.sign ?? "THE VELVET"}
-            look={card ? cardLook(card) : undefined}
-            neighbors={false}
-            open={phase === "cracked"}
-            p="home"
-            viewBox="80 0 292 244"
-            lampFigureX={356}
-            className="size-full"
-            back={
+        <StreetScroll>
+          <SceneLife className="absolute inset-0">
+            <DoorScene
+              sign={title.sign}
+              look={card ? cardLook(card) : undefined}
+              setting={card?.setting}
+              neighbors
+              open={phase === "cracked"}
+              p="home"
+              viewBox={STREET_VIEW}
+              lampFigureX={356}
+              className="size-full"
+              back={
               <g aria-hidden>
                 <text x="134" y="128" textAnchor="end" fontFamily="var(--font-jetbrains)" fontSize="6" fill="#efe8da" opacity="0.7">
                   IN
@@ -104,16 +112,18 @@ export function HomeDoor({
                 </g>
               </g>
             }
-          />
-        </SceneLife>
-        <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-b from-transparent to-night" />
+            />
+          </SceneLife>
+        </StreetScroll>
+        <p className="pointer-events-none absolute bottom-5 left-4 font-mono text-[10px] text-chalk/70 lg:hidden">Swipe the street</p>
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-b from-transparent to-night" />
       </section>
 
       <section id="door" tabIndex={-1} className="relative z-10 mx-auto -mt-6 max-w-lg scroll-mt-6 px-4 outline-none">
         <div className="rounded-3xl border border-white/10 bg-night-2 p-5 shadow-2xl">
-          <h1 className="font-sign text-3xl leading-none">{card?.sign ?? "THE VELVET"}</h1>
+          <h1 className="font-sign text-3xl leading-none">{title.sign}</h1>
           <div className="mt-3 flex items-center justify-between gap-3">
-            <span className="shrink-0 whitespace-nowrap rounded bg-chalk px-1.5 py-0.5 font-sign text-[10px] text-ink">{card ? card.name.toUpperCase() : "BIG SAM"}</span>
+            {title.name ? <span className="shrink-0 whitespace-nowrap rounded bg-chalk px-1.5 py-0.5 font-sign text-[10px] text-ink">{title.name.toUpperCase()}</span> : <span />}
             {vault ? <span className="text-right font-mono text-xs uppercase tracking-[0.2em] text-chalk/80">Round {vault.round}</span> : null}
           </div>
           <div className="mt-3 flex items-end justify-between gap-3">
@@ -130,7 +140,7 @@ export function HomeDoor({
               </div>
             ) : null}
           </div>
-          <p className="mt-3 font-sign text-xl leading-tight sm:text-2xl">{notice ?? (card ? card.pitch : phaseCopy[phase].line)}</p>
+          <p className="mt-3 font-sign text-xl leading-tight sm:text-2xl">{notice ?? (card?.pitch || phaseCopy[phase].line)}</p>
           {vault && !shut ? (
             <a
               href={`${base}/play`}
