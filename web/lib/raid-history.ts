@@ -29,10 +29,8 @@ export function raidHistoryLabel(state: RaidHistoryState): string {
   return "Not opened";
 }
 
-export function raidHistoryHref(row: RaidHistoryRow, defaultVaultId: string): string {
-  const paths = row.vaultId === defaultVaultId.trim()
-    ? { door: "/home", play: "/play", reveal: "/reveal", claim: "/claim" }
-    : doorPaths(row.vaultId);
+export function raidHistoryHref(row: RaidHistoryRow): string {
+  const paths = doorPaths(row.vaultId);
   if (row.state === "in") return paths.claim;
   if (row.state === "opened") return paths.play;
   return paths.door;

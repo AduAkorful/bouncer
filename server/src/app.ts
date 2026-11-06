@@ -12,6 +12,9 @@ import { sponsorCall, type Post, type SponsorOp } from "./guard-client.ts";
 import type { Budget, Counter, Limiter } from "./limits.ts";
 import { draftFitsCap } from "./sponsor-draft.ts";
 import { createAuthenticator } from "./auth.ts";
+import { createPlayerAuth } from "./player-auth.ts";
+import { openSession, publicBoard, recordGotIn, recordOpen, renamePlayer, rollName, utcDay, viewOf, type NightRow, type PlayerRow, type PlayerStore } from "./player-record.ts";
+import { playerNameToStore } from "../../web/lib/player-name.ts";
 
 export type Deps = {
   env: ServerEnv;
@@ -24,6 +27,8 @@ export type Deps = {
   bills: Counter;
   accessKeyIsFull: (account: string, publicKey: string) => Promise<boolean | null>;
   marks: Map<string, Mark>;
+  /** Absent until SurrealDB is configured. The phone is not the record. */
+  players?: PlayerStore;
   submitVerdict: (verdict: VerdictBody, signature: number[]) => Promise<{ ok: true; transactionHash: string } | { ok: false; error: string }>;
   createAccount: (publicKey: string) => Promise<unknown & { ok: boolean }>;
   signTransaction: (body: unknown) => Promise<unknown & { ok: boolean }>;
@@ -54,7 +59,7 @@ export function createApp(deps: Deps) {
       c.header("access-control-allow-origin", origin);
       c.header("vary", "origin");
       c.header("access-control-allow-methods", "GET, POST, OPTIONS");
-      c.header("access-control-allow-headers", "content-type, x-sponsor-auth");
+      c.header("access-control-allow-headers", "content-type, x-sponsor-auth, x-player-auth");
       c.header("access-control-max-age", "600");
     }
     if (c.req.method === "OPTIONS") return c.body(null, 204);
@@ -89,6 +94,12 @@ export function createApp(deps: Deps) {
       if (!deps.bills.take(key, env.roundBills)) return c.json({ ok: false, error: BUSY }, 429);
     }
     const result = await runGuardTurn(env.guard, deps.marks, body, deps.post);
+    if (deps.players && result.status === 200) {
+      const payload = result.body as { ok?: unknown; blob?: unknown };
+      if (payload?.ok === true && body.op === "open" && typeof payload.blob === "string" && typeof body.player_id === "string" && typeof body.vault_id === "string") {
+        await recordOpen(deps.players, { claimKey: body.player_id, vaultId: body.vault_id, round: String(body.round), blob: payload.blob, now: deps.now() }).catch(() => undefined);
+      }
+    }
     return c.json(result.body as Record<string, unknown>, result.status as 200);
   });
 
@@ -103,6 +114,9 @@ export function createApp(deps: Deps) {
     if (!allowed.ok) return c.json(allowed, 409);
     const sent = await deps.submitVerdict(parsed.verdict, parsed.signature);
     if (!sent.ok) return c.json(sent, 502);
+    if (deps.players) {
+      await recordGotIn(deps.players, { claimKey: parsed.verdict.player_id, vaultId: parsed.verdict.vault_id, round: parsed.verdict.round, now: deps.now() }).catch(() => undefined);
+    }
     return c.json({ ok: true, transactionHash: sent.transactionHash });
   });
 
@@ -223,6 +237,77 @@ export function createApp(deps: Deps) {
     return c.json({ ok: true, commitment: commit.commitment, guard_version: commit.guardVersion, signature: commit.signature, round: commit.round });
   });
 
+  const playerAuth = createPlayerAuth(deps.now);
+  const player = async (c: Context, route: string) => {
+    if (!deps.players) return null;
+    const who = playerAuth(c.req.header("x-player-auth"), route);
+    return who.ok ? who : null;
+  };
+  const unavailable = (c: Context) => c.json({ ok: false, error: "record" }, 503);
+
+  app.post("/player/session", async (c) => {
+    if (!take(c, "player", 30, MINUTE)) return slow(c);
+    if (!deps.players) return unavailable(c);
+    const who = await player(c, "/player/session");
+    if (!who) return c.json({ ok: false, error: "unauthorized" }, 401);
+    const opened = await openSession(deps.players, { ...who, now: deps.now() });
+    if (!opened.ok) return c.json(opened, 409);
+    return c.json(await playerView(deps.players, opened.player, opened.nights, deps.now()));
+  });
+
+  app.post("/player/roll", async (c) => {
+    if (!take(c, "player", 30, MINUTE)) return slow(c);
+    if (!deps.players) return unavailable(c);
+    const who = await player(c, "/player/roll");
+    if (!who) return c.json({ ok: false, error: "unauthorized" }, 401);
+    const rolled = await rollName(deps.players, who.publicKey);
+    if (!rolled.ok) return c.json(rolled, 409);
+    const nights = await deps.players.nightsFor(rolled.player.claimKey);
+    return c.json(await playerView(deps.players, rolled.player, nights, deps.now()));
+  });
+
+  app.post("/player/name", async (c) => {
+    if (!take(c, "player", 30, MINUTE)) return slow(c);
+    if (!deps.players) return unavailable(c);
+    const who = await player(c, "/player/name");
+    if (!who) return c.json({ ok: false, error: "unauthorized" }, 401);
+    const body = await bodyOf(c);
+    if (!playerNameToStore(typeof body?.name === "string" ? body.name : "")) return c.json({ ok: false, error: "name" }, 400);
+    const renamed = await renamePlayer(deps.players, who.publicKey, String(body?.name));
+    if (!renamed.ok) return c.json(renamed, 409);
+    const nights = await deps.players.nightsFor(renamed.player.claimKey);
+    return c.json(await playerView(deps.players, renamed.player, nights, deps.now()));
+  });
+
+  app.post("/player/resume", async (c) => {
+    if (!take(c, "player", 30, MINUTE)) return slow(c);
+    if (!deps.players) return unavailable(c);
+    const who = await player(c, "/player/resume");
+    if (!who) return c.json({ ok: false, error: "unauthorized" }, 401);
+    const body = await bodyOf(c);
+    const vaultId = typeof body?.vaultId === "string" ? body.vaultId : "";
+    const round = typeof body?.round === "string" ? body.round : "";
+    if (!validVaultId(vaultId) || !/^[0-9]+$/.test(round)) return c.json({ ok: false, error: "bad request" }, 400);
+    const blob = await deps.players.readBlob(who.claimKey, vaultId, round);
+    return c.json({ ok: true, blob });
+  });
+
+  app.get("/player/board", async (c) => {
+    if (!deps.players) return unavailable(c);
+    const board = publicBoard(await deps.players.allPlayers(), utcDay(deps.now()));
+    return c.json({ ok: true, players: board.slice(0, 50) });
+  });
+
+  app.get("/player/share/:name", async (c) => {
+    if (!deps.players) return unavailable(c);
+    const name = playerNameToStore(c.req.param("name"));
+    if (!name) return c.json({ ok: false, error: "name" }, 404);
+    const board = publicBoard(await deps.players.allPlayers(), utcDay(deps.now()));
+    const row = board.find((player) => player.name === name);
+    if (!row) return c.json({ ok: false, error: "name" }, 404);
+    return c.json({ ok: true, player: row });
+  });
+
   return app;
 }
 
@@ -233,4 +318,17 @@ function specFits(spec: unknown): boolean {
   } catch {
     return false;
   }
+}
+
+async function playerView(store: PlayerStore, player: PlayerRow, nights: NightRow[], now: number) {
+  const today = utcDay(now);
+  const board = publicBoard(await store.allPlayers(), today);
+  const place = board.find((entry) => entry.name === player.name) ?? null;
+  return {
+    ok: true as const,
+    player: viewOf(player, today),
+    place: place?.place ?? null,
+    line: place?.line ?? null,
+    nights: nights.map((night) => ({ vaultId: night.vaultId, round: night.round, state: night.state, day: night.day })),
+  };
 }

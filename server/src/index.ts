@@ -3,11 +3,17 @@ import { createApp } from "./app.ts";
 import { readServerEnv } from "./env.ts";
 import { createKeeper } from "./keeper.ts";
 import { liveDeps, liveKeeperChain } from "./live.ts";
+import { readSurrealEnv } from "./player-db.ts";
 
 const parsed = readServerEnv(process.env);
 if (!parsed.ok) {
   // Names only. A value never reaches a log.
   console.error(`missing or invalid environment: ${parsed.missing.join(", ")}`);
+  process.exit(1);
+}
+const surreal = readSurrealEnv(process.env);
+if (!surreal.ok) {
+  console.error(`missing or invalid environment: ${surreal.missing.join(", ")}`);
   process.exit(1);
 }
 const env = parsed.env;

@@ -25,7 +25,6 @@ async function PasskeyGate({ searchParams }: { searchParams: Promise<{ next?: st
       next={next}
       rpcUrl={labels.env.rpcUrl}
       networkId={labels.env.networkId}
-      vaultId={labels.env.vaultId}
       storageName={labels.env.storageName}
     />
   );

@@ -37,6 +37,19 @@ export function apiPost(path: string, body: unknown, headers: Record<string, str
   return postJson(readApiBase(process.env.NEXT_PUBLIC_API_URL), fetch, path, body, headers);
 }
 
+export async function apiGet(path: string): Promise<ApiResult> {
+  const base = readApiBase(process.env.NEXT_PUBLIC_API_URL);
+  if (!base) return { ok: false, error: "no server" };
+  try {
+    const response = await fetch(`${base}${path}`);
+    const parsed = await response.json().catch(() => null);
+    if (!response.ok) return { ok: false, error: "server" };
+    return { ok: true, status: response.status, body: parsed };
+  } catch {
+    return { ok: false, error: "network" };
+  }
+}
+
 /** The JSON object a call returned, or a flat failure the screens already know how to word. */
 export function asObject(result: ApiResult): Record<string, unknown> {
   if (result.ok && result.body && typeof result.body === "object" && !Array.isArray(result.body)) return result.body as Record<string, unknown>;

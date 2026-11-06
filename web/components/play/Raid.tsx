@@ -8,6 +8,8 @@ import { Suspense, useEffect, useLayoutEffect, useRef, useState, type MouseEvent
 import { Countdown } from "@/components/Countdown";
 import { DemoBadge, Money } from "@/components/bits";
 import { DoorScene } from "@/components/DoorScene";
+import { SceneLife } from "@/components/SceneLife";
+import { StreetScroll } from "@/components/home/StreetScroll";
 import { OfficeScene } from "@/components/OfficeScene";
 import { BillBuilder } from "@/components/play/BillBuilder";
 import { Desk, type Note } from "@/components/play/Desk";
@@ -17,7 +19,8 @@ import type { DraftBill } from "@/lib/bill";
 
 type Decision = "ask" | "refused" | "approved" | "none";
 import { Blocked } from "@/components/Blocked";
-import { playableRaid, playerDetail, playGateStatus, playStop } from "@/lib/door";
+import { doorTitle, playableRaid, playerDetail, playGateStatus, playStop } from "@/lib/door";
+import { resumeRaid, postPlayerSession } from "@/lib/player-session";
 import type { VaultView } from "@/lib/vault";
 import { guardRule } from "@/lib/rules";
 import type { TokenRead } from "@/lib/page-vault";
@@ -27,7 +30,7 @@ import { deriveSecrets, unlockDevice } from "@/lib/device-pass";
 import { loadRaid, raidFromDevice, saveRaid, loadTranscript, saveTranscript, type StoredRaid } from "@/lib/session-store";
 import type { Exchange } from "@/lib/raid-transcript";
 import { readStreet } from "@/lib/street";
-import { CITIES, type CityId } from "@/lib/cities";
+import { ACCRA_SETTING, PHONE_STREET, pieceLearn, soundCity, STREET_VIEW } from "@/lib/street-setting";
 import { beatGlow, parallax, startIdle } from "@/lib/idle";
 import { D, E, registerMotion, roll } from "@/lib/motion";
 import { rigTo, rigTween } from "@/lib/rigMotion";
@@ -38,7 +41,7 @@ type Gate = "door" | "office";
 type Stage = "play" | "choice" | "end";
 type End = "door" | "office" | "out";
 
-const SPEAKER = { door: { name: "BIG SAM", voice: VOICES.sam, who: "sam" as const }, office: { name: "MADAM EFUA", voice: VOICES.efua, who: "efua" as const } };
+const SPEAKER = { door: { name: "", voice: VOICES.sam, who: "sam" as const }, office: { name: "MADAM EFUA", voice: VOICES.efua, who: "efua" as const } };
 const OPENERS = { door: "Evening. Invoice?", office: "Mm. Invoice." };
 const SUGGEST = {
   door: ["Is K-Nova still headlining Saturday?", "Coastline changed bank details, right?", "Who's on your list tonight?"],
@@ -67,14 +70,17 @@ export default function PlayFrame({
   card?: Card | null;
   /** The sponsor's sealed story, sent with every guard call so the guard can open it. */
   specCt?: string | null;
-  /** This vault's own door. The default door is /home. */
+  /** This vault's own door. */
   doorHref: string;
   /** This vault's play page, so a failed open can be read again. */
   retryHref: string;
 }) {
-  const doorName = card ? card.name : "Big Sam";
-  const signText = card ? card.sign : venueId.toUpperCase();
+  const titled = doorTitle(card, vaultId);
+  const doorName = titled.name ?? titled.sign;
+  const signText = titled.sign;
   const doorLook = card ? cardLook(card) : undefined;
+  const setting = card?.setting ?? ACCRA_SETTING;
+  const streetKey = `${setting.stall}${setting.ride}${setting.passer}${setting.seller}${setting.shop}${setting.weather}${setting.posters}${setting.sound}`;
   const send = (body: Record<string, unknown>) => postGuard(specCt ? { ...body, spec_ct: specCt } : body);
   const root = useRef<HTMLDivElement>(null);
   const scene = useRef<HTMLDivElement>(null);
@@ -110,8 +116,6 @@ export default function PlayFrame({
   const [seen, setSeen] = useState(0);
   const [heard, setHeard] = useState<Record<string, number>>({});
   const [bubble, setBubble] = useState<{ who: string; text: string; x: number; y: number; learn?: boolean; gloss?: string } | null>(null);
-  const [city, setCity] = useState<CityId>("accra");
-  const kit = CITIES[city];
   const [sheet, setSheet] = useState<"bill" | "desk" | null>(null);
   const [saying, setSaying] = useState(false);
   const [draft, setDraft] = useState("");
@@ -122,9 +126,8 @@ export default function PlayFrame({
   const [toast, setToast] = useState(0);
   const [fade, setFade] = useState(false);
   const [streetW, setStreetW] = useState<number | null>(null);
-  const [swipe, setSwipe] = useState(false);
   const [narrow, setNarrow] = useState(true);
-  const [doorView, setDoorView] = useState("66 -40 268 300");
+  const [doorView, setDoorView] = useState(STREET_VIEW);
   const [wait, setWait] = useState<"reading" | "key" | "opening">("reading");
 
   useEffect(() => {
@@ -173,10 +176,20 @@ export default function PlayFrame({
       setDoorError("This phone cannot keep a key in the passkey.");
       return;
     }
+    await postPlayerSession(secrets);
     const minted = await raidFromDevice(secrets);
     if (!("playerId" in minted)) {
       setBusy(false);
       setDoorError("This phone cannot keep a key in the passkey.");
+      return;
+    }
+    const restored = await resumeRaid(secrets, vaultId, vault.round);
+    if (restored) {
+      const next = { ...minted, blob: restored };
+      sessionRef.current = next;
+      setSession(next);
+      await saveRaid(storageName, vaultId, vault.round, next);
+      setBusy(false);
       return;
     }
     setWait("opening");
@@ -217,9 +230,10 @@ export default function PlayFrame({
     }
   }
 
-  const speaker = card && gate === "door" ? { ...SPEAKER.door, name: card.name.toUpperCase() } : SPEAKER[gate];
+  const speaker = gate === "door" ? { ...SPEAKER.door, name: doorName.toUpperCase() } : SPEAKER[gate];
+  const playing = Boolean(session?.blob);
 
-  // Idle life and the beat, rebuilt whenever the scene changes.
+  // The passkey gate returns before this scene exists, so idle has to start again once the raid is on screen.
   useLayoutEffect(() => {
     registerMotion();
     reduced.current = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -233,24 +247,25 @@ export default function PlayFrame({
       offP();
       ctx.current?.revert();
     };
-  }, [gate, city]);
+  }, [gate, streetKey, playing]);
 
-  // A phone is narrower than the street, so the queue and the chop bar scroll into view.
+  useEffect(() => {
+    setSoundCity(soundCity(setting));
+  }, [setting]);
+
+  // A phone shows the stall, the queue, the door, and the lamp figure together.
   // A wide stage opens the viewBox until the suya cart, the chop-bar sign, and the taxi
   // all sit inside it. Height must not widen the element: a tall desktop would otherwise
-  // center a too-wide street, crop the shop sign, and say "swipe".
+  // center a too-wide street and crop the shop sign.
   useEffect(() => {
     const el = stageRef.current;
     if (!el) return;
     const ro = new ResizeObserver(([e]) => {
       const { width, height } = e!.contentRect;
       const isNarrow = width < 760;
-      const wide = Math.min(980, Math.max(width, height * 1.7));
       setNarrow(isNarrow);
-      setStreetW(isNarrow ? wide : width);
-      setSwipe(isNarrow && wide > width + 1);
+      setStreetW(width);
       if (!isNarrow && height > 0) {
-        // Suya cart through the chop-bar lettering and the taxi, in scene units.
         const left = -230;
         const right = 670;
         const bottom = 268;
@@ -387,13 +402,9 @@ export default function PlayFrame({
   }
 
   function explain(key: string, el: Element) {
-    const lines: Record<string, string> = {
-      ad: "The next door is someone else's night. This queue is The Velvet.",
-      kiosk: "The kiosk sells water. It does not sell the list.",
-    };
-    const text = lines[key];
-    if (!text) return;
-    setBubble({ who: "The street", text, learn: true, ...place(el) });
+    const learned = pieceLearn(setting)[key as "food" | "vehicle" | "passer" | "kiosk" | "ad"];
+    if (!learned) return;
+    setBubble({ who: learned.title, text: learned.text, learn: true, ...place(el) });
     sfx.tick();
   }
 
@@ -681,7 +692,11 @@ export default function PlayFrame({
       <main className="flex h-dvh flex-col bg-night text-chalk">
         <header className="px-4 pt-4 font-sign text-lg">BOUNCER</header>
         <div className="relative min-h-0 flex-1">
-          <DoorScene sign={signText} look={doorLook} neighbors={false} className="size-full" viewBox="66 -40 268 300" />
+          <StreetScroll>
+            <SceneLife className="absolute inset-0">
+              <DoorScene sign={signText} look={doorLook} setting={setting} neighbors className="size-full" viewBox={STREET_VIEW} />
+            </SceneLife>
+          </StreetScroll>
         </div>
         {wait === "key" ? (
           <div className="px-4 py-6 text-center">
@@ -747,10 +762,10 @@ export default function PlayFrame({
 
       {/* The scene: the player writes. Taps do not read a sample ledger. */}
       <section ref={stageRef} className="scene relative min-h-0 flex-1 overflow-hidden bg-[#140f1c]" onClick={onScene}>
-        <div ref={scroller} className={`absolute inset-0 overflow-y-hidden [scrollbar-width:none] ${swipe ? "overflow-x-auto" : "overflow-x-hidden"}`} onScroll={() => setBubble(null)}>
+        <div ref={scroller} className="absolute inset-0 overflow-hidden [scrollbar-width:none]">
           <div ref={scene} key={gate} className="relative h-full" style={{ width: gate === "door" && streetW ? streetW : "100%" }}>
             {gate === "door" ? (
-              <DoorScene key={city} city={city} sign={signText} look={doorLook} gossip={Boolean(session?.street)} speakingSlots={stage === "play" ? speakingSlots : undefined} viewBox={narrow ? "66 -40 268 300" : doorView} className="absolute inset-0 size-full" />
+              <DoorScene key={streetKey} setting={setting} sign={signText} look={doorLook} gossip={Boolean(session?.street)} speakingSlots={stage === "play" ? speakingSlots : undefined} viewBox={narrow ? PHONE_STREET : doorView} className="absolute inset-0 size-full" />
             ) : (
               <OfficeScene hints={stage === "play"} className="absolute inset-0 size-full" />
             )}
@@ -769,7 +784,7 @@ export default function PlayFrame({
         {stage === "play" && notes.length === 0 && !bubble && (
           <div className="pointer-events-none absolute bottom-3 left-1/2 w-max max-w-[calc(100%-1.5rem)] -translate-x-1/2 rounded-full bg-chalk px-3 py-1.5 text-center text-[12px] font-semibold text-ink shadow-lg">
             {gate === "office" ? "Look around. Tap what's glowing." : speakingSlots.some(Boolean)
-              ? "Tap a speech bubble or use Listen. Swipe to look around."
+              ? "Tap a person or use Listen."
               : "Nobody in this queue has a hint to share."}
           </div>
         )}

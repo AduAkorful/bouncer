@@ -23,10 +23,10 @@ test("transcripts and unsafe keys are left out", () => {
   assert.equal(raidHistoryRow("velvet-1:1", []), null);
 });
 
-test("the default door stays on its own paths", () => {
+test("a raid links to that vault's own pages", () => {
   const opened = { vaultId: "velvet-1", round: "1", state: "opened" as const };
-  assert.equal(raidHistoryHref(opened, "velvet-1"), "/play");
-  assert.equal(raidHistoryHref({ ...opened, state: "in" }, "velvet-1"), "/claim");
-  assert.equal(raidHistoryHref({ ...opened, state: "shut" }, "velvet-1"), "/home");
-  assert.equal(raidHistoryHref({ vaultId: "qa-coast-05", round: "2", state: "opened" }, "velvet-1"), "/v/qa-coast-05/play");
+  assert.equal(raidHistoryHref(opened), "/v/velvet-1/play");
+  assert.equal(raidHistoryHref({ ...opened, state: "in" }), "/v/velvet-1/claim");
+  assert.equal(raidHistoryHref({ ...opened, state: "shut" }), "/v/velvet-1");
+  assert.equal(raidHistoryHref({ vaultId: "qa-coast-05", round: "2", state: "opened" }), "/v/qa-coast-05/play");
 });

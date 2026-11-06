@@ -11,7 +11,8 @@
   "dependencies": {
     "@hono/node-server": "^1.13.0",
     "hono": "^4.6.0",
-    "near-api-js": "7.4.0"
+    "near-api-js": "7.4.0",
+    "surrealdb": "^2.2.2"
   },
   "devDependencies": {
     "@types/node": "^20",

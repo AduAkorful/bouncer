@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { raidHistoryHref, raidHistoryLabel, type RaidHistoryRow } from "@/lib/raid-history";
 import { listRaidHistory } from "@/lib/session-store";
 
-export function ProfileHistory({ storageName, defaultVaultId }: { storageName: string; defaultVaultId: string }) {
+export function ProfileHistory({ storageName }: { storageName: string }) {
   const [rows, setRows] = useState<RaidHistoryRow[] | { error: string } | null>(null);
 
   useEffect(() => {
@@ -24,7 +24,7 @@ export function ProfileHistory({ storageName, defaultVaultId }: { storageName: s
     <ul className="mt-3 divide-y divide-white/10">
       {rows.map((row) => (
         <li key={`${row.vaultId}:${row.round}`}>
-          <a href={raidHistoryHref(row, defaultVaultId)} className="chalk-focus flex min-h-11 items-center justify-between gap-3 py-2">
+          <a href={raidHistoryHref(row)} className="chalk-focus flex min-h-11 items-center justify-between gap-3 py-2">
             <span>
               <span className="block text-sm">{row.vaultId}</span>
               <span className="font-mono text-xs text-chalk/60">Round {row.round}</span>

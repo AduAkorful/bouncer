@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { deriveSecrets, unlockDevice } from "@/lib/device-pass";
+import { PlayerName } from "@/components/profile/PlayerName";
 import { accessMessage, accessOnAccount, testnetAccountId, writePayoutAccount } from "@/lib/imported-account";
 
 type Step = "create" | "signing" | "add" | "done" | "error";
@@ -11,13 +12,11 @@ export function PasskeySheet({
   next,
   rpcUrl,
   networkId,
-  vaultId,
   storageName,
 }: {
   next: "claim" | "profile";
   rpcUrl: string;
   networkId: string;
-  vaultId: string;
   storageName: string;
 }) {
   const [step, setStep] = useState<Step>("create");
@@ -85,7 +84,7 @@ export function PasskeySheet({
       setDetail(unlocked.error);
       return;
     }
-    const secrets = await deriveSecrets(unlocked.ikm, vaultId, "0");
+    const secrets = await deriveSecrets(unlocked.ikm, "account", "0");
     unlocked.ikm.fill(0);
     if ("error" in secrets) {
       setStep("error");
@@ -123,6 +122,7 @@ export function PasskeySheet({
         {step === "create" && (
           <>
             <p className="mt-3 text-sm text-chalk/70">Use a passkey from your device or password manager. No seed phrase, no password. Clearing this site does not remove it.</p>
+            <PlayerName />
             <button onClick={() => void create()} className="mt-6 w-full rounded-2xl bg-chalk py-4 font-sign text-lg text-ink shadow-[0_5px_0_#9c9483]">
               Create passkey
             </button>

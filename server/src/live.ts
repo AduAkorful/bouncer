@@ -12,6 +12,7 @@ import type { ServerEnv } from "./env.ts";
 import { createGuardPost, type Post } from "./guard-client.ts";
 import type { KeeperChain } from "./keeper.ts";
 import { createBudget, createCounter, createLimiter } from "./limits.ts";
+import { readSurrealEnv, surrealPlayers } from "./player-db.ts";
 
 export async function chainNowMs(rpcUrl: string): Promise<{ ok: true; nowMs: number } | { ok: false; error: string }> {
   try {
@@ -33,6 +34,7 @@ export async function chainNowMs(rpcUrl: string): Promise<{ ok: true; nowMs: num
 export function liveDeps(env: ServerEnv, status: () => unknown): Deps {
   const now = () => Date.now();
   const modelKey = process.env.NEAR_AI_KEY?.trim();
+  const surreal = readSurrealEnv(process.env);
   return {
     env,
     rpc: httpRpc(env.relay.rpcUrl),
@@ -44,6 +46,7 @@ export function liveDeps(env: ServerEnv, status: () => unknown): Deps {
     bills: createCounter(),
     accessKeyIsFull: (account, publicKey) => accessKeyIsFull(env.relay.rpcUrl, account, publicKey),
     marks: new Map(),
+    players: surreal.ok && surreal.env ? surrealPlayers(surreal.env) : undefined,
     submitVerdict: (verdict, signature) => submitVerdict(env.relay, verdict, signature),
     createAccount: (publicKey) => createPasskeyAccount(env.relay, env.authContractId, publicKey),
     signTransaction: (body) => signPasskeyTransaction(env.relay, env.authContractId, body),
