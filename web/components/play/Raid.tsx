@@ -4,7 +4,7 @@ import { cardLook, type Card } from "@/lib/card";
 import { apiPost, asObject } from "@/lib/api";
 
 import gsap from "gsap";
-import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "react";
+import { Suspense, useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "react";
 import { Countdown } from "@/components/Countdown";
 import { DemoBadge, Money } from "@/components/bits";
 import { DoorScene } from "@/components/DoorScene";
@@ -12,6 +12,7 @@ import { OfficeScene } from "@/components/OfficeScene";
 import { BillBuilder } from "@/components/play/BillBuilder";
 import { Desk, type Note } from "@/components/play/Desk";
 import { ApprovedStamp, RefusedStamp } from "@/components/Stamp";
+import { TokenBridge } from "@/components/TokenAmount";
 import type { DraftBill } from "@/lib/bill";
 
 type Decision = "ask" | "refused" | "approved" | "none";
@@ -19,7 +20,9 @@ import { Blocked } from "@/components/Blocked";
 import { playableRaid, playerDetail, playGateStatus, playStop } from "@/lib/door";
 import type { VaultView } from "@/lib/vault";
 import { guardRule } from "@/lib/rules";
-import { decimalToAtomic, formatAtomic } from "@/lib/units";
+import type { TokenRead } from "@/lib/page-vault";
+import { TOKEN_FAILED, TOKEN_READING, tokenAmount } from "@/lib/token-label";
+import { decimalToAtomic } from "@/lib/units";
 import { deriveSecrets, unlockDevice } from "@/lib/device-pass";
 import { loadRaid, raidFromDevice, saveRaid, loadTranscript, saveTranscript, type StoredRaid } from "@/lib/session-store";
 import type { Exchange } from "@/lib/raid-transcript";
@@ -45,8 +48,7 @@ const SUGGEST = {
 export default function PlayFrame({
   vaultId,
   vault,
-  currency,
-  decimals,
+  token,
   storageName,
   messageBudget,
   venueId,
@@ -57,8 +59,7 @@ export default function PlayFrame({
 }: {
   vaultId: string;
   vault: VaultView;
-  currency: string;
-  decimals: number;
+  token: Promise<TokenRead>;
   storageName: string;
   messageBudget: number;
   venueId: string;
@@ -117,6 +118,7 @@ export default function PlayFrame({
   const [xp, setXp] = useState(340);
   const [gain, setGain] = useState<string | null>(null);
   const [sound, setSoundOn] = useState(false);
+  const [tokenLabel, setTokenLabel] = useState<TokenRead | null>(null);
   const [toast, setToast] = useState(0);
   const [fade, setFade] = useState(false);
   const [streetW, setStreetW] = useState<number | null>(null);
@@ -449,11 +451,17 @@ export default function PlayFrame({
     });
   }
 
-  function handOver(b: DraftBill) {
+  async function handOver(b: DraftBill) {
     const current = sessionRef.current;
     if (busy || stage !== "play" || leftRef.current === 0 || !current?.blob) return;
+    const resolved = tokenLabel ?? await token;
+    if (sessionRef.current !== current || stage !== "play" || leftRef.current === 0) return;
+    if (!resolved.ok) {
+      setYou("The token could not be read.");
+      return;
+    }
     const qty = decimalToAtomic(b.qty, 0);
-    const unit = decimalToAtomic(b.unit, decimals);
+    const unit = decimalToAtomic(b.unit, resolved.decimals);
     if (!qty || !unit) {
       setYou("That amount could not be read.");
       return;
@@ -658,8 +666,8 @@ export default function PlayFrame({
     if (on) music.start(gate === "door" ? "street" : "office");
   }
 
-  const potText = formatAtomic(vault.dayPot, decimals);
-  const cutText = signedAmount ? formatAtomic(signedAmount, decimals) : null;
+  const potShown = tokenAmount(tokenLabel, vault.dayPot);
+  const cutShown = signedAmount ? tokenAmount(tokenLabel, signedAmount) : null;
   const unread = notes.length - seen;
   const streetQueue = session?.street?.queue ?? [];
   const speakingSlots = streetQueue.map((person) => person.lines.length > 0);
@@ -703,6 +711,9 @@ export default function PlayFrame({
 
   return (
     <div ref={root} onClickCapture={onPlayClickCapture} className="relative flex h-dvh flex-col overflow-hidden bg-night text-chalk">
+      <Suspense fallback={null}>
+        <TokenBridge token={token} onReady={setTokenLabel} />
+      </Suspense>
       {/* HUD */}
       <header className="z-20 flex items-center justify-between gap-2 px-3 pb-2 pt-3 sm:gap-3 sm:px-4">
         <div className="min-w-0 leading-none">
@@ -919,11 +930,11 @@ export default function PlayFrame({
         <div className="absolute inset-0 z-30 flex flex-col items-center justify-end bg-[linear-gradient(to_bottom,rgb(13_10_18/0)_0%,rgb(13_10_18/0.6)_35%,rgb(13_10_18/0.97)_60%)] px-6 pb-8 text-center">
           <h1 className="font-sign text-5xl leading-none">You got in.</h1>
           <div className="mt-3 font-mono text-xs uppercase tracking-[0.25em] text-chalk/80">Door cut, yours whatever happens next</div>
-          {cutText ? <Money text={cutText} currency={currency} className="neon-brass text-3xl" /> : <p className="mt-3 text-sm text-chalk/60">No signed amount yet.</p>}
+          <AmountLine shown={cutShown} empty="No signed amount yet." className="neon-brass text-3xl" block />
           <div className="mt-5 w-full max-w-sm rounded-2xl border border-white/10 bg-night-2 p-4 text-left">
             <div className="flex items-center justify-between">
               <span className="font-sign text-sm">Back office</span>
-              {potText ? <Money text={potText} currency={currency} className="text-sm text-chalk/80" /> : null}
+              <AmountLine shown={potShown} className="text-sm text-chalk/80" />
             </div>
             <p className="mt-2 text-sm text-chalk/65">
               Madam Efua pays the big bills from her own ledger. Nothing you learned at the door helps in there. You have{" "}
@@ -942,7 +953,7 @@ export default function PlayFrame({
               {left === 0 ? "No messages left" : "Walk to the back office"}
             </button>
             <button onClick={takeCut} className="rounded-2xl border border-chalk/30 py-3 text-sm">
-              {cutText ? `Take ${cutText} ${currency} and go` : "Leave with the verdict"}
+              {cutShown?.kind === "ready" ? `Take ${cutShown.text} ${cutShown.symbol} and go` : cutShown?.kind === "reading" ? TOKEN_READING : cutShown?.kind === "failed" ? TOKEN_FAILED : "Leave with the verdict"}
             </button>
           </div>
         </div>
@@ -951,8 +962,9 @@ export default function PlayFrame({
       {stage === "end" && (
         <EndScreen
           end={end}
-          cutText={cutText}
-          currency={currency}
+          cutText={cutShown?.kind === "ready" ? cutShown.text : null}
+          currency={cutShown?.kind === "ready" ? cutShown.symbol : ""}
+          amountNote={cutShown?.kind === "reading" ? TOKEN_READING : cutShown?.kind === "failed" ? TOKEN_FAILED : null}
           grid={grid}
           signature={signedHex}
           round={vault.round}
@@ -968,10 +980,28 @@ export default function PlayFrame({
   );
 }
 
+function AmountLine({
+  shown,
+  empty,
+  className,
+  block = false,
+}: {
+  shown: ReturnType<typeof tokenAmount> | null;
+  empty?: string;
+  className: string;
+  block?: boolean;
+}) {
+  if (!shown) return empty ? <p className="mt-3 text-sm text-chalk/60">{empty}</p> : null;
+  if (shown.kind === "reading") return <p className={`text-sm text-chalk/70 ${block ? "mt-3" : ""}`}>{TOKEN_READING}</p>;
+  if (shown.kind === "failed") return <p className={`text-sm text-chalk/70 ${block ? "mt-3" : ""}`}>{TOKEN_FAILED}</p>;
+  return <Money text={shown.text} currency={shown.symbol} className={`${className} ${block ? "mt-3" : ""}`} />;
+}
+
 function EndScreen({
   end,
   cutText,
   currency,
+  amountNote = null,
   grid,
   signature,
   round,
@@ -985,6 +1015,7 @@ function EndScreen({
   end: End;
   cutText: string | null;
   currency: string;
+  amountNote?: string | null;
   grid: Decision[];
   signature: string | null;
   round: string;
@@ -1042,7 +1073,7 @@ function EndScreen({
       ) : (
         <div className="end-rest end-cut mt-4">
           <div className="font-mono text-xs uppercase tracking-[0.25em] text-chalk/80">Signed amount</div>
-          {cutText ? <Money text={cutText} currency={currency} className="neon-brass text-4xl" /> : <p className="text-sm text-chalk/60">No signed amount.</p>}
+          {amountNote ? <p className="text-sm text-chalk/60">{amountNote}</p> : cutText ? <Money text={cutText} currency={currency} className="neon-brass text-4xl" /> : <p className="text-sm text-chalk/60">No signed amount.</p>}
           <p className="mt-2 max-w-xs text-sm text-chalk/60">
             {submitError
               ? `The verdict is still on this device. Submission failed: ${submitError}`

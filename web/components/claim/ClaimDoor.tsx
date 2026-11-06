@@ -5,21 +5,21 @@ import { useEffect, useState } from "react";
 import { apiPost } from "@/lib/api";
 import { Countdown } from "@/components/Countdown";
 import { TryAgain } from "@/components/TryAgain";
-import { Money, NetworkTag } from "@/components/bits";
+import { NetworkTag } from "@/components/bits";
+import { TokenAmount, TokenWord } from "@/components/TokenAmount";
 import { unlockDevice, deriveSecrets } from "@/lib/device-pass";
 import { readPayoutAccount, testnetAccountId, writePayoutAccount } from "@/lib/imported-account";
 import { addWalletKey, sendClaim } from "@/lib/send-claim";
 import { playableRaid } from "@/lib/door";
 import { loadRaid } from "@/lib/session-store";
-import { formatAtomic } from "@/lib/units";
+import type { TokenRead } from "@/lib/page-vault";
 import type { CrackView, VaultView } from "@/lib/vault";
 
 type Phase = "locked" | "ready" | "paying" | "paid" | "closed";
 
 export function ClaimDoor({
   vaultId,
-  currency,
-  decimals,
+  token,
   storageName,
   networkTag,
   round,
@@ -30,8 +30,7 @@ export function ClaimDoor({
   retryHref,
 }: {
   vaultId: string;
-  currency: string;
-  decimals: number;
+  token: Promise<TokenRead>;
   storageName: string;
   networkTag: string;
   round: string;
@@ -239,8 +238,6 @@ export function ClaimDoor({
     setKeyNote(added.ok ? "That key can use this account." : added.error);
   }
 
-  const amount = crack ? formatAtomic(crack.amount, decimals) : null;
-
   return (
     <main className="min-h-dvh overflow-x-clip bg-night px-4 pb-24 pt-8 text-chalk">
       <div className="mx-auto max-w-lg">
@@ -249,7 +246,7 @@ export function ClaimDoor({
           <NetworkTag label={networkTag} className="text-chalk/70" />
         </div>
         <h1 className="mt-2 font-sign text-3xl leading-none">Your cut</h1>
-        {amount ? <Money text={amount} currency={currency} className="mt-3 text-4xl text-brass" /> : null}
+        {crack ? <div className="mt-3"><TokenAmount token={token} atomic={crack.amount} className="text-4xl text-brass" /></div> : null}
         {error ? <p className="mt-4 text-sm text-chalk/70">{error}</p> : phase === null && !missing ? <p className="mt-4 text-sm text-chalk/70">Reading this claim.</p> : null}
         {retry ? (
           <div className="mt-4">
@@ -270,11 +267,17 @@ export function ClaimDoor({
         )}
         {phase === "ready" && (
           <section className="mt-5 rounded-3xl border border-white/10 bg-night-2 p-5">
-            <p className="text-sm text-chalk/70">
-              {preference === "existing" && namedAccount.trim()
-                ? `The lock is open. This phone's passkey signs the claim, and the vault pays ${namedAccount.trim()}.`
-                : `The lock is open. Claim uses a passkey on this phone. That account is the payout, and the vault sends the ${currency} there.`}
-            </p>
+            {preference === "existing" && namedAccount.trim() ? (
+              <p className="text-sm text-chalk/70">The lock is open. This phone&apos;s passkey signs the claim, and the vault pays {namedAccount.trim()}.</p>
+            ) : (
+              <TokenWord token={token}>
+                {(symbol) => (
+                  <p className="text-sm text-chalk/70">
+                    The lock is open. Claim uses a passkey on this phone. That account is the payout, and the vault sends the {symbol} there.
+                  </p>
+                )}
+              </TokenWord>
+            )}
             {preference === "existing" && (
               <>
                 <input

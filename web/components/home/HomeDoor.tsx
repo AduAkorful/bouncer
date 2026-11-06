@@ -1,13 +1,13 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { Countdown } from "@/components/Countdown";
-import { Money, NetworkTag } from "@/components/bits";
-import { DoorList } from "@/components/DoorList";
+import { NetworkTag } from "@/components/bits";
 import { DoorScene } from "@/components/DoorScene";
+import { TokenAmount, TokenPotGlyph } from "@/components/TokenAmount";
 import { cardLook, type Card } from "@/lib/card";
 import { SceneLife } from "@/components/SceneLife";
 import { doorShut } from "@/lib/door";
-import type { ListedDoor } from "@/lib/door-index";
-import { formatAtomic } from "@/lib/units";
+import type { TokenRead } from "@/lib/page-vault";
 import type { VaultView } from "@/lib/vault";
 
 const phaseCopy = {
@@ -27,35 +27,27 @@ const phaseCopy = {
 
 export function HomeDoor({
   vault,
-  currency,
-  decimals,
   networkTag,
   notice,
   card = null,
   base = "",
+  token,
   doors,
-  doorsFailed,
-  doorsTruncated,
-  retryHref,
 }: {
   vault: VaultView | null;
-  currency?: string;
-  decimals?: number;
   networkTag?: string;
   notice?: string;
   /** A sponsor's public card. Null for a built-in door. */
   card?: Card | null;
   /** Where this door's pages live: empty for the default vault, `/v/<id>` for a sponsor's. */
   base?: string;
-  /** Other vaults named by the contract. */
-  doors: ListedDoor[];
-  doorsFailed: boolean;
-  doorsTruncated: boolean;
-  retryHref: string;
+  token: Promise<TokenRead>;
+  /** The other-doors list, including its own loading state. */
+  doors: ReactNode;
 }) {
   const shut = vault ? doorShut(vault, Date.now()) : false;
   const phase = !vault ? "closed" : shut ? "closed" : vault.crackCount > 0 ? "cracked" : "open";
-  const pot = vault && decimals !== undefined ? formatAtomic(phase === "cracked" ? vault.dayPot : vault.open ? vault.dayPot : vault.pot, decimals) : undefined;
+  const atomic = vault ? (phase === "cracked" || vault.open ? vault.dayPot : vault.pot) : null;
   const commitment = vault?.commitment;
   return (
     <main className="min-h-dvh overflow-x-clip bg-night pb-24 text-chalk">
@@ -86,6 +78,7 @@ export function HomeDoor({
             open={phase === "cracked"}
             p="home"
             viewBox="80 0 292 244"
+            lampFigureX={356}
             className="size-full"
             back={
               <g aria-hidden>
@@ -100,23 +93,14 @@ export function HomeDoor({
               </g>
             }
             front={
-              <g aria-label={pot ? `Tonight's pot ${pot} ${currency}` : "Tonight's pot unavailable"}>
+              <g aria-label="Tonight's pot">
                 <path d="M282,224 L290,166 M330,224 L322,166" stroke="#5a4630" strokeWidth="3" />
                 <rect x="281" y="156" width="50" height="58" rx="3" fill="#1b2420" stroke="#5a4630" strokeWidth="3" />
                 <g transform="rotate(-3 306 185)">
                   <text x="306" y="170" textAnchor="middle" fontFamily="var(--font-jetbrains)" fontSize="4.4" letterSpacing="0.3" fill="#efe8da" opacity="0.85">
                     TONIGHT&apos;S POT
                   </text>
-                  {pot ? (
-                    <text x="306" y="188" textAnchor="middle" fontFamily="var(--font-bungee)" fontSize="11" fill="#f0d48f">
-                      {pot}
-                    </text>
-                  ) : null}
-                  {currency ? (
-                    <text x="306" y="202" textAnchor="middle" fontFamily="var(--font-jetbrains)" fontSize="4.4" fill="#efe8da" opacity="0.75">
-                      {currency}
-                    </text>
-                  ) : null}
+                  {atomic ? <TokenPotGlyph token={token} atomic={atomic} /> : null}
                 </g>
               </g>
             }
@@ -137,7 +121,7 @@ export function HomeDoor({
               <div className="font-mono text-xs uppercase tracking-[0.2em] text-chalk/80">
                 {vault ? (phase === "cracked" ? "Splitting now" : phase === "closed" ? "Closed" : "Tonight's pot") : "No vault"}
               </div>
-              {pot && currency ? <Money text={pot} currency={currency} className="text-2xl text-brass" /> : <p className="text-sm text-chalk/60">No pot is stored.</p>}
+              {atomic ? <TokenAmount token={token} atomic={atomic} className="text-2xl text-brass" /> : <p className="text-sm text-chalk/60">No pot is stored.</p>}
             </div>
             {vault && !shut ? (
               <div className="text-right">
@@ -174,22 +158,16 @@ export function HomeDoor({
         </div>
       </section>
 
-      <DoorList
-        title="Other doors"
-        doors={doors}
-        failed={doorsFailed}
-        truncated={doorsTruncated}
-        empty="No other door is listed."
-        retryHref={retryHref}
-      />
+      {doors}
 
-      <footer className="mx-auto mt-8 max-w-5xl px-4 font-mono text-[11px] text-chalk/50">
+      <footer className="mx-auto mt-8 max-w-5xl px-4 font-mono text-[11px] leading-relaxed text-chalk/50">
         {vault && shut ? null : commitment ? (
-          <span>
-            <span className="text-uv-glow">●</span> Tonight&apos;s ledger committed before the door opened · {commitment}
-          </span>
+          <p className="break-words">
+            <span className="text-uv-glow">●</span> Tonight&apos;s ledger committed before the door opened ·{" "}
+            <span className="break-all">{commitment}</span>
+          </p>
         ) : (
-          <span>No commitment is stored on this vault.</span>
+          <p>No commitment is stored on this vault.</p>
         )}
       </footer>
     </main>

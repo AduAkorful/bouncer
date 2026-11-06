@@ -53,6 +53,52 @@ test("the deadline includes stalled response bodies", async () => {
   assert.equal(signal?.aborted, true);
 });
 
+test("one rpc failure is tried once more", async () => {
+  let calls = 0;
+  const rpc = httpRpc("https://rpc.invalid", async () => {
+    calls += 1;
+    if (calls === 1) return new Response("unavailable", { status: 503 });
+    return Response.json(rpcBody("owner.testnet"));
+  });
+  assert.deepEqual(await rpc(request), { ok: true, value: "owner.testnet" });
+  assert.equal(calls, 2);
+});
+
+test("two rpc failures stay a failure", async () => {
+  let calls = 0;
+  const rpc = httpRpc("https://rpc.invalid", async () => {
+    calls += 1;
+    return new Response("unavailable", { status: 503 });
+  });
+  assert.deepEqual(await rpc(request), failure);
+  assert.equal(calls, 2);
+});
+
+test("an aborted page does not start a second call", async () => {
+  const page = new AbortController();
+  let calls = 0;
+  const rpc = httpRpc("https://rpc.invalid", async () => {
+    calls += 1;
+    page.abort();
+    return new Response("unavailable", { status: 503 });
+  }, { signal: page.signal });
+  assert.deepEqual(await rpc(request), failure);
+  assert.equal(calls, 1);
+});
+
+test("two identical view calls share one request", async () => {
+  let calls = 0;
+  const rpc = httpRpc("https://rpc.invalid", async () => {
+    calls += 1;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    return Response.json(rpcBody("owner.testnet"));
+  });
+  const [first, second] = await Promise.all([rpc(request), rpc(request)]);
+  assert.deepEqual(first, { ok: true, value: "owner.testnet" });
+  assert.deepEqual(second, first);
+  assert.equal(calls, 1);
+});
+
 test("the page signal cancels in-flight and future requests", async () => {
   const page = new AbortController();
   let calls = 0;

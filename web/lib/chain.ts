@@ -7,41 +7,62 @@ type RpcOptions = { timeoutMs?: number; signal?: AbortSignal };
 export const CALL_BUDGET_MS = 10_000;
 export const PAGE_READ_MS = CALL_BUDGET_MS * 2;
 
-export function httpRpc(rpcUrl: string, fetchImpl: typeof fetch = fetch, options: RpcOptions = {}): Rpc {
-  return async (request) => {
-    const controller = new AbortController();
-    const abort = () => controller.abort();
-    options.signal?.addEventListener("abort", abort, { once: true });
-    if (options.signal?.aborted) abort();
-    const timer = setTimeout(abort, options.timeoutMs ?? CALL_BUDGET_MS);
-    let onAbort: () => void = () => {};
-    const aborted = new Promise<never>((_, reject) => {
-      onAbort = () => reject(new DOMException("RPC read aborted", "AbortError"));
-      controller.signal.addEventListener("abort", onAbort, { once: true });
-    });
-    try {
+type RpcResult = { ok: true; value: unknown } | { ok: false; error: string };
+
+const flights = new Map<string, Promise<RpcResult>>();
+
+async function once(rpcUrl: string, fetchImpl: typeof fetch, options: RpcOptions, request: ReturnType<typeof viewRequest>): Promise<RpcResult> {
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  options.signal?.addEventListener("abort", abort, { once: true });
+  if (options.signal?.aborted) abort();
+  const timer = setTimeout(abort, options.timeoutMs ?? CALL_BUDGET_MS);
+  let onAbort: () => void = () => {};
+  const aborted = new Promise<never>((_, reject) => {
+    onAbort = () => reject(new DOMException("RPC read aborted", "AbortError"));
+    controller.signal.addEventListener("abort", onAbort, { once: true });
+  });
+  try {
+    controller.signal.throwIfAborted();
+    return await Promise.race([aborted, (async (): Promise<RpcResult> => {
+      const response = await fetchImpl(rpcUrl, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(request),
+        cache: "no-store",
+        signal: controller.signal,
+      });
       controller.signal.throwIfAborted();
-      return await Promise.race([aborted, (async (): ReturnType<Rpc> => {
-        const response = await fetchImpl(rpcUrl, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(request),
-          cache: "no-store",
-          signal: controller.signal,
-        });
-        controller.signal.throwIfAborted();
-        if (!response.ok) return { ok: false, error: "rpc" };
-        const body = await response.json();
-        controller.signal.throwIfAborted();
-        return parseRpcJson(body);
-      })()]);
-    } catch {
-      return { ok: false, error: "rpc" };
-    } finally {
-      clearTimeout(timer);
-      options.signal?.removeEventListener("abort", abort);
-      controller.signal.removeEventListener("abort", onAbort);
-    }
+      if (!response.ok) return { ok: false, error: "rpc" };
+      const body = await response.json();
+      controller.signal.throwIfAborted();
+      return parseRpcJson(body);
+    })()]);
+  } catch {
+    return { ok: false, error: "rpc" };
+  } finally {
+    clearTimeout(timer);
+    options.signal?.removeEventListener("abort", abort);
+    controller.signal.removeEventListener("abort", onAbort);
+  }
+}
+
+async function readWithRetry(rpcUrl: string, fetchImpl: typeof fetch, options: RpcOptions, request: ReturnType<typeof viewRequest>): Promise<RpcResult> {
+  const first = await once(rpcUrl, fetchImpl, options, request);
+  if (first.ok || first.error !== "rpc" || options.signal?.aborted) return first;
+  return once(rpcUrl, fetchImpl, options, request);
+}
+
+export function httpRpc(rpcUrl: string, fetchImpl: typeof fetch = fetch, options: RpcOptions = {}): Rpc {
+  return (request) => {
+    const key = `${rpcUrl}\n${JSON.stringify(request)}`;
+    const current = flights.get(key);
+    if (current) return current;
+    const run = readWithRetry(rpcUrl, fetchImpl, options, request).finally(() => {
+      if (flights.get(key) === run) flights.delete(key);
+    });
+    flights.set(key, run);
+    return run;
   };
 }
 

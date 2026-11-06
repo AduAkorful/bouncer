@@ -32,6 +32,8 @@ interface Props {
   ink?: { stroke: string; fill: string };
   /** The sign is inside a link that already names the door. */
   decorative?: boolean;
+  /** The green-dress figure at the lamp. The door page moves her clear of the pot board. */
+  lampFigureX?: number;
 }
 
 // The queue. The front four talk if you tap them (index → queueGossip); the rest are the crowd behind.
@@ -80,6 +82,7 @@ export function DoorScene({
   neighbors = true,
   ink,
   decorative = false,
+  lampFigureX = 318,
 }: Props) {
   const n = ink ?? NEONS.find((x) => x.value === neon) ?? NEONS[0];
   const kit = CITIES[city];
@@ -349,7 +352,7 @@ export function DoorScene({
             <Goer x={584} s={0.72} look={{ skin: "#8a5a3c", top: "#efe8da", bottom: "#17141c", hair: "puff", hairColor: "#2a1a10", outfit: "dress", pose: "hold" }} rim={n.stroke} dark={0.3} flip />
           </g>
           <Goer x={612} s={0.76} look={{ skin: "#3b2417", top: "#3b4a8f", bottom: "#2a2234", hair: "locs", hairColor: "#1c120c", outfit: "hoodie", pose: "phone" }} rim="#ffe2a0" dark={0.35} flip />
-          <Goer x={318} s={0.76} look={P.braids} rim={n.stroke} dark={0.2} index={3} gossip={speaks(3)} flip />
+          <Goer x={lampFigureX} s={0.76} look={P.braids} rim={n.stroke} dark={0.2} index={3} gossip={speaks(3)} flip />
         </g>
       )}
 

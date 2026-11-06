@@ -5,11 +5,12 @@ import { useEffect, useState } from "react";
 import { Countdown } from "@/components/Countdown";
 import { TryAgain } from "@/components/TryAgain";
 import { apiPost } from "@/lib/api";
-import { Money, NetworkTag } from "@/components/bits";
+import { NetworkTag } from "@/components/bits";
+import { TokenAmount } from "@/components/TokenAmount";
 import { playableRaid } from "@/lib/door";
 import { revealChecksOut } from "@/lib/reveal";
 import { loadRaid } from "@/lib/session-store";
-import { formatAtomic } from "@/lib/units";
+import type { TokenRead } from "@/lib/page-vault";
 import type { VaultView } from "@/lib/vault";
 
 type Line = { payee: string; reference: string; item: string; total: string; paid: boolean };
@@ -17,8 +18,7 @@ type Line = { payee: string; reference: string; item: string; total: string; pai
 export function RevealDoor({
   vaultId,
   vault,
-  currency,
-  decimals,
+  token,
   storageName,
   venueId,
   specCt = null,
@@ -29,8 +29,7 @@ export function RevealDoor({
 }: {
   vaultId: string;
   vault: VaultView;
-  currency: string;
-  decimals: number;
+  token: Promise<TokenRead>;
   storageName: string;
   venueId: string;
   /** The sponsor's sealed story for a custom vault, so the guard can rebuild the ledger. */
@@ -133,12 +132,11 @@ export function RevealDoor({
         {lines && (
           <ul className="mt-5 space-y-2">
             {lines.map((line) => {
-              const total = formatAtomic(line.total, decimals);
               return (
                 <li key={`${line.payee}-${line.reference}-${line.total}`} className="rounded-2xl border border-white/10 bg-night-2 px-4 py-3">
                   <div className="flex items-baseline justify-between gap-3">
                     <span className="font-sign">{line.payee}</span>
-                    {total ? <Money text={total} currency={currency} className="text-sm" /> : null}
+                    <TokenAmount token={token} atomic={line.total} className="text-sm" />
                   </div>
                   <p className="mt-1 font-mono text-[11px] text-chalk/50">
                     {line.reference} · {line.item} · {line.paid ? "paid" : "open"}

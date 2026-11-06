@@ -1,5 +1,8 @@
+import { Suspense } from "react";
+import { connection } from "next/server";
 import { Blocked } from "@/components/Blocked";
 import { ClaimDoor } from "@/components/claim/ClaimDoor";
+import { DoorList, DoorListPending } from "@/components/DoorList";
 import { DoorUnread } from "@/components/DoorUnread";
 import { HomeDoor } from "@/components/home/HomeDoor";
 import Raid from "@/components/play/Raid";
@@ -27,7 +30,7 @@ async function load(vaultId?: string): Promise<Loaded> {
   if (!labels) return { ok: false, failure: unreadDoor("unset", vaultId) };
   const page = await readPageVault(
     httpRpc(labels.rpcUrl, fetch, { signal: AbortSignal.timeout(PAGE_READ_MS) }),
-    { contractId: labels.contractId, defaultVaultId: labels.vaultId, currency: labels.currency, decimals: labels.decimals, venue: labels.venue },
+    { contractId: labels.contractId, defaultVaultId: labels.vaultId, venue: labels.venue },
     vaultId,
   );
   if (!page.ok) return { ok: false, failure: unreadDoor(page.error, vaultId) };
@@ -43,28 +46,51 @@ function unread(surface: Surface, vaultId: string | undefined, failure: UnreadDo
 const basePath = (vaultId?: string) => (vaultId ? `/v/${vaultId}` : "");
 
 export async function HomeGate({ vaultId }: { vaultId?: string }) {
-  const loaded = await load(vaultId);
-  if (!loaded.ok) return unread("door", vaultId, loaded.failure);
-  const { page, labels } = loaded;
-  const index = await readDoorIndex(
-    httpRpc(labels.rpcUrl, fetch, { signal: AbortSignal.timeout(PAGE_READ_MS) }),
-    labels.contractId,
-    labels.vaultId,
-    Date.now(),
-  );
-  const doors = index.ok ? index.doors.filter((door) => door.id !== page.vaultId) : [];
+  await connection();
+  const labels = publicLabels();
+  if (!labels) return unread("door", vaultId, unreadDoor("unset", vaultId));
+  const rpc = httpRpc(labels.rpcUrl, fetch, { signal: AbortSignal.timeout(PAGE_READ_MS) });
+  const env = { contractId: labels.contractId, defaultVaultId: labels.vaultId, venue: labels.venue };
+  const pagePromise = readPageVault(rpc, env, vaultId);
+  const indexPromise = readDoorIndex(rpc, labels.contractId, labels.vaultId, Date.now());
+  const page = await pagePromise;
+  if (!page.ok) return unread("door", vaultId, unreadDoor(page.error, vaultId));
+  const retryHref = doorPaths(vaultId).door;
   return (
     <HomeDoor
-      vault={page.vault}
-      card={page.card}
+      vault={page.page.vault}
+      card={page.page.card}
       base={basePath(vaultId)}
-      currency={page.currency}
-      decimals={page.decimals}
       networkTag={labels.networkTag}
+      token={page.page.token}
+      doors={
+        <Suspense fallback={<DoorListPending />}>
+          <HomeIndex index={indexPromise} exclude={page.page.vaultId} retryHref={retryHref} />
+        </Suspense>
+      }
+    />
+  );
+}
+
+async function HomeIndex({
+  index,
+  exclude,
+  retryHref,
+}: {
+  index: ReturnType<typeof readDoorIndex>;
+  exclude: string;
+  retryHref: string;
+}) {
+  const read = await index;
+  const doors = read.ok ? read.doors.filter((door) => door.id !== exclude) : [];
+  return (
+    <DoorList
+      title="Other doors"
       doors={doors}
-      doorsFailed={!index.ok}
-      doorsTruncated={index.ok && index.truncated}
-      retryHref={doorPaths(vaultId).door}
+      failed={!read.ok}
+      truncated={read.ok && read.truncated}
+      empty="No other door is listed."
+      retryHref={retryHref}
     />
   );
 }
@@ -78,8 +104,7 @@ export async function PlayGate({ vaultId }: { vaultId?: string }) {
     <Raid
       vaultId={page.vaultId}
       vault={page.vault}
-      currency={page.currency}
-      decimals={page.decimals}
+      token={page.token}
       storageName={labels.storageName}
       messageBudget={labels.messageBudget}
       venueId={page.venueId}
@@ -99,8 +124,7 @@ export async function RevealGate({ vaultId }: { vaultId?: string }) {
     <RevealDoor
       vaultId={page.vaultId}
       vault={page.vault}
-      currency={page.currency}
-      decimals={page.decimals}
+      token={page.token}
       storageName={labels.storageName}
       venueId={page.venueId}
       specCt={page.specCt}
@@ -119,8 +143,7 @@ export async function ClaimGate({ vaultId }: { vaultId?: string }) {
   return (
     <ClaimDoor
       vaultId={page.vaultId}
-      currency={page.currency}
-      decimals={page.decimals}
+      token={page.token}
       storageName={labels.storageName}
       networkTag={labels.networkTag}
       round={page.vault.round}

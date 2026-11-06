@@ -23,6 +23,8 @@ export function PasskeySheet({
   const [step, setStep] = useState<Step>("create");
   const [detail, setDetail] = useState<string | null>(null);
   const [accountDraft, setAccountDraft] = useState("");
+  const [nameError, setNameError] = useState<string | null>(null);
+  const nameField = useRef<HTMLInputElement>(null);
   const [accountId, setAccountId] = useState<string | null>(null);
   const [publicKey, setPublicKey] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -69,10 +71,11 @@ export function PasskeySheet({
       return;
     }
     if (!named) {
-      setStep("error");
-      setDetail("That account name cannot be used.");
+      setNameError("That account name cannot be used.");
+      nameField.current?.focus();
       return;
     }
+    setNameError(null);
     setStep("signing");
     setDetail(null);
     const unlocked = await unlock();
@@ -124,12 +127,23 @@ export function PasskeySheet({
               Create passkey
             </button>
             <p className="mt-6 text-sm text-chalk/70">Use an account you already have. A passkey will be created for it.</p>
+            <label htmlFor="existing-account-id" className="mt-3 block text-sm text-chalk/80">
+              Existing account ID
+            </label>
             <input
+              id="existing-account-id"
+              ref={nameField}
               value={accountDraft}
-              onChange={(event) => setAccountDraft(event.target.value)}
+              onChange={(event) => {
+                setAccountDraft(event.target.value);
+                setNameError(null);
+              }}
               placeholder="name.testnet"
-              className="mt-3 w-full rounded-2xl border border-white/10 bg-night px-3 py-3 font-mono text-sm"
+              aria-invalid={nameError ? true : undefined}
+              aria-describedby={nameError ? "existing-account-error" : undefined}
+              className="mt-2 w-full rounded-2xl border border-white/10 bg-night px-3 py-3 font-mono text-sm"
             />
+            {nameError ? <p id="existing-account-error" className="mt-2 text-sm text-chalk/70">{nameError}</p> : null}
             <button onClick={() => void bind()} className="mt-3 w-full rounded-2xl border border-chalk/30 py-3 text-sm">
               Create a passkey for it
             </button>

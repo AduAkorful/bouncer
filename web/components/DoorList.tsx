@@ -4,6 +4,16 @@ import { TryAgain } from "@/components/TryAgain";
 import { cardLook } from "@/lib/card";
 import type { ListedDoor } from "@/lib/door-index";
 
+/** Shown while the chain list is still reading. The door above it does not wait. */
+export function DoorListPending({ title = "Other doors" }: { title?: string }) {
+  return (
+    <section className="mx-auto mt-8 min-w-0 max-w-5xl px-4">
+      <h2 className="font-sign text-lg">{title}</h2>
+      <p className="mt-3 text-sm text-chalk/70">Reading the doors.</p>
+    </section>
+  );
+}
+
 /** Vaults returned by the chain. An empty or failed read stays empty. */
 export function DoorList({
   title,
