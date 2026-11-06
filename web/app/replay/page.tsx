@@ -1,8 +1,8 @@
+import { ReplaySample } from "@/components/replay/ReplaySample";
 import { screen } from "@/lib/screen";
-import { Quiet } from "@/components/Quiet";
 
-export const metadata = screen("No replay is stored.", "A replay reads a recorded night.", { index: false });
+export const metadata = screen("A patched refusal", "Sample. This is not tonight's ledger.", { index: false });
 
 export default function Page() {
-  return <Quiet kicker="Replay" title="No replay is stored." detail="A replay reads a recorded night. None is stored." />;
+  return <ReplaySample />;
 }

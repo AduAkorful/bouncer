@@ -6,7 +6,7 @@ import { DoorScene } from "@/components/DoorScene";
 import { TokenAmount, TokenPotGlyph } from "@/components/TokenAmount";
 import { cardLook, type Card } from "@/lib/card";
 import { SceneLife } from "@/components/SceneLife";
-import { CLOSED_DOOR_NOTE, doorShut } from "@/lib/door";
+import { CLOSED_DOOR_NOTE, COMMITMENT_LINE, NO_COMMITMENT, commitmentFooter, doorShut } from "@/lib/door";
 import type { TokenRead } from "@/lib/page-vault";
 import type { VaultView } from "@/lib/vault";
 
@@ -48,7 +48,7 @@ export function HomeDoor({
   const shut = vault ? doorShut(vault, Date.now()) : false;
   const phase = !vault ? "closed" : shut ? "closed" : vault.crackCount > 0 ? "cracked" : "open";
   const atomic = vault ? (phase === "cracked" || vault.open ? vault.dayPot : vault.pot) : null;
-  const commitment = vault?.commitment;
+  const commitment = commitmentFooter(vault?.commitment);
   return (
     <main className="min-h-dvh overflow-x-clip bg-night pb-24 text-chalk">
       <a
@@ -161,13 +161,12 @@ export function HomeDoor({
       {doors}
 
       <footer className="mx-auto mt-8 max-w-5xl px-4 font-mono text-[11px] leading-relaxed text-chalk/50">
-        {vault && shut ? null : commitment ? (
+        {"hash" in commitment ? (
           <p className="break-words">
-            <span className="text-uv-glow">●</span> Tonight&apos;s ledger committed before the door opened ·{" "}
-            <span className="break-all">{commitment}</span>
+            <span className="text-uv-glow">●</span> {COMMITMENT_LINE} · <span className="break-all">{commitment.hash}</span>
           </p>
         ) : (
-          <p>No commitment is stored on this vault.</p>
+          <p>{NO_COMMITMENT}</p>
         )}
       </footer>
     </main>

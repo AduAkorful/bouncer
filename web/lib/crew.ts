@@ -42,6 +42,43 @@ export function buildCreateCrew(env: CrewEnv | null | undefined, name: string, m
   };
 }
 
+const CREW_ACCOUNT = /^[a-z0-9._-]{2,64}$/;
+
+export function crewDaoKey(storageName: string): string | null {
+  const name = storageName.trim();
+  if (!name) return null;
+  return `${name}.crew-dao`;
+}
+
+/** A DAO id already stored on this browser. An unsafe value is ignored. This function does not write. */
+export function readStoredCrew(storage: { getItem(key: string): string | null }, storageName: string): string | null {
+  const key = crewDaoKey(storageName);
+  if (!key) return null;
+  let raw: string | null;
+  try {
+    raw = storage.getItem(key);
+  } catch {
+    return null;
+  }
+  if (!raw || !CREW_ACCOUNT.test(raw)) return null;
+  return raw;
+}
+
+/** Council accounts from a Sputnik policy. Any other shape supplies no members. */
+export function councilFromPolicy(policy: unknown): { ok: true; members: string[] } | { ok: false } {
+  const body = policy && typeof policy === "object" && "Current" in policy ? (policy as { Current?: unknown }).Current : policy;
+  if (!body || typeof body !== "object") return { ok: false };
+  const roles = (body as { roles?: unknown }).roles;
+  if (!Array.isArray(roles)) return { ok: false };
+  const council = roles.find((role) => role && typeof role === "object" && (role as { name?: unknown }).name === "council");
+  if (!council || typeof council !== "object") return { ok: false };
+  const kind = (council as { kind?: unknown }).kind;
+  if (!kind || typeof kind !== "object" || !("Group" in kind)) return { ok: false };
+  const group = (kind as { Group?: unknown }).Group;
+  if (!Array.isArray(group) || group.some((account) => typeof account !== "string" || !CREW_ACCOUNT.test(account))) return { ok: false };
+  return { ok: true, members: group };
+}
+
 export function bondFromPolicy(policy: unknown): string | null {
   const body = policy && typeof policy === "object" && "Current" in policy ? (policy as { Current?: unknown }).Current : policy;
   if (!body || typeof body !== "object") return null;

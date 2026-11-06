@@ -44,6 +44,15 @@ export const CLOSED_QUEUE = {
   detail: "This door is shut. No next opening is stored. The door page lists any other door.",
 };
 
+export const COMMITMENT_LINE = "Tonight's ledger committed before the door opened";
+export const NO_COMMITMENT = "No commitment is stored on this vault.";
+
+/** A stored hash stays visible after the door shuts. A missing hash stays missing. */
+export function commitmentFooter(commitment: string | null | undefined): { hash: string } | { empty: true } {
+  if (commitment) return { hash: commitment };
+  return { empty: true };
+}
+
 /** What the play gate says before a raid exists. The passkey prompt is a separate panel. */
 export function playGateStatus(wait: "reading" | "opening"): string {
   return wait === "reading" ? "Reading this browser." : "Opening the door.";

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CLOSED_DOOR_NOTE, CLOSED_QUEUE, closesAtMs, doorShut, playableRaid, playerDetail, playGateStatus, playStop } from "./door.ts";
+import { CLOSED_DOOR_NOTE, CLOSED_QUEUE, COMMITMENT_LINE, NO_COMMITMENT, closesAtMs, commitmentFooter, doorShut, playableRaid, playerDetail, playGateStatus, playStop } from "./door.ts";
 
 const OPEN = "1793577600000000000";
 
@@ -25,6 +25,15 @@ test("a player does not see an internal token", () => {
 test("an open door that does not start says why", () => {
   assert.deepEqual(playStop("The door did not answer."), { title: "The door did not answer.", detail: "The raid stays shut." });
   assert.deepEqual(playStop("The passkey was cancelled."), { title: "This phone's passkey did not open.", detail: "The passkey was cancelled." });
+});
+
+test("a shut door keeps a stored commitment", () => {
+  const hash = "ab".repeat(32);
+  assert.deepEqual(commitmentFooter(hash), { hash });
+  assert.equal(COMMITMENT_LINE, "Tonight's ledger committed before the door opened");
+  assert.deepEqual(commitmentFooter(null), { empty: true });
+  assert.deepEqual(commitmentFooter(undefined), { empty: true });
+  assert.equal(NO_COMMITMENT, "No commitment is stored on this vault.");
 });
 
 test("a closed door names no opening time", () => {

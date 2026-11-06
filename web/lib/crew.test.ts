@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { bondFromPolicy, buildAddProposal, buildCreateCrew, evenSplit, policyShares } from "./crew.ts";
+import { bondFromPolicy, buildAddProposal, buildCreateCrew, councilFromPolicy, evenSplit, policyShares, readStoredCrew } from "./crew.ts";
 import { acceptCrewPost, type CrewRoom } from "./crew-relay.ts";
 import { readCrewEnv } from "./config.ts";
 
@@ -21,6 +21,26 @@ test("a missing factory, deposit, or bond does not build a transaction", () => {
   assert.equal(missing.ok, false);
   assert.equal(buildAddProposal(null, "split", { FunctionCall: {} }).ok, false);
   assert.equal(bondFromPolicy({}), null);
+});
+
+test("a stored crew id is shown only when it is a safe account", () => {
+  const storage = new Map<string, string>();
+  const box = { getItem: (key: string) => storage.get(key) ?? null };
+  assert.equal(readStoredCrew(box, "bouncer"), null);
+  storage.set("bouncer.crew-dao", "bad id");
+  assert.equal(readStoredCrew(box, "bouncer"), null);
+  storage.set("bouncer.crew-dao", "lions.sputnikv2.testnet");
+  assert.equal(readStoredCrew(box, "bouncer"), "lions.sputnikv2.testnet");
+  assert.equal(readStoredCrew({ getItem: () => { throw new Error("blocked"); } }, "bouncer"), null);
+});
+
+test("a policy read supplies the council and a failed read supplies none", () => {
+  const policy = { roles: [{ name: "council", kind: { Group: ["a.testnet", "b.testnet"] } }] };
+  assert.deepEqual(councilFromPolicy(policy), { ok: true, members: ["a.testnet", "b.testnet"] });
+  assert.deepEqual(councilFromPolicy({ Current: policy }), { ok: true, members: ["a.testnet", "b.testnet"] });
+  assert.deepEqual(councilFromPolicy({ roles: [{ name: "council", kind: "Everyone" }] }), { ok: false });
+  assert.deepEqual(councilFromPolicy({}), { ok: false });
+  assert.deepEqual(councilFromPolicy(null), { ok: false });
 });
 
 test("the bond attached is the value read from the policy", () => {
