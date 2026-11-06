@@ -64,7 +64,9 @@ export function HomeDoor({
         Skip to the door
       </a>
       <header className="relative z-20 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 px-4 py-3 sm:absolute sm:inset-x-0 sm:top-0 sm:flex-nowrap">
-        <span className="order-1 font-sign text-lg drop-shadow">BOUNCER</span>
+        <Link href="/" className="chalk-focus order-1 inline-flex min-h-11 items-center font-sign text-lg drop-shadow">
+          BOUNCER
+        </Link>
         <div className="order-3 flex w-full items-center gap-1.5 sm:order-2 sm:ml-auto sm:w-auto sm:flex-nowrap sm:justify-end sm:gap-2">
           <NetworkTag label={networkTag} className="whitespace-nowrap bg-black/40 text-chalk/80 backdrop-blur" />
           <span className="cursor-default select-none font-mono text-xs text-chalk/80">Queue</span>

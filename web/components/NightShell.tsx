@@ -6,7 +6,9 @@ export function NightShell({ door = false, href = "/home" }: { door?: boolean; h
   return (
     <main className="min-h-dvh bg-night text-chalk">
       <header className="px-4 py-3">
-        <span className="font-sign text-lg">BOUNCER</span>
+        <Link href={door ? "/" : href} className="chalk-focus inline-flex min-h-11 items-center font-sign text-lg">
+          BOUNCER
+        </Link>
       </header>
       {door ? (
         <section className="relative h-[46dvh] min-h-[280px] bg-[#1a1424]">

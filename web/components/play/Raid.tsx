@@ -690,7 +690,9 @@ export default function PlayFrame({
   if (!session?.blob) {
     return (
       <main className="flex h-dvh flex-col bg-night text-chalk">
-        <header className="px-4 pt-4 font-sign text-lg">BOUNCER</header>
+        <header className="px-4 pt-4">
+          <a href={doorHref} className="chalk-focus inline-flex min-h-11 items-center font-sign text-lg">BOUNCER</a>
+        </header>
         <div className="relative min-h-0 flex-1">
           <StreetScroll>
             <SceneLife className="absolute inset-0">
@@ -731,12 +733,12 @@ export default function PlayFrame({
       </Suspense>
       {/* HUD */}
       <header className="z-20 flex items-center justify-between gap-2 px-3 pb-2 pt-3 sm:gap-3 sm:px-4">
-        <div className="min-w-0 leading-none">
+        <a href={doorHref} className="chalk-focus inline-flex min-h-11 min-w-0 flex-col justify-center leading-none">
           <div className="font-sign text-sm">BOUNCER</div>
           <div className="truncate font-mono text-xs uppercase tracking-wider text-chalk/80 sm:tracking-[0.2em]">
             #{vault.round} · {gate === "door" ? "The door" : "Back office"}
           </div>
-        </div>
+        </a>
         <div className="flex shrink-0 items-center gap-1 sm:gap-1.5" aria-label={`${left} messages left`}>
           {Array.from({ length: messageBudget }, (_, i) => (
             <span

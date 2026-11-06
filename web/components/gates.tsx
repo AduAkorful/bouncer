@@ -26,6 +26,7 @@ function publicLabels() {
 }
 
 async function load(vaultId?: string): Promise<Loaded> {
+  await connection();
   const labels = publicLabels();
   if (!labels) return { ok: false, failure: unreadDoor("unset", vaultId) };
   const rpc = httpRpc(labels.rpcUrl, fetch, { signal: AbortSignal.timeout(PAGE_READ_MS) });
