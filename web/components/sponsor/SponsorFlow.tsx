@@ -11,6 +11,7 @@ import { chainNowNs, connectSponsor, readChain, readFunds, readVault, vaultRegis
 import { sponsorAvailability, type SponsorAvailability } from "@/lib/sponsor-availability";
 import { sponsorStep } from "@/lib/sponsor-state";
 import { runSponsorAction, sponsorDetail } from "@/lib/sponsor-action";
+import { confirmSponsorVault, type VaultChange } from "@/lib/sponsor-confirmation";
 import { createBytes, depositFor, specBytes } from "@/lib/storage-cost";
 import { fromBaseUnits, toBaseUnits } from "@/lib/token";
 import { commitRound, createSponsorVault, fund, reclaim, setKeeper, setSpec, type Call } from "@/lib/vault-calls";
@@ -42,6 +43,9 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
   const [funds, setFunds] = useState<Funds | null>(null);
   const [vaultId, setVaultId] = useState("");
   const [vault, setVault] = useState<VaultView | null>(null);
+  const selectedVault = useRef("");
+  const vaultReadVersion = useRef(0);
+  const [vaultActionStatus, setVaultActionStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ text: string } | null>(null);
   const [readNotice, setReadNotice] = useState<string | null>(null);
@@ -67,24 +71,35 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
   const [fundText, setFundText] = useState("20");
   const [ackHint, setAckHint] = useState(false);
 
+  const selectVault = useCallback((id: string) => {
+    if (selectedVault.current === id) return;
+    selectedVault.current = id;
+    vaultReadVersion.current += 1;
+    setVault(null);
+    setVaultId(id);
+  }, []);
+
   useEffect(() => {
     try {
       const saved = window.localStorage.getItem("bouncer.sponsor.vault");
-      if (saved && validVaultId(saved)) setVaultId(saved);
+      if (saved && validVaultId(saved)) selectVault(saved);
     } catch {}
-  }, []);
+  }, [selectVault]);
 
   const refresh = useCallback(async () => {
-    if (!sponsor || !chain) return;
+    if (!sponsor || !chain || selectedVault.current !== vaultId) return;
+    const version = ++vaultReadVersion.current;
     try {
       const [f, v] = await Promise.all([
         readFunds(rpc, rpcUrl, chain.tokenId, sponsor.accountId),
         vaultId && validVaultId(vaultId) ? readVault(rpc, contractId, vaultId) : Promise.resolve({ ok: true as const, vault: null }),
       ]);
+      if (version !== vaultReadVersion.current) return;
       setFunds(f);
       if (v.ok) setVault(v.vault);
       setReadNotice(!v.ok ? "The vault did not answer." : !f ? "The balances did not answer." : null);
     } catch {
+      if (version !== vaultReadVersion.current) return;
       setFunds(null);
       setReadNotice("The balances and vault could not be refreshed. Try again.");
     }
@@ -94,9 +109,9 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
     void refresh();
   }, [refresh]);
 
-  const run = async (work: () => Promise<string | null>) => {
+  const run = async (work: () => Promise<string | null>, refreshAfter = true) => {
     await runSponsorAction(work, { busy: setBusy, notice: (text) => setNotice(text === null ? null : { text }) });
-    await refresh();
+    if (refreshAfter) await refresh();
   };
 
   const connect = () =>
@@ -110,13 +125,30 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
       return null;
     });
 
-  const sendChecked = async (check: Check, build: () => { ok: true; call: Call } | { ok: false; error: string }, done: string) => {
+  const sendChecked = async (
+    check: Check,
+    build: () => { ok: true; call: Call } | { ok: false; error: string },
+    done: string,
+    confirmation?: { expected: VaultChange; pending: string; unconfirmed: string },
+  ) => {
     if (!sponsor) return "Connect this phone first.";
     if (!check.ok) return check.error;
     const built = build();
     if (!built.ok) return "That value could not be sent.";
+    const version = confirmation ? ++vaultReadVersion.current : vaultReadVersion.current;
     const sent = await sponsor.send(built.call);
-    return sent.ok ? done : sent.error;
+    if (!sent.ok) return sent.error;
+    if (!confirmation) return done;
+
+    setVaultActionStatus(confirmation.pending);
+    const confirmed = await confirmSponsorVault(
+      (signal) => readVault(httpRpc(rpcUrl, fetch, { signal }), contractId, vaultId),
+      confirmation.expected,
+      () => version === vaultReadVersion.current,
+    );
+    if (!confirmed || version !== vaultReadVersion.current) return confirmation.unconfirmed;
+    setVault(confirmed);
+    return done;
   };
 
   const step = sponsorStep({ accountId: sponsor?.accountId ?? null, vault });
@@ -223,24 +255,36 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
     await run(async () => {
       if (!vault || !sponsor) return "Create the vault first.";
       if (on && !keeperAccount) return "No keeper account is set for this site.";
-      return sendChecked(preflightKeeper({ vault, accountId: sponsor.accountId }), () => setKeeper(contractId, vaultId, on ? keeperAccount : null), on ? "The keeper will open each night." : "The keeper is off.");
-    });
+      const keeper = on ? keeperAccount : null;
+      setVaultActionStatus("Saving the keeper setting…");
+      return sendChecked(preflightKeeper({ vault, accountId: sponsor.accountId }), () => setKeeper(contractId, vaultId, keeper), on ? "Keeper enabled." : "The keeper is off.", {
+        expected: { keeper },
+        pending: "Checking the keeper setting on-chain…",
+        unconfirmed: "The keeper change was submitted but could not be confirmed. Refresh balances and vault before trying again.",
+      });
+    }, false).finally(() => setVaultActionStatus(null));
   }
 
   async function launch() {
     await run(async () => {
       if (!chain || !vault || !sponsor) return "Create the vault first.";
+      setVaultActionStatus("Getting the guard’s signature…");
       const signed = await apiPost("/sponsor/commit", { vault_id: vaultId }, sponsor.authHeaders("/sponsor/commit"));
-      const body = (signed.ok ? signed.body : null) as { ok?: boolean; commitment?: string; guard_version?: string; signature?: string; error?: string } | null;
-      if (!body?.ok || !body.commitment || !body.guard_version || !body.signature) return typeof body?.error === "string" && body.error.length > 3 && !/^[a-z ]+$/.test(body.error) ? body.error : "The guard did not sign this round.";
+      const body = (signed.ok ? signed.body : null) as { ok?: boolean; commitment?: string; guard_version?: string; signature?: string; round?: number; error?: string } | null;
+      if (!body?.ok || !body.commitment || !body.guard_version || !body.signature || !Number.isSafeInteger(body.round) || Number(body.round) < 1) return typeof body?.error === "string" && body.error.length > 3 && !/^[a-z ]+$/.test(body.error) ? body.error : "The guard did not sign this round.";
       const now = await chainNowNs(rpcUrl);
       if (now === null) return "The chain's time could not be read.";
       const check = preflightCommit({ limits: chain.limits, vault, owner: chain.owner, accountId: sponsor.accountId, nowNs: now, opensAtNs: now, hasSignature: true });
       const commitment = body.commitment;
       const guardVersion = body.guard_version;
       const signature = body.signature;
-      return sendChecked(check, () => commitRound(contractId, { vaultId, commitmentHex: commitment, guardVersionHex: guardVersion, opensAtNs: now, signatureHex: signature }), "The door is open.");
-    });
+      setVaultActionStatus("Submitting the round to the chain…");
+      return sendChecked(check, () => commitRound(contractId, { vaultId, commitmentHex: commitment, guardVersionHex: guardVersion, opensAtNs: now, signatureHex: signature }), "The door is open.", {
+        expected: { round: String(body.round), commitment: commitment.toLowerCase() },
+        pending: "Checking that the door is open…",
+        unconfirmed: "The round was submitted but opening could not be confirmed. Refresh balances and vault before trying again.",
+      });
+    }, false).finally(() => setVaultActionStatus(null));
   }
 
   async function takeBack() {
@@ -272,7 +316,7 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
             {availability !== "loading" ? <button className="chalk-focus ml-2 min-h-11 underline" onClick={() => { setAvailability("loading"); setAvailabilityCheck((n) => n + 1); }}>Check again</button> : null}
           </div>
         ) : null}
-        {busy ? <p role="status" className="text-sm text-chalk/80">Working on this step…</p> : null}
+        {busy && !vaultActionStatus ? <p role="status" className="text-sm text-chalk/80">Working on this step…</p> : null}
         {notice ? <p ref={noticeRef} role="status" className="rounded-xl border border-white/15 px-4 py-3 text-sm">{notice.text}</p> : null}
         {readNotice ? <p role="status" className="text-sm text-chalk/70">{readNotice}</p> : null}
 
@@ -386,7 +430,7 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
             <section className={box}>
               <h2 className="font-sign text-lg">4 · Your vault</h2>
               <label className={label} htmlFor="vid">Vault id</label>
-              <input id="vid" className={input} value={vaultId} onChange={(e) => setVaultId(e.target.value.trim())} placeholder="rusty-anchor" />
+              <input id="vid" className={input} value={vaultId} disabled={busy} onChange={(e) => selectVault(e.target.value.trim())} placeholder="rusty-anchor" />
               {!vault ? (
                 <button className={button} disabled={busy || !report?.pass || !validVaultId(vaultId)} onClick={() => void create()}>
                   Create the vault
@@ -418,6 +462,10 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
             {vault && vault.specHash ? (
               <section className={box}>
                 <h2 className="font-sign text-lg">5 · Fund and open</h2>
+                <button type="button" className="chalk-focus mt-2 min-h-11 text-sm underline disabled:opacity-40" disabled={busy} onClick={() => void refresh()}>
+                  Refresh balances and vault
+                </button>
+                {vaultActionStatus && <p role="status" className="mt-2 text-sm text-chalk/80">{vaultActionStatus}</p>}
                 <label className={label} htmlFor="fund">Amount ({symbol})</label>
                 <input id="fund" className={input} inputMode="decimal" value={fundText} onChange={(e) => setFundText(e.target.value)} />
                 <button className={button} disabled={busy} onClick={() => void addFunds()}>
@@ -427,10 +475,11 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
                   <div>
                     <p className="text-sm">Open each night for me</p>
                     <p className="text-xs text-chalk/60">A keeper account can open and close rounds. It cannot move funds.</p>
+                    {vault.keeper && <p className="break-all text-xs text-chalk/80">{vault.keeper}</p>}
                   </div>
                   <button
                     className="chalk-focus min-h-11 rounded-full border border-white/20 px-4 text-sm disabled:opacity-40"
-                    disabled={busy || !keeperAccount}
+                    disabled={busy || (!keeperAccount && vault.keeper === null)}
                     aria-pressed={vault.keeper !== null}
                     onClick={() => void toggleKeeper(vault.keeper === null)}
                   >

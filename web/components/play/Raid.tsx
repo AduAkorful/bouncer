@@ -342,6 +342,7 @@ export default function PlayFrame({
 
   function onScene(e: MouseEvent) {
     if (stage !== "play") return;
+    setBubble(null);
     const t = e.target as Element;
     const person = t.closest("[data-person]");
     const clue = t.closest("[data-clue]");
@@ -360,7 +361,7 @@ export default function PlayFrame({
 
   function listen(i: number, el: Element) {
     const g = gate === "door" ? session?.street?.queue[i] : undefined;
-    if (!g || g.lines.length === 0) { setBubble(null); return; }
+    if (!g || g.lines.length === 0) return;
     const k = `${gate}${i}`;
     const n = heard[k] ?? 0;
     const l = g.lines[n % g.lines.length];
