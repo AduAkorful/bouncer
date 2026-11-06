@@ -28,6 +28,17 @@ export function playerDetail(error: string): string {
   return error;
 }
 
+/** The panel when an open door does not start a raid. A closed queue is a separate panel. */
+export function playStop(detail: string): { title: string; detail: string } {
+  if (detail === "The door did not answer.") return { title: detail, detail: "The raid stays shut." };
+  return { title: "This phone's passkey did not open.", detail };
+}
+
+/** What the play gate says before a raid exists. The passkey prompt is a separate panel. */
+export function playGateStatus(wait: "reading" | "opening"): string {
+  return wait === "reading" ? "Reading this browser." : "Opening the door.";
+}
+
 /** A stored row with no blob is not a raid. The door never finished opening. */
 export function playableRaid<T extends { playerId: string; blob: string | null }>(raid: T | null | { error: string }): T | null | { error: string } {
   if (!raid) return null;

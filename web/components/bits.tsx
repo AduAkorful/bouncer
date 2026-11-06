@@ -15,7 +15,7 @@ export function Money({
   className?: string;
   tag?: boolean;
 }) {
-  const unit = currency ?? process.env.NEXT_PUBLIC_CURRENCY;
+  const unit = currency || null;
   const shown = text ?? (typeof amount === "number" ? usd(amount) : null);
   if (!shown) return null;
   return (

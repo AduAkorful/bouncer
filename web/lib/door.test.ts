@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { closesAtMs, doorShut, playableRaid, playerDetail } from "./door.ts";
+import { closesAtMs, doorShut, playableRaid, playerDetail, playGateStatus, playStop } from "./door.ts";
 
 const OPEN = "1793577600000000000";
 
@@ -20,6 +20,16 @@ test("a past close shuts an open door", () => {
 test("a player does not see an internal token", () => {
   assert.equal(playerDetail("guard"), "The door did not answer.");
   assert.equal(playerDetail("Not approved."), "Not approved.");
+});
+
+test("an open door that does not start says why", () => {
+  assert.deepEqual(playStop("The door did not answer."), { title: "The door did not answer.", detail: "The raid stays shut." });
+  assert.deepEqual(playStop("The passkey was cancelled."), { title: "This phone's passkey did not open.", detail: "The passkey was cancelled." });
+});
+
+test("the play gate reads this browser before it opens the door", () => {
+  assert.equal(playGateStatus("reading"), "Reading this browser.");
+  assert.equal(playGateStatus("opening"), "Opening the door.");
 });
 
 test("a row with no blob is not a raid", () => {

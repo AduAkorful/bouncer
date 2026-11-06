@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { apiPost } from "@/lib/api";
 import { Countdown } from "@/components/Countdown";
+import { TryAgain } from "@/components/TryAgain";
 import { Money, NetworkTag } from "@/components/bits";
 import { unlockDevice, deriveSecrets } from "@/lib/device-pass";
 import { readPayoutAccount, testnetAccountId, writePayoutAccount } from "@/lib/imported-account";
@@ -25,6 +26,8 @@ export function ClaimDoor({
   rpcUrl,
   contractId,
   networkId,
+  doorHref,
+  retryHref,
 }: {
   vaultId: string;
   currency: string;
@@ -35,6 +38,8 @@ export function ClaimDoor({
   rpcUrl: string;
   contractId: string;
   networkId: string;
+  doorHref: string;
+  retryHref: string;
 }) {
   const [phase, setPhase] = useState<Phase | null>(null);
   const [crack, setCrack] = useState<CrackView | null>(null);
@@ -44,6 +49,7 @@ export function ClaimDoor({
   const [payoutAccount, setPayoutAccount] = useState<string | null>(null);
   const [raidId, setRaidId] = useState<string | null>(null);
   const [missing, setMissing] = useState(false);
+  const [retry, setRetry] = useState(false);
   const [walletKey, setWalletKey] = useState("");
   const [keyNote, setKeyNote] = useState<string | null>(null);
   const [namedAccount, setNamedAccount] = useState("");
@@ -61,10 +67,19 @@ export function ClaimDoor({
     let cancel = false;
     (async () => {
       const raid = playableRaid(await loadRaid(storageName, vaultId, round));
-      if (!raid || !("playerId" in raid)) {
+      if (!raid) {
         if (!cancel) {
           setMissing(true);
-          setError(!raid ? "No raid is stored on this device." : "The door did not answer.");
+          setRetry(false);
+          setError("No raid is stored on this device.");
+        }
+        return;
+      }
+      if (!("playerId" in raid)) {
+        if (!cancel) {
+          setMissing(false);
+          setRetry(true);
+          setError("The door did not answer.");
         }
         return;
       }
@@ -78,7 +93,10 @@ export function ClaimDoor({
         vault?: VaultView;
       } | null;
       if (!body?.ok || !body.vault || typeof body.nowMs !== "number") {
-        if (!cancel) setError("The vault did not answer.");
+        if (!cancel) {
+          setRetry(true);
+          setError("The vault did not answer.");
+        }
         return;
       }
       if (!body.crack) {
@@ -128,13 +146,16 @@ export function ClaimDoor({
       vault?: VaultView;
     } | null;
     if (!body?.ok || !body.vault || typeof body.nowMs !== "number") {
+      setRetry(true);
       setError("The vault did not answer.");
       return;
     }
     if (!body.crack) {
+      setRetry(false);
       setError("No crack is recorded for this raid.");
       return;
     }
+    setRetry(false);
     setMissing(false);
     setCrack(body.crack);
     setVault(body.vault);
@@ -144,6 +165,7 @@ export function ClaimDoor({
 
   async function recover() {
     setBusy(true);
+    setRetry(false);
     setError(null);
     const unlocked = await unlockDevice();
     if ("error" in unlocked) {
@@ -229,6 +251,11 @@ export function ClaimDoor({
         <h1 className="mt-2 font-sign text-3xl leading-none">Your cut</h1>
         {amount ? <Money text={amount} currency={currency} className="mt-3 text-4xl text-brass" /> : null}
         {error ? <p className="mt-4 text-sm text-chalk/70">{error}</p> : phase === null && !missing ? <p className="mt-4 text-sm text-chalk/70">Reading this claim.</p> : null}
+        {retry ? (
+          <div className="mt-4">
+            <TryAgain href={retryHref} />
+          </div>
+        ) : null}
         {missing && (
           <button disabled={busy} onClick={() => void recover()} className="mt-4 w-full rounded-2xl bg-chalk py-4 font-sign text-lg text-ink disabled:opacity-40">
             {busy ? "Waiting for your passkey" : "Use this phone's passkey"}
@@ -246,7 +273,7 @@ export function ClaimDoor({
             <p className="text-sm text-chalk/70">
               {preference === "existing" && namedAccount.trim()
                 ? `The lock is open. This phone's passkey signs the claim, and the vault pays ${namedAccount.trim()}.`
-                : "The lock is open. Claim uses a passkey on this phone. That account is the payout, and the vault sends the tUSDC there."}
+                : `The lock is open. Claim uses a passkey on this phone. That account is the payout, and the vault sends the ${currency} there.`}
             </p>
             {preference === "existing" && (
               <>
@@ -312,7 +339,7 @@ export function ClaimDoor({
           </section>
         )}
         {vault && <p className="mt-4 font-mono text-xs text-chalk/80">Round {vault.round}</p>}
-        <Link href="/home" className="chalk-focus mt-6 inline-flex min-h-11 items-center text-sm text-chalk/80 underline decoration-white/20">
+        <Link href={doorHref} className="chalk-focus mt-6 inline-flex min-h-11 items-center text-sm text-chalk/80 underline decoration-white/20">
           The door
         </Link>
       </div>

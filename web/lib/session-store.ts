@@ -1,5 +1,6 @@
 import { baseDecode } from "near-api-js";
 import { importClaimKey, type DeviceSecrets } from "./device-pass.ts";
+import { raidHistoryRow, type RaidHistoryRow } from "./raid-history.ts";
 
 export type StoredNote = {
   id: string;
@@ -135,6 +136,22 @@ function openDb(name: string): Promise<IDBDatabase> {
   });
 }
 
+function allRecords(db: IDBDatabase): Promise<{ key: IDBValidKey; value: unknown }[]> {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("raids");
+    const store = tx.objectStore("raids");
+    const keysRequest = store.getAllKeys();
+    const valuesRequest = store.getAll();
+    tx.oncomplete = () => {
+      const keys = keysRequest.result ?? [];
+      const values = valuesRequest.result ?? [];
+      resolve(keys.map((key, index) => ({ key, value: values[index] })));
+    };
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
+}
+
 function getRecord(db: IDBDatabase, key: string): Promise<StoredRaid | null> {
   return new Promise((resolve, reject) => {
     const request = db.transaction("raids").objectStore("raids").get(key);
@@ -149,6 +166,24 @@ function putRecord(db: IDBDatabase, key: string, value: StoredRaid) {
     request.onsuccess = () => resolve();
     request.onerror = () => reject(request.error);
   });
+}
+
+/** Raid rows on this browser. Notes, transcripts, and keys are not returned. */
+export async function listRaidHistory(storageName: string): Promise<RaidHistoryRow[] | { error: string }> {
+  const name = storageName.trim();
+  if (!name) return { error: "storage" };
+  try {
+    const db = await openDb(name);
+    const records = await allRecords(db);
+    const rows = records.flatMap(({ key, value }) => {
+      const row = raidHistoryRow(key, value);
+      return row ? [row] : [];
+    });
+    rows.sort((a, b) => a.vaultId.localeCompare(b.vaultId) || Number(a.round) - Number(b.round));
+    return rows;
+  } catch {
+    return { error: "storage" };
+  }
 }
 
 /** Transcript uses a separate record so note and raid state writes cannot overwrite it. */

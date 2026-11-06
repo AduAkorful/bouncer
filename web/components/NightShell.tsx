@@ -2,7 +2,7 @@ import { DoorScene } from "@/components/DoorScene";
 import Link from "next/link";
 
 /** Painted before the vault view returns. No pot and no join. */
-export function NightShell({ door = false }: { door?: boolean }) {
+export function NightShell({ door = false, href = "/home" }: { door?: boolean; href?: string }) {
   return (
     <main className="min-h-dvh bg-night text-chalk">
       <header className="px-4 py-3">
@@ -21,7 +21,7 @@ export function NightShell({ door = false }: { door?: boolean }) {
           <div className="h-3 w-1/2 rounded-full bg-white/10" />
         </div>
         {!door ? (
-          <Link href="/home" className="chalk-focus mt-6 inline-flex min-h-11 items-center text-sm text-chalk/80 underline decoration-white/20">
+          <Link href={href} className="chalk-focus mt-6 inline-flex min-h-11 items-center text-sm text-chalk/80 underline decoration-white/20">
             Back to the door
           </Link>
         ) : null}

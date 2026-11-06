@@ -8,7 +8,7 @@ import { httpRpc } from "@/lib/chain";
 import { PARTS, SKINS } from "@/lib/look";
 import { preflightCommit, preflightCreate, preflightFund, preflightKeeper, preflightReclaim, preflightSetSpec, validVaultId, type Check, type Funds } from "@/lib/preflight";
 import { chainNowNs, connectSponsor, readChain, readFunds, readVault, vaultRegistered, type Chain, type Sponsor } from "@/lib/sponsor-client";
-import { sponsorAvailability, type SponsorAvailability } from "@/lib/sponsor-availability";
+import { sponsorAvailability, sponsorAvailabilityMessage, type SponsorAvailability } from "@/lib/sponsor-availability";
 import { sponsorStep } from "@/lib/sponsor-state";
 import { runSponsorAction, sponsorDetail } from "@/lib/sponsor-action";
 import { confirmSponsorVault, type VaultChange } from "@/lib/sponsor-confirmation";
@@ -310,12 +310,10 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
         <p className="text-sm text-chalk/70">
           You write the story, fund a pot, and the guard runs your door every night. The story passes through this site&apos;s server and the guard in plaintext, and the draft uses a model. Testnet only.
         </p>
-        {availability !== "open" ? (
-          <div role="status" className="rounded-xl border border-white/20 px-4 py-3 text-sm text-chalk/90">
-            {availability === "loading" ? "Checking whether new sponsor doors are open…" : availability === "closed" ? "New sponsor doors are not open yet. Existing sponsors can still connect to manage their doors." : "We could not check whether new sponsor doors are open. Existing sponsors can still connect to manage their doors."}
-            {availability !== "loading" ? <button className="chalk-focus ml-2 min-h-11 underline" onClick={() => { setAvailability("loading"); setAvailabilityCheck((n) => n + 1); }}>Check again</button> : null}
-          </div>
-        ) : null}
+        <div role="status" className="rounded-xl border border-white/20 px-4 py-3 text-sm text-chalk/90">
+          {sponsorAvailabilityMessage(availability)}
+          {availability !== "loading" ? <button className="chalk-focus ml-2 min-h-11 underline" onClick={() => { setAvailability("loading"); setAvailabilityCheck((n) => n + 1); }}>Check again</button> : null}
+        </div>
         {busy && !vaultActionStatus ? <p role="status" className="text-sm text-chalk/80">Working on this step…</p> : null}
         {notice ? <p ref={noticeRef} role="status" className="rounded-xl border border-white/15 px-4 py-3 text-sm">{notice.text}</p> : null}
         {readNotice ? <p role="status" className="text-sm text-chalk/70">{readNotice}</p> : null}

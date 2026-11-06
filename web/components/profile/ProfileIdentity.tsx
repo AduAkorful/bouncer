@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { testnetAccountId } from "@/lib/imported-account";
 
-export function ProfileIdentity({ storageName }: { storageName: string }) {
+export function ProfileIdentity({ storageName, heading = "Your profile" }: { storageName: string; heading?: string }) {
   const [state, setState] = useState<{ account: string | null; error: boolean } | null>(null);
 
   useEffect(() => {
@@ -18,7 +18,7 @@ export function ProfileIdentity({ storageName }: { storageName: string }) {
 
   return (
     <>
-      <h1 className="mt-1 font-sign text-3xl leading-none">Your profile</h1>
+      <h1 className="mt-1 font-sign text-3xl leading-none">{heading}</h1>
       {state === null ? <p className="mt-2 text-sm text-chalk/60">Reading this browser.</p> : state.error ? (
         <p role="status" className="mt-2 text-sm text-chalk/70">The account name could not be read on this browser.</p>
       ) : state.account ? (

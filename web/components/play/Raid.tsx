@@ -16,7 +16,7 @@ import type { DraftBill } from "@/lib/bill";
 
 type Decision = "ask" | "refused" | "approved" | "none";
 import { Blocked } from "@/components/Blocked";
-import { playableRaid, playerDetail } from "@/lib/door";
+import { playableRaid, playerDetail, playGateStatus, playStop } from "@/lib/door";
 import type { VaultView } from "@/lib/vault";
 import { guardRule } from "@/lib/rules";
 import { decimalToAtomic, formatAtomic } from "@/lib/units";
@@ -52,6 +52,8 @@ export default function PlayFrame({
   venueId,
   card = null,
   specCt = null,
+  doorHref,
+  retryHref,
 }: {
   vaultId: string;
   vault: VaultView;
@@ -64,6 +66,10 @@ export default function PlayFrame({
   card?: Card | null;
   /** The sponsor's sealed story, sent with every guard call so the guard can open it. */
   specCt?: string | null;
+  /** This vault's own door. The default door is /home. */
+  doorHref: string;
+  /** This vault's play page, so a failed open can be read again. */
+  retryHref: string;
 }) {
   const doorName = card ? card.name : "Big Sam";
   const signText = card ? card.sign : venueId.toUpperCase();
@@ -117,7 +123,7 @@ export default function PlayFrame({
   const [swipe, setSwipe] = useState(false);
   const [narrow, setNarrow] = useState(true);
   const [doorView, setDoorView] = useState("66 -40 268 300");
-  const [needsKey, setNeedsKey] = useState(false);
+  const [wait, setWait] = useState<"reading" | "key" | "opening">("reading");
 
   useEffect(() => {
     let cancel = false;
@@ -143,7 +149,7 @@ export default function PlayFrame({
         setNotes(ready.notes);
         return;
       }
-      setNeedsKey(true);
+      setWait("key");
     });
     return () => {
       cancel = true;
@@ -171,7 +177,7 @@ export default function PlayFrame({
       setDoorError("This phone cannot keep a key in the passkey.");
       return;
     }
-    setNeedsKey(false);
+    setWait("opening");
     sessionRef.current = minted;
     await openDoor(minted);
     setBusy(false);
@@ -339,6 +345,11 @@ export default function PlayFrame({
   }
 
   // ——— Free actions: listening, looking around ———
+
+  function onPlayClickCapture() {
+    if (stage !== "play") return;
+    setBubble(null);
+  }
 
   function onScene(e: MouseEvent) {
     if (stage !== "play") return;
@@ -653,7 +664,10 @@ export default function PlayFrame({
   const streetQueue = session?.street?.queue ?? [];
   const speakingSlots = streetQueue.map((person) => person.lines.length > 0);
 
-  if (doorError) return <Blocked title="The raid did not start." detail={doorError} />;
+  if (doorError) {
+    const stop = playStop(doorError);
+    return <Blocked title={stop.title} detail={stop.detail} href={doorHref} retryHref={retryHref} />;
+  }
   if (!session?.blob) {
     return (
       <main className="flex h-dvh flex-col bg-night text-chalk">
@@ -661,7 +675,7 @@ export default function PlayFrame({
         <div className="relative min-h-0 flex-1">
           <DoorScene sign={signText} look={doorLook} neighbors={false} className="size-full" viewBox="66 -40 268 300" />
         </div>
-        {needsKey ? (
+        {wait === "key" ? (
           <div className="px-4 py-6 text-center">
             <p className="text-sm text-chalk/70">This phone keeps the key. Clearing this site does not remove it.</p>
             <button
@@ -676,10 +690,10 @@ export default function PlayFrame({
             </a>
           </div>
         ) : (
-          <p className="px-4 py-6 text-center text-sm text-chalk/70">Opening the door.</p>
+          <p role="status" className="px-4 py-6 text-center text-sm text-chalk/70">{playGateStatus(wait)}</p>
         )}
         <p className="px-4 pb-6 text-center">
-          <a href="/home" className="text-sm text-chalk/80 underline decoration-white/20">
+          <a href={doorHref} className="text-sm text-chalk/80 underline decoration-white/20">
             The door
           </a>
         </p>
@@ -688,7 +702,7 @@ export default function PlayFrame({
   }
 
   return (
-    <div ref={root} className="relative flex h-dvh flex-col overflow-hidden bg-night text-chalk">
+    <div ref={root} onClickCapture={onPlayClickCapture} className="relative flex h-dvh flex-col overflow-hidden bg-night text-chalk">
       {/* HUD */}
       <header className="z-20 flex items-center justify-between gap-2 px-3 pb-2 pt-3 sm:gap-3 sm:px-4">
         <div className="min-w-0 leading-none">
@@ -947,6 +961,7 @@ export default function PlayFrame({
           submitError={submitError}
           crackCount={vault.crackCount}
           closesAt={vault.closesAt}
+          doorHref={doorHref}
         />
       )}
     </div>
@@ -965,6 +980,7 @@ function EndScreen({
   submitError,
   crackCount,
   closesAt,
+  doorHref,
 }: {
   end: End;
   cutText: string | null;
@@ -977,6 +993,7 @@ function EndScreen({
   submitError: string | null;
   crackCount: number;
   closesAt: string;
+  doorHref: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
@@ -1020,7 +1037,7 @@ function EndScreen({
       </div>
       {end === "out" ? (
         <p className="end-rest mt-3 max-w-xs text-sm text-chalk/65">
-          {guardName}&apos;s door closes in <Countdown endsAtNs={closesAt} className="text-chalk" />. Your desk notes stay. The practice room is open all night: no prize, no limit.
+          {guardName}&apos;s door closes in <Countdown endsAtNs={closesAt} className="text-chalk" />. Your desk notes stay.
         </p>
       ) : (
         <div className="end-rest end-cut mt-4">
@@ -1035,23 +1052,13 @@ function EndScreen({
       )}
       <div className="end-rest mt-6 flex w-full max-w-xs flex-col gap-3">
         {end === "out" ? (
-          <>
-            <a href="/after?end=out" className="rounded-2xl bg-chalk py-4 font-sign text-lg text-ink shadow-[0_6px_0_#9c9483]">
-              After the raid
-            </a>
-            <a href="/practice" className="rounded-2xl border border-chalk/30 py-3 text-sm">
-              Practice room
-            </a>
-          </>
+          <a href={doorHref} className="rounded-2xl bg-chalk py-4 font-sign text-lg text-ink shadow-[0_6px_0_#9c9483]">
+            The door
+          </a>
         ) : (
-          <>
-            <a href="/passkey?next=claim" className="rounded-2xl bg-chalk py-4 font-sign text-lg text-ink shadow-[0_6px_0_#9c9483]">
-              Save the claim
-            </a>
-            <a href="/share" className="rounded-2xl border border-chalk/30 py-3 text-sm">
-              Share your stamp
-            </a>
-          </>
+          <a href="/passkey?next=claim" className="rounded-2xl bg-chalk py-4 font-sign text-lg text-ink shadow-[0_6px_0_#9c9483]">
+            Save the claim
+          </a>
         )}
       </div>
       <DemoBadge className="end-rest mt-4" />

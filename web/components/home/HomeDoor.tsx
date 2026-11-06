@@ -1,24 +1,14 @@
 import Link from "next/link";
 import { Countdown } from "@/components/Countdown";
 import { Money, NetworkTag } from "@/components/bits";
+import { DoorList } from "@/components/DoorList";
 import { DoorScene } from "@/components/DoorScene";
 import { cardLook, type Card } from "@/lib/card";
 import { SceneLife } from "@/components/SceneLife";
 import { doorShut } from "@/lib/door";
+import type { ListedDoor } from "@/lib/door-index";
 import { formatAtomic } from "@/lib/units";
 import type { VaultView } from "@/lib/vault";
-
-const otherDoors = [
-  { name: "Accra Lions FC", kind: "Club treasurer", tone: "#2c6e49", href: "/venue/lions", sign: "ACCRA LIONS", mark: "lions" },
-  { name: "Osu Builders", kind: "DAO treasury", tone: "#3b4a8f", href: "/venue/builders", sign: "OSU BUILDERS", mark: "builders" },
-  { name: "Kofi's Corner", kind: "Practice room", tone: "#7a5a20", href: "/practice", sign: "KOFI", mark: "kofi" },
-];
-
-const wristbands = [
-  { name: "The Queue", line: "Today's door, every day", color: "#efe8da", here: true, href: "/play" },
-  { name: "The Door", line: "Preview · Lions and Builders", color: "#8f6bff", here: false, href: "/venue/lions" },
-  { name: "VIP", line: "Steward a sponsored vault", color: "#cfa349", here: false, href: "/vip" },
-];
 
 const phaseCopy = {
   open: {
@@ -43,6 +33,10 @@ export function HomeDoor({
   notice,
   card = null,
   base = "",
+  doors,
+  doorsFailed,
+  doorsTruncated,
+  retryHref,
 }: {
   vault: VaultView | null;
   currency?: string;
@@ -53,6 +47,11 @@ export function HomeDoor({
   card?: Card | null;
   /** Where this door's pages live: empty for the default vault, `/v/<id>` for a sponsor's. */
   base?: string;
+  /** Other vaults named by the contract. */
+  doors: ListedDoor[];
+  doorsFailed: boolean;
+  doorsTruncated: boolean;
+  retryHref: string;
 }) {
   const shut = vault ? doorShut(vault, Date.now()) : false;
   const phase = !vault ? "closed" : shut ? "closed" : vault.crackCount > 0 ? "cracked" : "open";
@@ -128,7 +127,8 @@ export function HomeDoor({
 
       <section id="door" tabIndex={-1} className="relative z-10 mx-auto -mt-6 max-w-lg scroll-mt-6 px-4 outline-none">
         <div className="rounded-3xl border border-white/10 bg-night-2 p-5 shadow-2xl">
-          <div className="flex items-center justify-between gap-3">
+          <h1 className="font-sign text-3xl leading-none">{card?.sign ?? "THE VELVET"}</h1>
+          <div className="mt-3 flex items-center justify-between gap-3">
             <span className="shrink-0 whitespace-nowrap rounded bg-chalk px-1.5 py-0.5 font-sign text-[10px] text-ink">{card ? card.name.toUpperCase() : "BIG SAM"}</span>
             {vault ? <span className="text-right font-mono text-xs uppercase tracking-[0.2em] text-chalk/80">Round {vault.round}</span> : null}
           </div>
@@ -174,51 +174,14 @@ export function HomeDoor({
         </div>
       </section>
 
-      {card ? null : (
-      <div className="mx-auto mt-8 grid min-w-0 max-w-5xl gap-8 px-4 lg:grid-cols-2">
-        <section className="min-w-0">
-          <h2 className="font-sign text-lg">Down the street</h2>
-          <div className="mt-3 grid grid-cols-1 gap-3 min-[360px]:grid-cols-2 sm:grid-cols-3 lg:grid-cols-2">
-            {otherDoors.map((door) => (
-              <Link key={door.name} href={door.href} className="chalk-focus min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-night-2">
-                <DoorScene
-                  sign={door.sign}
-                  neighbors={false}
-                  queue={false}
-                  p={door.mark}
-                  ink={{ stroke: door.tone, fill: door.tone }}
-                  viewBox="104 8 192 62"
-                  className="block h-16 w-full bg-[#1a1424]"
-                  decorative
-                />
-                <div className="p-3">
-                  <div className="font-sign text-sm leading-tight">{door.name}</div>
-                  <div className="mt-0.5 text-xs text-chalk/60">{door.kind}</div>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </section>
-        <section className="min-w-0">
-          <h2 className="font-sign text-lg">Your wristband</h2>
-          <div className="mt-3 space-y-2">
-            {wristbands.map((band) => (
-              <Link
-                key={band.name}
-                href={band.href}
-                className={`chalk-focus flex min-h-11 items-center gap-3 rounded-2xl border px-4 py-3 ${band.here ? "border-chalk/40 bg-night-2" : "border-white/10"}`}
-              >
-                <span className="h-3.5 w-10 rounded-sm" style={{ background: band.color }} />
-                <div className="flex-1">
-                  <div className="font-sign text-sm">{band.name}</div>
-                  <div className="text-xs text-chalk/60">{band.line}</div>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </section>
-      </div>
-      )}
+      <DoorList
+        title="Other doors"
+        doors={doors}
+        failed={doorsFailed}
+        truncated={doorsTruncated}
+        empty="No other door is listed."
+        retryHref={retryHref}
+      />
 
       <footer className="mx-auto mt-8 max-w-5xl px-4 font-mono text-[11px] text-chalk/50">
         {vault && shut ? null : commitment ? (

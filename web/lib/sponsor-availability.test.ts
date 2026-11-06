@@ -1,9 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { sponsorAvailability } from "./sponsor-availability.ts";
+import { sponsorAvailability, sponsorAvailabilityMessage } from "./sponsor-availability.ts";
 import type { Rpc } from "./chain.ts";
 
 const limits = { self_serve: true, max_cap: "5000000", max_cracks: 4, min_lock_ns: "60000000000", max_lock_ns: "86400000000000", max_card: 600, max_spec_ct: 10000, max_open_lead_ns: "86400000000000", default_guard_pk: null, reserved_prefixes: ["velvet"] };
+test("each availability state has one visible sentence", () => {
+  assert.equal(sponsorAvailabilityMessage("loading"), "Checking whether new sponsor doors are open…");
+  assert.equal(sponsorAvailabilityMessage("open"), "New sponsor doors are open.");
+  assert.match(sponsorAvailabilityMessage("closed"), /not open yet/);
+  assert.match(sponsorAvailabilityMessage("unknown"), /could not check/);
+});
+
 test("availability reads current limits and reports unknown for failed or malformed reads", async () => {
   let current: unknown = limits;
   const rpc: Rpc = async (request) => {

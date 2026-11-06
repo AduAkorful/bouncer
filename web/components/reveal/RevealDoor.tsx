@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Countdown } from "@/components/Countdown";
+import { TryAgain } from "@/components/TryAgain";
 import { apiPost } from "@/lib/api";
 import { Money, NetworkTag } from "@/components/bits";
 import { playableRaid } from "@/lib/door";
@@ -23,6 +24,8 @@ export function RevealDoor({
   specCt = null,
   networkTag,
   shut,
+  doorHref,
+  retryHref,
 }: {
   vaultId: string;
   vault: VaultView;
@@ -34,9 +37,11 @@ export function RevealDoor({
   specCt?: string | null;
   networkTag: string;
   shut: boolean;
+  doorHref: string;
+  retryHref: string;
 }) {
   const [lines, setLines] = useState<Line[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [problem, setProblem] = useState<"none" | "failed" | null>(null);
   const [timedOut, setTimedOut] = useState(false);
 
   useEffect(() => {
@@ -47,11 +52,11 @@ export function RevealDoor({
     (async () => {
       const raid = playableRaid(await loadRaid(storageName, vaultId, vault.round));
       if (!raid) {
-        if (!cancel) setError("No raid is stored on this device. The ledger stays shut.");
+        if (!cancel) setProblem("none");
         return;
       }
       if (!("playerId" in raid)) {
-        if (!cancel) setError("The door did not answer. The ledger stays shut.");
+        if (!cancel) setProblem("failed");
         return;
       }
       const sent = await apiPost("/guard", {
@@ -64,7 +69,7 @@ export function RevealDoor({
       });
       const body = (sent.ok ? sent.body : null) as Record<string, unknown> | null;
       if (!body || body.ok !== true) {
-        if (!cancel) setError("The door did not answer. The ledger stays shut.");
+        if (!cancel) setProblem("failed");
         return;
       }
       const checked = await revealChecksOut({
@@ -78,22 +83,22 @@ export function RevealDoor({
         storedCommitmentHex: vault.commitment,
       });
       if (!checked.ok) {
-        if (!cancel) setError("The door did not answer. The ledger stays shut.");
+        if (!cancel) setProblem("failed");
         return;
       }
       if (!Array.isArray(body.ledger)) {
-        if (!cancel) setError("The door did not answer. The ledger stays shut.");
+        if (!cancel) setProblem("failed");
         return;
       }
       const parsed: Line[] = [];
       for (const row of body.ledger) {
         if (!row || typeof row !== "object") {
-          if (!cancel) setError("The door did not answer. The ledger stays shut.");
+          if (!cancel) setProblem("failed");
           return;
         }
         const line = row as Record<string, unknown>;
         if (typeof line.payee !== "string" || typeof line.reference !== "string" || typeof line.item !== "string" || typeof line.total !== "string" || typeof line.paid !== "boolean") {
-          if (!cancel) setError("The door did not answer. The ledger stays shut.");
+          if (!cancel) setProblem("failed");
           return;
         }
         parsed.push({ payee: line.payee, reference: line.reference, item: line.item, total: line.total, paid: line.paid });
@@ -104,10 +109,11 @@ export function RevealDoor({
       cancel = true;
       window.clearTimeout(timer);
     };
-  }, [storageName, vaultId, vault.round, vault.guardPk, vault.commitment, venueId]);
+  }, [storageName, vaultId, vault.round, vault.guardPk, vault.commitment, venueId, specCt]);
 
-  const waiting = lines === null && error === null;
+  const waiting = lines === null && problem === null;
   const stalled = waiting && timedOut;
+  const failed = problem === "failed" || stalled;
 
   return (
     <main className="min-h-dvh overflow-x-clip bg-night px-4 pb-24 pt-8 text-chalk">
@@ -117,8 +123,13 @@ export function RevealDoor({
           <NetworkTag label={networkTag} className="text-chalk/70" />
         </div>
         <h1 className="mt-2 font-sign text-3xl leading-none">Last night&apos;s door</h1>
-        {error && <p className="mt-4 text-sm text-chalk/70">{error}</p>}
-        {stalled && <p className="mt-4 text-sm text-chalk/70">The door did not answer. The ledger stays shut.</p>}
+        {problem === "none" && <p className="mt-4 text-sm text-chalk/70">No raid is stored on this device. The ledger stays shut.</p>}
+        {failed && <p className="mt-4 text-sm text-chalk/70">The door did not answer. The ledger stays shut.</p>}
+        {failed && (
+          <div className="mt-4">
+            <TryAgain href={retryHref} />
+          </div>
+        )}
         {lines && (
           <ul className="mt-5 space-y-2">
             {lines.map((line) => {
@@ -145,8 +156,8 @@ export function RevealDoor({
             Closes <Countdown endsAtNs={vault.closesAt} className="text-chalk" />
           </p>
         )}
-        <Link href="/home" className="chalk-focus mt-6 inline-flex min-h-11 items-center text-sm text-chalk/80 underline decoration-white/20">
-          Back to the door
+        <Link href={doorHref} className="chalk-focus mt-6 inline-flex min-h-11 items-center text-sm text-chalk/80 underline decoration-white/20">
+          The door
         </Link>
       </div>
     </main>

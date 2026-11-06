@@ -1,7 +1,7 @@
 import { screen } from "@/lib/screen";
 import Link from "next/link";
 
-export const metadata = screen("Names, not ledgers.", "A crack shows the night. The bill that worked stays off this page.");
+export const metadata = screen("Names, not ledgers.", "A crack shows the night. The bill that worked stays off this page.", { index: false });
 
 export default function FamePage() {
   return (

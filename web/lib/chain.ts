@@ -3,13 +3,17 @@ import { parseOwner, parseRpcJson, parseVault, viewRequest, type VaultView } fro
 export type Rpc = (request: ReturnType<typeof viewRequest>) => Promise<{ ok: true; value: unknown } | { ok: false; error: string }>;
 type RpcOptions = { timeoutMs?: number; signal?: AbortSignal };
 
+/** One chain call, including its body. A page read is two of these rounds. */
+export const CALL_BUDGET_MS = 10_000;
+export const PAGE_READ_MS = CALL_BUDGET_MS * 2;
+
 export function httpRpc(rpcUrl: string, fetchImpl: typeof fetch = fetch, options: RpcOptions = {}): Rpc {
   return async (request) => {
     const controller = new AbortController();
     const abort = () => controller.abort();
     options.signal?.addEventListener("abort", abort, { once: true });
     if (options.signal?.aborted) abort();
-    const timer = setTimeout(abort, options.timeoutMs ?? 10_000);
+    const timer = setTimeout(abort, options.timeoutMs ?? CALL_BUDGET_MS);
     let onAbort: () => void = () => {};
     const aborted = new Promise<never>((_, reject) => {
       onAbort = () => reject(new DOMException("RPC read aborted", "AbortError"));

@@ -21,15 +21,25 @@ function rpcFor(table: Record<string, unknown>): Rpc {
   };
 }
 
-test("the default vault is read with the labels from env", async () => {
-  const out = await readPageVault(rpcFor({ "get_vault:velvet-1": row(), get_owner: "owner.test" }), env);
+test("the default vault uses the token symbol", async () => {
+  const out = await readPageVault(rpcFor({
+    "get_vault:velvet-1": row(), get_owner: "owner.test",
+    get_usdc_account: "usdc.test", ft_metadata: { symbol: "USDC", decimals: 6 },
+  }), env);
   assert.ok(out.ok);
   if (out.ok) {
     assert.equal(out.page.venueId, "velvet");
-    assert.equal(out.page.currency, "tUSDC");
+    assert.deepEqual([out.page.currency, out.page.decimals], ["USDC", 6]);
     assert.equal(out.page.card, null);
     assert.equal(out.page.specCt, null);
   }
+});
+
+test("a built-in door does not keep the env label when the token cannot be read", async () => {
+  assert.deepEqual(
+    await readPageVault(rpcFor({ "get_vault:velvet-1": row(), get_owner: "owner.test" }), env),
+    { ok: false, error: "token" },
+  );
 });
 
 test("a sponsor vault is read with its card, its sealed story, and its own token labels", async () => {
@@ -70,24 +80,40 @@ test("every failed read is an error and nothing is filled in", async () => {
   assert.deepEqual(await readPageVault(rpcFor(base), env, "bad id!"), { ok: false, error: "id" });
 });
 
-test("sponsor token reads start without waiting for the sealed spec", async () => {
-  const calls: string[] = [];
+test("the token account is read with the door, and metadata does not wait for the spec", async () => {
+  let releaseVault!: () => void;
+  const vaultHeld = new Promise<void>((resolve) => { releaseVault = resolve; });
+  let accountDuringVault = false;
   let releaseSpec!: () => void;
-  let tokenStarted!: () => void;
-  const started = new Promise<void>((resolve) => { tokenStarted = resolve; });
-  const spec = new Promise<void>((resolve) => { releaseSpec = resolve; });
+  const specHeld = new Promise<void>((resolve) => { releaseSpec = resolve; });
+  let metadataDuringSpec = false;
+  let metadataStarted!: () => void;
+  const metadata = new Promise<void>((resolve) => { metadataStarted = resolve; });
   const rpc: Rpc = async (request) => {
     const method = (request.params as { method_name: string }).method_name;
-    calls.push(method);
-    if (method === "get_vault") return { ok: true, value: row({ spec_hash: key, card }) };
+    if (method === "get_vault") {
+      await vaultHeld;
+      return { ok: true, value: row({ spec_hash: key, card }) };
+    }
     if (method === "get_owner") return { ok: true, value: "owner.testnet" };
-    if (method === "get_spec") { await spec; return { ok: true, value: "AQID" }; }
-    if (method === "get_usdc_account") { tokenStarted(); return { ok: true, value: "usdc.testnet" }; }
+    if (method === "get_usdc_account") {
+      accountDuringVault = true;
+      return { ok: true, value: "usdc.testnet" };
+    }
+    if (method === "get_spec") {
+      await specHeld;
+      return { ok: true, value: "AQID" };
+    }
+    metadataDuringSpec = true;
+    metadataStarted();
     return { ok: true, value: { symbol: "USDC", decimals: 6 } };
   };
   const reading = readPageVault(rpc, env, "anchor");
-  await started;
-  assert.ok(calls.includes("get_spec"));
+  await Promise.resolve();
+  assert.equal(accountDuringVault, true);
+  releaseVault();
+  await metadata;
+  assert.equal(metadataDuringSpec, true);
   releaseSpec();
   const result = await reading;
   assert.ok(result.ok && result.page.specCt === "010203");
