@@ -9,7 +9,7 @@ import Raid from "@/components/play/Raid";
 import { RevealDoor } from "@/components/reveal/RevealDoor";
 import { httpRpc, PAGE_READ_MS } from "@/lib/chain";
 import { readPublicEnv } from "@/lib/config";
-import { doorShut } from "@/lib/door";
+import { CLOSED_QUEUE, doorShut } from "@/lib/door";
 import { doorPaths, unreadDoor, type UnreadDoor } from "@/lib/door-read";
 import { readDoorIndex } from "@/lib/door-index";
 import { readPageVault, type PageVault } from "@/lib/page-vault";
@@ -40,7 +40,8 @@ async function load(vaultId?: string): Promise<Loaded> {
 function unread(surface: Surface, vaultId: string | undefined, failure: UnreadDoor) {
   const paths = doorPaths(vaultId);
   const backHref = surface === "door" ? (vaultId ? "/home" : null) : paths.door;
-  return <DoorUnread {...failure} retryHref={failure.retry ? paths[surface] : null} backHref={backHref} />;
+  const backLabel = surface === "door" && vaultId ? "The default door" : "Back to the door";
+  return <DoorUnread {...failure} retryHref={failure.retry ? paths[surface] : null} backHref={backHref} backLabel={backLabel} />;
 }
 
 const basePath = (vaultId?: string) => (vaultId ? `/v/${vaultId}` : "");
@@ -99,7 +100,7 @@ export async function PlayGate({ vaultId }: { vaultId?: string }) {
   const loaded = await load(vaultId);
   if (!loaded.ok) return unread("play", vaultId, loaded.failure);
   const { page, labels } = loaded;
-  if (doorShut(page.vault, Date.now())) return <Blocked title="The queue is closed." detail="The door is shut." href={doorPaths(vaultId).door} />;
+  if (doorShut(page.vault, Date.now())) return <Blocked kicker={CLOSED_QUEUE.kicker} title={CLOSED_QUEUE.title} detail={CLOSED_QUEUE.detail} href={doorPaths(vaultId).door} />;
   return (
     <Raid
       vaultId={page.vaultId}

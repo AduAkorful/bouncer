@@ -34,6 +34,16 @@ export function playStop(detail: string): { title: string; detail: string } {
   return { title: "This phone's passkey did not open.", detail };
 }
 
+/** A closed door has no stored next opening. The other-doors list is the place to look. */
+export const CLOSED_DOOR_NOTE = "No next opening is stored. Other doors are listed below.";
+
+/** Closed play. No retry: the queue is shut, and the door page lists any other door. */
+export const CLOSED_QUEUE = {
+  kicker: "Closed",
+  title: "The queue is closed.",
+  detail: "This door is shut. No next opening is stored. The door page lists any other door.",
+};
+
 /** What the play gate says before a raid exists. The passkey prompt is a separate panel. */
 export function playGateStatus(wait: "reading" | "opening"): string {
   return wait === "reading" ? "Reading this browser." : "Opening the door.";

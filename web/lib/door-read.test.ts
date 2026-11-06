@@ -6,8 +6,9 @@ test("a missing id is not a failed read", () => {
   for (const error of ["id", "missing vault", "no story"]) {
     assert.deepEqual(unreadDoor(error, "qa-coast-05"), {
       label: "qa-coast-05",
+      kicker: "Missing",
       title: "There is no door with that id.",
-      detail: "Nothing on this door was filled in.",
+      detail: "No vault uses that id.",
       retry: false,
     });
   }
@@ -18,8 +19,9 @@ test("a failed read can be tried again and keeps a safe id", () => {
     const copy = unreadDoor(error, "qa-coast-05");
     assert.equal(copy.retry, true);
     assert.equal(copy.label, "qa-coast-05");
+    assert.equal(copy.kicker, "Unavailable");
     assert.equal(copy.title, "This door could not be read.");
-    assert.equal(copy.detail, "Nothing on this door was filled in.");
+    assert.equal(copy.detail, "The page could not load this door. Try again.");
   }
   assert.equal(unreadDoor("vault").label, null);
 });
@@ -27,8 +29,9 @@ test("a failed read can be tried again and keeps a safe id", () => {
 test("a disconnected door does not offer a retry", () => {
   assert.deepEqual(unreadDoor("unset", "qa-coast-05"), {
     label: "qa-coast-05",
+    kicker: "Unavailable",
     title: "This door is not connected.",
-    detail: "Nothing on this door was filled in.",
+    detail: "This site has no vault connected.",
     retry: false,
   });
 });

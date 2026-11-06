@@ -6,7 +6,7 @@ import { DoorScene } from "@/components/DoorScene";
 import { TokenAmount, TokenPotGlyph } from "@/components/TokenAmount";
 import { cardLook, type Card } from "@/lib/card";
 import { SceneLife } from "@/components/SceneLife";
-import { doorShut } from "@/lib/door";
+import { CLOSED_DOOR_NOTE, doorShut } from "@/lib/door";
 import type { TokenRead } from "@/lib/page-vault";
 import type { VaultView } from "@/lib/vault";
 
@@ -21,7 +21,7 @@ const phaseCopy = {
   },
   closed: {
     line: "Last call is over. The door is shut.",
-    note: "Check back for the next opening",
+    note: CLOSED_DOOR_NOTE,
   },
 } as const;
 

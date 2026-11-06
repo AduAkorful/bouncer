@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { closesAtMs, doorShut, playableRaid, playerDetail, playGateStatus, playStop } from "./door.ts";
+import { CLOSED_DOOR_NOTE, CLOSED_QUEUE, closesAtMs, doorShut, playableRaid, playerDetail, playGateStatus, playStop } from "./door.ts";
 
 const OPEN = "1793577600000000000";
 
@@ -25,6 +25,15 @@ test("a player does not see an internal token", () => {
 test("an open door that does not start says why", () => {
   assert.deepEqual(playStop("The door did not answer."), { title: "The door did not answer.", detail: "The raid stays shut." });
   assert.deepEqual(playStop("The passkey was cancelled."), { title: "This phone's passkey did not open.", detail: "The passkey was cancelled." });
+});
+
+test("a closed door names no opening time", () => {
+  assert.equal(CLOSED_DOOR_NOTE, "No next opening is stored. Other doors are listed below.");
+  assert.deepEqual(CLOSED_QUEUE, {
+    kicker: "Closed",
+    title: "The queue is closed.",
+    detail: "This door is shut. No next opening is stored. The door page lists any other door.",
+  });
 });
 
 test("the play gate reads this browser before it opens the door", () => {

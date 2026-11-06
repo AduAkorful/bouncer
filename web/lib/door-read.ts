@@ -2,10 +2,10 @@
 
 const SAFE_ID = /^[A-Za-z0-9._-]{1,64}$/;
 const ABSENT = new Set(["id", "missing vault", "no story"]);
-const DETAIL = "Nothing on this door was filled in.";
 
 export type UnreadDoor = {
   label: string | null;
+  kicker: string;
   title: string;
   detail: string;
   retry: boolean;
@@ -13,9 +13,13 @@ export type UnreadDoor = {
 
 export function unreadDoor(error: string, vaultId?: string): UnreadDoor {
   const label = vaultId && SAFE_ID.test(vaultId) ? vaultId : null;
-  if (error === "unset") return { label, title: "This door is not connected.", detail: DETAIL, retry: false };
-  if (ABSENT.has(error)) return { label, title: "There is no door with that id.", detail: DETAIL, retry: false };
-  return { label, title: "This door could not be read.", detail: DETAIL, retry: true };
+  if (error === "unset") {
+    return { label, kicker: "Unavailable", title: "This door is not connected.", detail: "This site has no vault connected.", retry: false };
+  }
+  if (ABSENT.has(error)) {
+    return { label, kicker: "Missing", title: "There is no door with that id.", detail: "No vault uses that id.", retry: false };
+  }
+  return { label, kicker: "Unavailable", title: "This door could not be read.", detail: "The page could not load this door. Try again.", retry: true };
 }
 
 export function isVaultId(vaultId: string): boolean {
