@@ -22,7 +22,15 @@ export function BillBuilder({
   left: number;
 }) {
   const [b, setB] = useState<DraftBill>({ payee: "", reference: "", item: "", qty: 1, unit: 0 });
+  const [unitText, setUnitText] = useState("");
   const set = <K extends keyof DraftBill>(k: K, v: DraftBill[K]) => setB((x) => ({ ...x, [k]: v }));
+  const setUnit = (raw: string) => {
+    const clean = raw.replace(/[^\d.]/g, "");
+    const dot = clean.indexOf(".");
+    const text = dot < 0 ? clean : `${clean.slice(0, dot)}.${clean.slice(dot + 1).replace(/\./g, "").slice(0, 2)}`;
+    setUnitText(text);
+    set("unit", Number(text) || 0);
+  };
   const total = Math.round(b.qty * b.unit * 100) / 100;
   const ready = b.payee.trim() && b.reference.trim() && b.item.trim() && b.qty >= 1 && b.unit > 0;
   const field = "w-full border-b border-rule bg-transparent py-1.5 font-mono text-[15px] text-on-paper outline-none placeholder:text-on-paper/30 focus:border-on-paper";
@@ -60,16 +68,14 @@ export function BillBuilder({
         <div className="grid grid-cols-[5rem_1fr] gap-3">
           <label className="block">
             <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-on-paper/50">Qty</span>
-            <input type="number" min={1} value={b.qty} onChange={(e) => set("qty", Math.max(1, Number(e.target.value) || 1))} className={field} />
+            <input inputMode="numeric" value={b.qty} onChange={(e) => set("qty", Math.max(1, Number(e.target.value.replace(/\D/g, "")) || 1))} className={field} />
           </label>
           <label className="block">
             <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-on-paper/50">Unit price</span>
             <input
-              type="number"
-              min={0}
-              step="0.01"
-              value={b.unit || ""}
-              onChange={(e) => set("unit", Number(e.target.value) || 0)}
+              inputMode="decimal"
+              value={unitText}
+              onChange={(e) => setUnit(e.target.value)}
               placeholder="0.00"
               className={field}
             />
