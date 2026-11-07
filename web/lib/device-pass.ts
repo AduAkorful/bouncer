@@ -75,7 +75,7 @@ export async function unlockDevice(signal?: AbortSignal, mode: "get" | "create" 
       const known = mode === "create" ? null : rememberedCredential();
       const credential = mode === "create"
         ? await createPasskey(host, salt, active)
-        : await getPasskey(host, salt, active, known, known !== null);
+        : await getPasskey(host, salt, active, known, false);
       active.throwIfAborted();
       if (!credential) return { error: "No passkey was selected. Create one from the passkey page, or try again with your existing passkey." };
       rememberCredential(credential.rawId);
@@ -131,7 +131,7 @@ async function getPasskey(host: string, salt: Uint8Array, signal: AbortSignal, i
     hints: ["client-device"],
   };
   if (withPrf) publicKey.extensions = prfExtension(salt) as AuthenticationExtensionsClientInputs;
-  if (id) publicKey.allowCredentials = [{ type: "public-key", id, transports: ["internal", "hybrid"] }];
+  if (id) publicKey.allowCredentials = [{ type: "public-key", id, transports: ["internal"] }];
   const credential = await navigator.credentials.get({ signal, publicKey });
   return credential instanceof PublicKeyCredential ? credential : null;
 }

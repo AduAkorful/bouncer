@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { loadPlayerSession, rollPlayerName, savePlayerName, type PlayerSession } from "@/lib/player-session";
-import { deriveSecrets } from "@/lib/device-pass";
-import { clearHold, readHold, unlockHeld } from "@/lib/player-hold";
+import { deriveSecrets, unlockDevice } from "@/lib/device-pass";
+import { clearHold, holdIkm, readHold, unlockHeld } from "@/lib/player-hold";
 
 /** The name, streak, and nights come back with the passkey. This browser is not the record. */
 export function PlayerName({ initial = null }: { initial?: PlayerSession | null }) {
@@ -52,6 +52,28 @@ export function PlayerName({ initial = null }: { initial?: PlayerSession | null 
     unlocked.ikm.fill(0);
     if ("error" in secrets) return { error: "This device cannot keep a key in the passkey." };
     return { secrets };
+  }
+
+  async function create() {
+    setBusy(true);
+    setError(null);
+    const unlocked = await unlockDevice(undefined, "create");
+    if ("error" in unlocked) {
+      setBusy(false);
+      setError(unlocked.error);
+      return;
+    }
+    holdIkm(unlocked.ikm);
+    unlocked.ikm.fill(0);
+    const result = await loadPlayerSession();
+    setBusy(false);
+    setSignedIn(true);
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+    setSession(result.session);
+    setDraft(result.session.player.name);
   }
 
   async function enter() {
@@ -115,9 +137,16 @@ export function PlayerName({ initial = null }: { initial?: PlayerSession | null 
       <div className="mt-4">
         <p className="text-sm text-chalk/70">{signedIn ? "This browser is signed in. The name has not loaded." : "Your name, streak, and nights come back with your passkey."}</p>
         {error ? <p role="status" className="mt-2 text-sm text-chalk/70">{error}</p> : null}
-        <button type="button" disabled={busy} onClick={() => void enter()} className="chalk-focus mt-3 min-h-11 rounded-2xl bg-chalk px-4 py-2 text-sm text-ink disabled:opacity-40">
-          {busy ? "Waiting for your passkey" : signedIn ? "Try again" : "Use your passkey"}
-        </button>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button type="button" disabled={busy} onClick={() => void enter()} className="chalk-focus min-h-11 rounded-2xl bg-chalk px-4 py-2 text-sm text-ink disabled:opacity-40">
+            {busy ? "Waiting for your passkey" : signedIn ? "Try again" : "Use your device passkey"}
+          </button>
+          {signedIn ? null : (
+            <button type="button" disabled={busy} onClick={() => void create()} className="chalk-focus min-h-11 rounded-2xl border border-chalk/30 px-4 py-2 text-sm disabled:opacity-40">
+              Create a passkey
+            </button>
+          )}
+        </div>
         {signedIn ? <button type="button" onClick={logout} className="chalk-focus mt-3 block min-h-11 text-sm text-chalk/70 underline decoration-white/20">Log out</button> : null}
       </div>
     );
