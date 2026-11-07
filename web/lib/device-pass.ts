@@ -143,12 +143,12 @@ function rememberCredential(id: BufferSource) {
   store.setItem(CREDENTIAL_KEY, [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join(""));
 }
 
-function rememberedCredential(): Uint8Array | null {
+function rememberedCredential(): Uint8Array<ArrayBuffer> | null {
   const raw = credentialStore()?.getItem(CREDENTIAL_KEY);
   if (!raw || !/^[0-9a-f]{16,1024}$/.test(raw) || raw.length % 2 !== 0) return null;
   const bytes = new Uint8Array(raw.length / 2);
   for (let i = 0; i < bytes.length; i++) bytes[i] = Number.parseInt(raw.slice(i * 2, i * 2 + 2), 16);
-  return bytes;
+  return owned(bytes);
 }
 
 function credentialStore(): { getItem(key: string): string | null; setItem(key: string, value: string): void } | null {
