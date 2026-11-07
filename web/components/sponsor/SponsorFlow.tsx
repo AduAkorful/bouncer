@@ -133,7 +133,7 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
     done: string,
     confirmation?: { expected: VaultChange; pending: string; unconfirmed: string },
   ) => {
-    if (!sponsor) return "Connect this phone first.";
+    if (!sponsor) return "Connect this device first.";
     if (!check.ok) return check.error;
     const built = build();
     if (!built.ok) return "That value could not be sent.";
@@ -208,7 +208,7 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
 
   async function create() {
     await run(async () => {
-      if (!chain || !funds || !sponsor) return "Connect this phone first.";
+      if (!chain || !funds || !sponsor) return "Connect this device first.";
       const cap = toBaseUnits(capText, decimals);
       const lockNs = BigInt(Math.round(Number(lockMinutes) * 60)) * 1_000_000_000n;
       const cracks = Number(maxCracks);
@@ -329,9 +329,9 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
           <h2 className="font-sign text-lg">1 · Your account</h2>
           {!sponsor ? (
             <>
-              <p className="mt-2 text-sm text-chalk/70">This phone&apos;s passkey is your sponsor account. It pays for storage and holds the pot you fund.</p>
+              <p className="mt-2 text-sm text-chalk/70">This device&apos;s passkey is your sponsor account. It pays for storage and holds the pot you fund.</p>
               <button className={button} disabled={busy} onClick={() => void connect()}>
-                Use this phone&apos;s passkey
+                Use your device passkey
               </button>
             </>
           ) : (

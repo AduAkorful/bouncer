@@ -6,7 +6,8 @@ import { Account, actions, KeyPair, type KeyPairString } from "near-api-js";
 import { apiPost } from "./api.ts";
 import { buildAuthHeader } from "./sponsor-auth.ts";
 import { type Rpc } from "./chain.ts";
-import { deriveSecrets, unlockDevice } from "./device-pass.ts";
+import { deriveSecrets } from "./device-pass.ts";
+import { unlockHeld } from "./player-hold.ts";
 import { accessMessage, accessOnAccount, readPayoutAccount } from "./imported-account.ts";
 import { parseBalance, parseLimits, parseTokenMeta, type LimitsView, type TokenMeta } from "./sponsor-views.ts";
 import { byteCostFromConfig, protocolConfigRequest } from "./storage-cost.ts";
@@ -24,11 +25,11 @@ export type Sponsor = {
 /** The sponsor's account: the named testnet account this device holds a key for, or the passkey account the relay creates. */
 export async function connectSponsor(input: { rpcUrl: string; networkId: string; storageName: string }): Promise<{ ok: true; sponsor: Sponsor } | { ok: false; error: string }> {
   if (input.networkId !== "testnet") return { ok: false, error: "The passkey network is not testnet." };
-  const unlocked = await unlockDevice();
+  const unlocked = await unlockHeld();
   if ("error" in unlocked) return { ok: false, error: unlocked.error };
   const secrets = await deriveSecrets(unlocked.ikm, "sponsor", "0");
   unlocked.ikm.fill(0);
-  if ("error" in secrets) return { ok: false, error: "This phone cannot keep a key in the passkey." };
+  if ("error" in secrets) return { ok: false, error: "This device cannot keep a key in the passkey." };
   const named = readPayoutAccount(window.localStorage, input.storageName);
   let accountId = named;
   if (named) {

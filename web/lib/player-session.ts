@@ -19,7 +19,7 @@ export async function loadPlayerSession(): Promise<{ ok: true; session: PlayerSe
   if ("error" in unlocked) return { ok: false, error: unlocked.error };
   const secrets = await deriveSecrets(unlocked.ikm, "account", "0");
   unlocked.ikm.fill(0);
-  if ("error" in secrets) return { ok: false, error: "This phone cannot keep a key in the passkey." };
+  if ("error" in secrets) return { ok: false, error: "This device cannot keep a key in the passkey." };
   return postPlayerSession(secrets);
 }
 

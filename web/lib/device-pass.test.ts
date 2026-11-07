@@ -61,11 +61,13 @@ test("signing in asks for a passkey, not an empty security-key list", async () =
     create: async () => { throw new Error("sign-in must not create a passkey"); },
   } });
   try {
+    try { localStorage.removeItem("bouncer.passkey.credential.v1"); } catch { /* no browser store in this test */ }
     const unlocked = await unlockDevice();
     assert.ok("ikm" in unlocked);
     unlocked.ikm.fill(0);
     assert.equal(options?.allowCredentials, undefined);
-    assert.deepEqual(options?.hints, ["client-device", "hybrid"]);
+    assert.equal(options?.extensions, undefined);
+    assert.deepEqual(options?.hints, ["client-device"]);
   } finally {
     for (const [target, key, descriptor] of [[globalThis, "window", windowDescriptor], [globalThis, "PublicKeyCredential", credentialDescriptor], [navigator, "credentials", credentialsDescriptor]] as const) {
       if (descriptor) Object.defineProperty(target, key, descriptor);

@@ -2,6 +2,7 @@ import { baseEncode, KeyPairEd25519, type KeyPairString } from "near-api-js";
 
 const PRF_LABEL = "bouncer.prf.v1";
 const HKDF_SALT = "bouncer.hkdf.v1";
+const CREDENTIAL_KEY = "bouncer.passkey.credential.v1";
 
 export type DeviceSecrets = {
   accountSecret: KeyPairString;
@@ -50,10 +51,10 @@ export async function importClaimKey(seed: Uint8Array): Promise<CryptoKey> {
 /** Asks this device for its passkey. The same passkey returns the same bytes. */
 export async function unlockDevice(signal?: AbortSignal, mode: "get" | "create" = "get"): Promise<Unlocked> {
   if (typeof window === "undefined" || !window.PublicKeyCredential || !navigator.credentials) {
-    return { error: "This phone cannot keep a key in the passkey." };
+    return { error: "This device cannot keep a key in the passkey." };
   }
   const host = window.location.hostname;
-  if (!host) return { error: "This phone cannot keep a key in the passkey." };
+  if (!host) return { error: "This device cannot keep a key in the passkey." };
   const controller = new AbortController();
   const cancel = () => controller.abort();
   signal?.addEventListener("abort", cancel, { once: true });
@@ -71,12 +72,14 @@ export async function unlockDevice(signal?: AbortSignal, mode: "get" | "create" 
     return await Promise.race([aborted, (async (): Promise<Unlocked> => {
       const salt = await digest(PRF_LABEL);
       active.throwIfAborted();
+      const known = mode === "create" ? null : rememberedCredential();
       const credential = mode === "create"
         ? await createPasskey(host, salt, active)
-        : await getPasskey(host, salt, active);
+        : await getPasskey(host, salt, active, known, known !== null);
       active.throwIfAborted();
       if (!credential) return { error: "No passkey was selected. Create one from the passkey page, or try again with your existing passkey." };
-      const ikm = prfBytes(credential) ?? prfBytes(await getPasskey(host, salt, active, rawId(credential)));
+      rememberCredential(credential.rawId);
+      const ikm = prfBytes(credential) ?? prfBytes(await getPasskey(host, salt, active, rawId(credential), true));
       if (active.aborted) { ikm?.fill(0); active.throwIfAborted(); }
       if (!ikm || ikm.length !== 32) return { error: "This passkey cannot unlock Bouncer. Try a passkey provider that supports secure key derivation (PRF)." };
       return { ikm };
@@ -84,7 +87,7 @@ export async function unlockDevice(signal?: AbortSignal, mode: "get" | "create" 
   } catch (error) {
     if (active.aborted) return { error: timedOut ? "The passkey request timed out. Try again when your device is ready." : "The passkey was cancelled." };
     if (error instanceof DOMException && error.name === "NotAllowedError") return { error: "The passkey was dismissed." };
-    return { error: "This phone cannot keep a key in the passkey." };
+    return { error: "This device cannot keep a key in the passkey." };
   } finally {
     clearTimeout(timer);
     signal?.removeEventListener("abort", cancel);
@@ -117,7 +120,7 @@ function prfExtension(salt: Uint8Array) {
   return { prf: { eval: { first: salt } } };
 }
 
-async function getPasskey(host: string, salt: Uint8Array, signal: AbortSignal, id?: BufferSource): Promise<PublicKeyCredential | null> {
+async function getPasskey(host: string, salt: Uint8Array, signal: AbortSignal, id: BufferSource | null, withPrf: boolean): Promise<PublicKeyCredential | null> {
   const challenge = new Uint8Array(32);
   crypto.getRandomValues(challenge);
   const publicKey: PublicKeyCredentialRequestOptions & { hints?: string[] } = {
@@ -125,12 +128,36 @@ async function getPasskey(host: string, salt: Uint8Array, signal: AbortSignal, i
     rpId: host,
     timeout: 60_000,
     userVerification: "required",
-    extensions: prfExtension(salt) as AuthenticationExtensionsClientInputs,
+    hints: ["client-device"],
   };
-  if (id) publicKey.allowCredentials = [{ type: "public-key", id }];
-  else publicKey.hints = ["client-device", "hybrid"];
+  if (withPrf) publicKey.extensions = prfExtension(salt) as AuthenticationExtensionsClientInputs;
+  if (id) publicKey.allowCredentials = [{ type: "public-key", id, transports: ["internal", "hybrid"] }];
   const credential = await navigator.credentials.get({ signal, publicKey });
   return credential instanceof PublicKeyCredential ? credential : null;
+}
+
+function rememberCredential(id: BufferSource) {
+  const store = credentialStore();
+  if (!store) return;
+  const bytes = new Uint8Array(id instanceof ArrayBuffer ? id : id.buffer.slice(id.byteOffset, id.byteOffset + id.byteLength));
+  store.setItem(CREDENTIAL_KEY, [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join(""));
+}
+
+function rememberedCredential(): Uint8Array | null {
+  const raw = credentialStore()?.getItem(CREDENTIAL_KEY);
+  if (!raw || !/^[0-9a-f]{16,1024}$/.test(raw) || raw.length % 2 !== 0) return null;
+  const bytes = new Uint8Array(raw.length / 2);
+  for (let i = 0; i < bytes.length; i++) bytes[i] = Number.parseInt(raw.slice(i * 2, i * 2 + 2), 16);
+  return bytes;
+}
+
+function credentialStore(): { getItem(key: string): string | null; setItem(key: string, value: string): void } | null {
+  try {
+    if (typeof localStorage === "undefined") return null;
+    return localStorage;
+  } catch {
+    return null;
+  }
 }
 
 async function createPasskey(host: string, salt: Uint8Array, signal: AbortSignal): Promise<PublicKeyCredential> {

@@ -137,6 +137,6 @@ async function signingSecrets(vaultId: string, round: string): Promise<{ ok: tru
   if ("error" in unlocked) return { ok: false, error: unlocked.error };
   const secrets = await deriveSecrets(unlocked.ikm, vaultId, round);
   unlocked.ikm.fill(0);
-  if ("error" in secrets) return { ok: false, error: "This phone cannot keep a key in the passkey." };
+  if ("error" in secrets) return { ok: false, error: "This device cannot keep a key in the passkey." };
   return { ok: true, accountSecret: secrets.accountSecret };
 }

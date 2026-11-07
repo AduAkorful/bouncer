@@ -184,14 +184,14 @@ export default function PlayFrame({
     if ("error" in secrets) {
       setBusy(false);
       setWait("key");
-      setDoorError("This phone cannot keep a key in the passkey.");
+      setDoorError("This device cannot keep a key in the passkey.");
       return;
     }
     await postPlayerSession(secrets);
     const minted = await raidFromDevice(secrets);
     if (!("playerId" in minted)) {
       setBusy(false);
-      setDoorError("This phone cannot keep a key in the passkey.");
+      setDoorError("This device cannot keep a key in the passkey.");
       return;
     }
     const restored = await resumeRaid(secrets, vaultId, vault.round);
@@ -726,13 +726,13 @@ export default function PlayFrame({
         </div>
         {wait === "key" ? (
           <div className="px-4 py-6 text-center">
-            <p className="text-sm text-chalk/70">This phone keeps the key. Clearing this site does not remove it.</p>
+            <p className="text-sm text-chalk/70">This device keeps the key. Clearing this site does not remove it.</p>
             <button
               disabled={busy}
               onClick={() => void startWithPasskey()}
               className="mt-4 w-full rounded-2xl bg-chalk py-4 font-sign text-lg text-ink disabled:opacity-40"
             >
-              {busy ? "Waiting for your passkey" : "Use this phone's passkey"}
+              {busy ? "Waiting for your passkey" : "Use your device passkey"}
             </button>
             <a href="/passkey" className="mt-3 inline-flex min-h-11 items-center text-sm text-chalk/80 underline decoration-white/20">
               New here? Create a passkey

@@ -1,7 +1,8 @@
 import { Account, actions, KeyPair, PublicKey, type KeyPairString } from "near-api-js";
 import { apiPost } from "./api";
 import { claimMessage } from "./claim";
-import { deriveSecrets, unlockDevice } from "./device-pass";
+import { deriveSecrets } from "./device-pass";
+import { unlockHeld } from "./player-hold";
 import { accessMessage, accessOnAccount, testnetAccountId } from "./imported-account";
 
 const CLAIM_GAS = 300_000_000_000_000n;
@@ -21,7 +22,7 @@ export async function sendClaim(input: {
   if (input.accountId?.trim() && !named) return { ok: false, error: "That account name cannot be used." };
   const secrets = await deviceSecrets(input.vaultId, input.round);
   if ("error" in secrets) return { ok: false, error: secrets.error };
-  if (secrets.raidId !== input.raidId) return { ok: false, error: "This phone's passkey does not match this raid." };
+  if (secrets.raidId !== input.raidId) return { ok: false, error: "This device's passkey does not match this raid." };
   try {
     const accountId = named ?? (await relayAccount(secrets.accountPublicKey));
     if (!accountId) return { ok: false, error: "The passkey account was not created." };
@@ -86,7 +87,7 @@ export async function addWalletKey(input: {
   }
   const secrets = await deviceSecrets(input.vaultId, input.round);
   if ("error" in secrets) return { ok: false, error: secrets.error };
-  if (secrets.raidId !== input.raidId) return { ok: false, error: "This phone's passkey does not match this raid." };
+  if (secrets.raidId !== input.raidId) return { ok: false, error: "This device's passkey does not match this raid." };
   try {
     const player = new Account(input.accountId, input.rpcUrl, secrets.accountSecret);
     const outcome = await player.signAndSendTransaction({
@@ -111,11 +112,11 @@ async function deviceSecrets(
   | { accountSecret: KeyPairString; accountPublicKey: string; claimSecret: KeyPairString; raidId: string }
   | { error: string }
 > {
-  const unlocked = await unlockDevice();
+  const unlocked = await unlockHeld();
   if ("error" in unlocked) return unlocked;
   const secrets = await deriveSecrets(unlocked.ikm, vaultId, round);
   unlocked.ikm.fill(0);
-  if ("error" in secrets) return { error: "This phone cannot keep a key in the passkey." };
+  if ("error" in secrets) return { error: "This device cannot keep a key in the passkey." };
   return secrets;
 }
 

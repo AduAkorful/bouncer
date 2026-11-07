@@ -7,7 +7,8 @@ import { Countdown } from "@/components/Countdown";
 import { TryAgain } from "@/components/TryAgain";
 import { NetworkTag } from "@/components/bits";
 import { TokenAmount, TokenWord } from "@/components/TokenAmount";
-import { unlockDevice, deriveSecrets } from "@/lib/device-pass";
+import { deriveSecrets } from "@/lib/device-pass";
+import { unlockHeld } from "@/lib/player-hold";
 import { readPayoutAccount, testnetAccountId, writePayoutAccount } from "@/lib/imported-account";
 import { addWalletKey, sendClaim } from "@/lib/send-claim";
 import { PayoutWallet } from "@/components/claim/PayoutWallet";
@@ -176,7 +177,7 @@ export function ClaimDoor({
     setBusy(true);
     setRetry(false);
     setError(null);
-    const unlocked = await unlockDevice();
+    const unlocked = await unlockHeld();
     if ("error" in unlocked) {
       setBusy(false);
       setError(unlocked.error);
@@ -186,7 +187,7 @@ export function ClaimDoor({
     unlocked.ikm.fill(0);
     setBusy(false);
     if ("error" in secrets) {
-      setError("This phone cannot keep a key in the passkey.");
+      setError("This device cannot keep a key in the passkey.");
       return;
     }
     setRaidId(secrets.raidId);
@@ -276,7 +277,7 @@ export function ClaimDoor({
         ) : null}
         {missing && (
           <button disabled={busy} onClick={() => void recover()} className="mt-4 w-full rounded-2xl bg-chalk py-4 font-sign text-lg text-ink disabled:opacity-40">
-            {busy ? "Waiting for your passkey" : "Use this phone's passkey"}
+            {busy ? "Waiting for your passkey" : "Use your device passkey"}
           </button>
         )}
         {phase === "locked" && crack && (
@@ -289,12 +290,12 @@ export function ClaimDoor({
         {phase === "ready" && (
           <section className="mt-5 rounded-3xl border border-white/10 bg-night-2 p-5">
             {preference === "existing" && namedAccount.trim() ? (
-              <p className="text-sm text-chalk/70">The lock is open. This phone&apos;s passkey signs the claim, and the vault pays {namedAccount.trim()}.</p>
+              <p className="text-sm text-chalk/70">The lock is open. This device&apos;s passkey signs the claim, and the vault pays {namedAccount.trim()}.</p>
             ) : (
               <TokenWord token={token}>
                 {(symbol) => (
                   <p className="text-sm text-chalk/70">
-                    The lock is open. Claim uses a passkey on this phone. That account is the payout, and the vault sends the {symbol} there.
+                    The lock is open. Claim uses a passkey on this device. That account is the payout, and the vault sends the {symbol} there.
                   </p>
                 )}
               </TokenWord>
@@ -307,7 +308,7 @@ export function ClaimDoor({
                   placeholder="name.testnet"
                   className="mt-4 w-full rounded-2xl border border-white/10 bg-night px-3 py-3 font-mono text-sm"
                 />
-                <p className="mt-2 text-sm text-chalk/60">This phone's passkey has to be a full-access key on that account. The account pays the gas.</p>
+                <p className="mt-2 text-sm text-chalk/60">This device's passkey has to be a full-access key on that account. The account pays the gas.</p>
               </>
             )}
             <button disabled={busy} onClick={() => void claim()} className="mt-4 w-full rounded-2xl bg-chalk py-4 font-sign text-lg text-ink disabled:opacity-40">
@@ -349,7 +350,7 @@ export function ClaimDoor({
             </button>
             {preference !== "existing" && (
               <>
-                <p className="mt-4 text-sm text-chalk/70">The key stays on this phone. Paste a wallet public key to use this account there.</p>
+                <p className="mt-4 text-sm text-chalk/70">The key stays on this device. Paste a wallet public key to use this account there.</p>
                 <input
                   value={walletKey}
                   onChange={(event) => setWalletKey(event.target.value)}

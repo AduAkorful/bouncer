@@ -9,7 +9,7 @@ export const metadata = screen(
 const steps = [
   {
     title: "Bring the pot.",
-    text: "A passkey on this phone is the sponsor account. It pays for storage and holds the tokens you put in. You need the door's token for the pot and a little NEAR for storage. This site does not send you either.",
+    text: "A passkey on this device is the sponsor account. It pays for storage and holds the tokens you put in. You need the door's token for the pot and a little NEAR for storage. This site does not send you either.",
   },
   {
     title: "Write who is owed.",

@@ -91,7 +91,7 @@ export function PasskeySheet({
     unlocked.ikm.fill(0);
     if ("error" in secrets) {
       setStep("error");
-      setDetail("This phone cannot keep a key in the passkey.");
+      setDetail("This device cannot keep a key in the passkey.");
       return;
     }
     setAccountId(named);
@@ -163,7 +163,7 @@ export function PasskeySheet({
         {step === "add" && accountId && publicKey && (
           <>
             <p className="mt-3 text-sm text-chalk/70">
-              A passkey is on this phone for {accountId}. Add this public key in that wallet as a full-access key. The account pays the gas. Then check again.
+              A passkey is on this device for {accountId}. Add this public key in that wallet as a full-access key. The account pays the gas. Then check again.
             </p>
             {detail ? <p className="mt-3 text-sm text-chalk/70">{detail}</p> : null}
             <p className="mt-4 break-all font-mono text-[12px] text-chalk/70">{publicKey}</p>
@@ -189,7 +189,7 @@ export function PasskeySheet({
         )}
         {step === "done" && (
           <>
-            {accountId ? <p className="mt-3 text-sm text-chalk/70">This phone can sign for {accountId}.</p> : null}
+            {accountId ? <p className="mt-3 text-sm text-chalk/70">This device can sign for {accountId}.</p> : null}
             <Link href={next === "claim" ? "/claim" : "/profile"} className="mt-6 block rounded-2xl bg-chalk py-4 text-center font-sign text-lg text-ink">
               Continue
             </Link>

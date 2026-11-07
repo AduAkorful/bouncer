@@ -30,7 +30,7 @@ test("a player does not see an internal token", () => {
 
 test("an open door that does not start says why", () => {
   assert.deepEqual(playStop("The door did not answer."), { title: "The door did not answer.", detail: "The raid stays shut." });
-  assert.deepEqual(playStop("The passkey was cancelled."), { title: "This phone's passkey did not open.", detail: "The passkey was cancelled." });
+  assert.deepEqual(playStop("The passkey was cancelled."), { title: "This device's passkey did not open.", detail: "The passkey was cancelled." });
 });
 
 test("a shut door keeps a stored commitment", () => {

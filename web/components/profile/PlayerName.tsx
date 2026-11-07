@@ -50,7 +50,7 @@ export function PlayerName({ initial = null }: { initial?: PlayerSession | null 
     if ("error" in unlocked) return unlocked;
     const secrets = await deriveSecrets(unlocked.ikm, "account", "0");
     unlocked.ikm.fill(0);
-    if ("error" in secrets) return { error: "This phone cannot keep a key in the passkey." };
+    if ("error" in secrets) return { error: "This device cannot keep a key in the passkey." };
     return { secrets };
   }
 

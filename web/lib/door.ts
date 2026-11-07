@@ -41,7 +41,7 @@ export function playerDetail(error: string): string {
 /** The panel when an open door does not start a raid. A closed queue is a separate panel. */
 export function playStop(detail: string): { title: string; detail: string } {
   if (detail === "The door did not answer.") return { title: detail, detail: "The raid stays shut." };
-  return { title: "This phone's passkey did not open.", detail };
+  return { title: "This device's passkey did not open.", detail };
 }
 
 /** A closed door has no stored next opening. The other-doors list is the place to look. */
