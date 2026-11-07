@@ -120,17 +120,16 @@ function prfExtension(salt: Uint8Array) {
 async function getPasskey(host: string, salt: Uint8Array, signal: AbortSignal, id?: BufferSource): Promise<PublicKeyCredential | null> {
   const challenge = new Uint8Array(32);
   crypto.getRandomValues(challenge);
-  const credential = await navigator.credentials.get({
-    signal,
-    publicKey: {
-      challenge,
-      rpId: host,
-      timeout: 60_000,
-      userVerification: "required",
-      allowCredentials: id ? [{ type: "public-key", id }] : [],
-      extensions: prfExtension(salt) as AuthenticationExtensionsClientInputs,
-    },
-  });
+  const publicKey: PublicKeyCredentialRequestOptions & { hints?: string[] } = {
+    challenge,
+    rpId: host,
+    timeout: 60_000,
+    userVerification: "required",
+    extensions: prfExtension(salt) as AuthenticationExtensionsClientInputs,
+  };
+  if (id) publicKey.allowCredentials = [{ type: "public-key", id }];
+  else publicKey.hints = ["client-device", "hybrid"];
+  const credential = await navigator.credentials.get({ signal, publicKey });
   return credential instanceof PublicKeyCredential ? credential : null;
 }
 

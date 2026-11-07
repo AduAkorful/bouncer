@@ -23,6 +23,8 @@ export type StoredRaid = {
   blob: string | null;
   verdict: unknown | null;
   transactionHash: string | null;
+  /** The claim transaction, once the vault was asked to pay. */
+  payoutHash?: string | null;
   street: StoredStreet | null;
   notes: StoredNote[];
 };
@@ -122,7 +124,8 @@ async function createRaid(): Promise<StoredRaid | { error: string }> {
 }
 
 function ready(raid: StoredRaid): StoredRaid {
-  return { ...raid, street: raid.street ?? null, notes: raid.notes ?? [] };
+  const payout = typeof raid.payoutHash === "string" ? raid.payoutHash : null;
+  return { ...raid, street: raid.street ?? null, notes: raid.notes ?? [], payoutHash: payout };
 }
 
 function openDb(name: string): Promise<IDBDatabase> {

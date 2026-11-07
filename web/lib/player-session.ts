@@ -4,7 +4,8 @@
 
 import { KeyPair, type KeyPairString } from "near-api-js";
 import { apiPost } from "./api.ts";
-import { deriveSecrets, unlockDevice, type DeviceSecrets } from "./device-pass.ts";
+import { deriveSecrets, type DeviceSecrets } from "./device-pass.ts";
+import { unlockHeld } from "./player-hold.ts";
 
 export type PlayerSession = {
   player: { name: string; renameUsed: boolean; streak: number; nights: number; created: string };
@@ -14,7 +15,7 @@ export type PlayerSession = {
 };
 
 export async function loadPlayerSession(): Promise<{ ok: true; session: PlayerSession } | { ok: false; error: string }> {
-  const unlocked = await unlockDevice();
+  const unlocked = await unlockHeld();
   if ("error" in unlocked) return { ok: false, error: unlocked.error };
   const secrets = await deriveSecrets(unlocked.ikm, "account", "0");
   unlocked.ikm.fill(0);

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { deriveSecrets, unlockDevice } from "@/lib/device-pass";
+import { holdIkm } from "@/lib/player-hold";
 import { PlayerName } from "@/components/profile/PlayerName";
 import { accessMessage, accessOnAccount, testnetAccountId, writePayoutAccount } from "@/lib/imported-account";
 
@@ -56,6 +57,7 @@ export function PasskeySheet({
       setDetail(unlocked.error);
       return;
     }
+    holdIkm(unlocked.ikm);
     unlocked.ikm.fill(0);
     writePayoutAccount(window.localStorage, storageName, null);
     setAccountId(null);
@@ -84,6 +86,7 @@ export function PasskeySheet({
       setDetail(unlocked.error);
       return;
     }
+    holdIkm(unlocked.ikm);
     const secrets = await deriveSecrets(unlocked.ikm, "account", "0");
     unlocked.ikm.fill(0);
     if ("error" in secrets) {

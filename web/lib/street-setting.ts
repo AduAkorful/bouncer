@@ -38,9 +38,6 @@ export const SETTING_FIELDS = [
 /** The whole street, from the food stall through the shop and the taxi. */
 export const STREET_VIEW = "-230 -40 900 320";
 
-/** Phone play: the stall, the queue, the door, and the figure at the lamp, all in one view. */
-export const PHONE_STREET = "-240 8 640 268";
-
 const ACCRA_SLIPS = {
   purple: ["AFRO", "BEATS", "EVERY SAT"] as [string, string, string],
   cream: ["FRI · LADIES", "SAT", "K-NOVA", "23:00 – 02:00"] as [string, string, string, string],

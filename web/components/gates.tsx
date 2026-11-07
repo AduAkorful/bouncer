@@ -87,6 +87,7 @@ export async function HomeGate({ vaultId }: { vaultId?: string }) {
       base={doorPaths(id).door}
       networkTag={labels.networkTag}
       token={page.page.token}
+      wallet={{ rpcUrl: labels.rpcUrl, contractId: labels.contractId, networkId: labels.networkId, storageName: labels.storageName }}
       doors={
         <Suspense fallback={<DoorListPending />}>
           <HomeIndex index={indexPromise} exclude={page.page.vaultId} retryHref={retryHref} />

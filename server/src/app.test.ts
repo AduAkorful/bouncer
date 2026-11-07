@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { accountIdForPublicKey } from "../../web/lib/passkey-account.ts";
 import { createApp } from "./app.ts";
 import { authHeader, SECRETS, testDeps, vaultRow } from "./testkit.ts";
 
@@ -24,6 +25,23 @@ test("only the site's origin is answered, and preflight is handled", async () =>
   assert.equal(pre.status, 204);
   const bare = await app.request("/health");
   assert.equal(bare.status, 200);
+});
+
+test("a passkey account id is named without creating the account", async () => {
+  const { deps } = testDeps();
+  let created = 0;
+  deps.createAccount = async () => {
+    created += 1;
+    return { ok: true };
+  };
+  const publicKey = `ed25519:${"2".repeat(44)}`;
+  const expected = await accountIdForPublicKey(publicKey, "relay.test");
+  const app = createApp(deps);
+  const named = await app.request("/passkey/account", post("/passkey/account", { publicKey }));
+  assert.equal(named.status, 200);
+  assert.equal(((await named.json()) as { accountId: string }).accountId, expected);
+  assert.equal(created, 0);
+  assert.equal((await app.request("/passkey/account", post("/passkey/account", { publicKey: "nope" }))).status, 400);
 });
 
 test("browser sponsor preflights allow the signed header without executing a guard call", async () => {

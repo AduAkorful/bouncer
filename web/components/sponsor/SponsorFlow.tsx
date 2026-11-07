@@ -304,9 +304,14 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
   return (
     <main className="min-h-dvh overflow-x-clip bg-night px-4 pb-24 pt-8 text-chalk">
       <div className="mx-auto max-w-lg space-y-4">
-        <Link href="/home" className="text-sm text-chalk/70 underline decoration-white/20">
-          The door
-        </Link>
+        <div className="flex flex-wrap gap-x-5">
+          <Link href="/sponsors" className="chalk-focus inline-flex min-h-11 items-center text-sm text-chalk/70 underline decoration-white/20">
+            How sponsoring works
+          </Link>
+          <Link href="/home" className="chalk-focus inline-flex min-h-11 items-center text-sm text-chalk/70 underline decoration-white/20">
+            The door
+          </Link>
+        </div>
         <p className="font-mono text-xs uppercase tracking-[0.2em] text-chalk/80">Sponsor</p>
         <h1 className="font-sign text-3xl leading-tight">Run your own door.</h1>
         <p className="text-sm text-chalk/70">

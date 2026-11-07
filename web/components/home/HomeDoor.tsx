@@ -6,6 +6,7 @@ import { DoorScene } from "@/components/DoorScene";
 import { StreetScroll } from "@/components/home/StreetScroll";
 import { TokenAmount, TokenPotGlyph } from "@/components/TokenAmount";
 import { STREET_VIEW } from "@/lib/street-setting";
+import { WalletChip } from "@/components/profile/ProfileWallet";
 import { cardLook, type Card } from "@/lib/card";
 import { SceneLife } from "@/components/SceneLife";
 import { CLOSED_DOOR_NOTE, COMMITMENT_LINE, NO_COMMITMENT, commitmentFooter, doorShut, doorTitle } from "@/lib/door";
@@ -36,6 +37,7 @@ export function HomeDoor({
   base = "",
   token,
   doors,
+  wallet,
 }: {
   vault: VaultView | null;
   /** This vault's id. It is the sign when the vault has no card. */
@@ -49,6 +51,8 @@ export function HomeDoor({
   token: Promise<TokenRead>;
   /** The other-doors list, including its own loading state. */
   doors: ReactNode;
+  /** Chain names for the signed-in balance. Absent when the page has no public env. */
+  wallet?: { rpcUrl: string; contractId: string; networkId: string; storageName: string } | null;
 }) {
   const title = doorTitle(card, vaultId);
   const shut = vault ? doorShut(vault, Date.now()) : false;
@@ -72,9 +76,17 @@ export function HomeDoor({
           <span className="cursor-default select-none font-mono text-xs text-chalk/80">Queue</span>
           {vault ? <span className="font-mono text-xs text-chalk/80">{vault.crackCount} in</span> : null}
         </div>
-        <Link href="/profile" className="chalk-focus order-2 inline-flex min-h-11 items-center whitespace-nowrap rounded-full bg-black/50 px-3 font-mono text-xs backdrop-blur sm:order-3">
-          Profile
-        </Link>
+        <div className="order-2 flex items-center gap-1.5 sm:order-3">
+          <Link href="/sponsors" className="chalk-focus inline-flex min-h-11 items-center whitespace-nowrap rounded-full bg-black/50 px-3 font-mono text-xs backdrop-blur">
+            Sponsor
+          </Link>
+          <Link href="/fame" className="chalk-focus inline-flex min-h-11 items-center whitespace-nowrap rounded-full bg-black/50 px-3 font-mono text-xs backdrop-blur">
+            Hall of fame
+          </Link>
+          <Link href="/profile" className="chalk-focus inline-flex min-h-11 items-center whitespace-nowrap rounded-full bg-black/50 px-3 font-mono text-xs backdrop-blur">
+            Profile
+          </Link>
+        </div>
       </header>
 
       <section className="relative h-[46dvh] min-h-[280px] bg-[#1a1424] sm:h-[70dvh] sm:min-h-[420px]">
@@ -155,8 +167,17 @@ export function HomeDoor({
               {vault ? "The queue is closed" : "The queue is not open"}
             </p>
           )}
+          {wallet ? <WalletChip {...wallet} /> : null}
           <p className="mt-3 text-center text-sm text-chalk/60">{vault ? phaseCopy[phase].note : "Nothing on this door was filled in."}</p>
           <p className="mt-3 text-center text-xs leading-relaxed text-chalk/70">Test tokens have no cash value. Playing costs no money.</p>
+          <p className="text-center">
+            <Link href="/sponsors" className="chalk-focus inline-flex min-h-11 items-center text-sm text-chalk/80 underline decoration-white/20">
+              Sponsor a door
+            </Link>
+            <Link href="/fame" className="chalk-focus inline-flex min-h-11 items-center text-sm text-chalk/80 underline decoration-white/20">
+              Hall of fame
+            </Link>
+          </p>
           <p className="text-center">
             <Link href="/#how-to-play" className="chalk-focus inline-flex min-h-11 items-center text-sm text-chalk/80 underline decoration-white/20">
               How to play

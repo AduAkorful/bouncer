@@ -15,6 +15,7 @@ import { createAuthenticator } from "./auth.ts";
 import { createPlayerAuth } from "./player-auth.ts";
 import { openSession, publicBoard, recordGotIn, recordOpen, renamePlayer, rollName, utcDay, viewOf, type NightRow, type PlayerRow, type PlayerStore } from "./player-record.ts";
 import { playerNameToStore } from "../../web/lib/player-name.ts";
+import { accountIdForPublicKey } from "../../web/lib/passkey-account.ts";
 
 export type Deps = {
   env: ServerEnv;
@@ -137,6 +138,15 @@ export function createApp(deps: Deps) {
     const now = await deps.chainNowMs();
     if (!now.ok) return c.json(now, 502);
     return c.json({ ok: true, crack: crack.crack, nowMs: now.nowMs, vault: door.vault });
+  });
+
+  app.post("/passkey/account", async (c) => {
+    if (!take(c, "account-id", 60, MINUTE)) return slow(c);
+    const body = await bodyOf(c);
+    if (typeof body?.publicKey !== "string") return c.json({ ok: false, error: "account" }, 400);
+    const accountId = await accountIdForPublicKey(body.publicKey, deps.env.relay.accountId);
+    if (!accountId) return c.json({ ok: false, error: "account" }, 400);
+    return c.json({ ok: true, accountId });
   });
 
   app.post("/passkey/create-account", async (c) => {

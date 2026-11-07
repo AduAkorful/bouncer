@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { loadPlayerSession, rollPlayerName, savePlayerName, type PlayerSession } from "@/lib/player-session";
-import { unlockDevice, deriveSecrets } from "@/lib/device-pass";
+import { deriveSecrets } from "@/lib/device-pass";
+import { clearHold, readHold, unlockHeld } from "@/lib/player-hold";
 
 /** The name, streak, and nights come back with the passkey. This browser is not the record. */
 export function PlayerName({ initial = null }: { initial?: PlayerSession | null }) {
@@ -10,6 +11,48 @@ export function PlayerName({ initial = null }: { initial?: PlayerSession | null 
   const [draft, setDraft] = useState(initial?.player.name ?? "");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [checked, setChecked] = useState(initial !== null);
+  const [signedIn, setSignedIn] = useState(initial !== null);
+
+  useEffect(() => {
+    if (initial) return;
+    let live = true;
+    if (!readHold()) {
+      setChecked(true);
+      return;
+    }
+    setSignedIn(true);
+    setBusy(true);
+    loadPlayerSession().then((result) => {
+      if (!live) return;
+      setBusy(false);
+      setChecked(true);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setSession(result.session);
+      setDraft(result.session.player.name);
+    });
+    return () => { live = false; };
+  }, [initial]);
+
+  function logout() {
+    clearHold();
+    setSession(null);
+    setDraft("");
+    setError(null);
+    setSignedIn(false);
+  }
+
+  async function accountSecrets() {
+    const unlocked = await unlockHeld();
+    if ("error" in unlocked) return unlocked;
+    const secrets = await deriveSecrets(unlocked.ikm, "account", "0");
+    unlocked.ikm.fill(0);
+    if ("error" in secrets) return { error: "This phone cannot keep a key in the passkey." };
+    return { secrets };
+  }
 
   async function enter() {
     setBusy(true);
@@ -20,6 +63,7 @@ export function PlayerName({ initial = null }: { initial?: PlayerSession | null 
       setError(result.error);
       return;
     }
+    setSignedIn(true);
     setSession(result.session);
     setDraft(result.session.player.name);
   }
@@ -27,20 +71,13 @@ export function PlayerName({ initial = null }: { initial?: PlayerSession | null 
   async function save(nextName: string) {
     setBusy(true);
     setError(null);
-    const unlocked = await unlockDevice();
-    if ("error" in unlocked) {
+    const ready = await accountSecrets();
+    if ("error" in ready) {
       setBusy(false);
-      setError(unlocked.error);
+      setError(ready.error);
       return;
     }
-    const secrets = await deriveSecrets(unlocked.ikm, "account", "0");
-    unlocked.ikm.fill(0);
-    if ("error" in secrets) {
-      setBusy(false);
-      setError("This phone cannot keep a key in the passkey.");
-      return;
-    }
-    const result = await savePlayerName(secrets, nextName);
+    const result = await savePlayerName(ready.secrets, nextName);
     setBusy(false);
     if (!result.ok) {
       setError(result.error);
@@ -53,20 +90,13 @@ export function PlayerName({ initial = null }: { initial?: PlayerSession | null 
   async function another() {
     setBusy(true);
     setError(null);
-    const unlocked = await unlockDevice();
-    if ("error" in unlocked) {
+    const ready = await accountSecrets();
+    if ("error" in ready) {
       setBusy(false);
-      setError(unlocked.error);
+      setError(ready.error);
       return;
     }
-    const secrets = await deriveSecrets(unlocked.ikm, "account", "0");
-    unlocked.ikm.fill(0);
-    if ("error" in secrets) {
-      setBusy(false);
-      setError("This phone cannot keep a key in the passkey.");
-      return;
-    }
-    const result = await rollPlayerName(secrets);
+    const result = await rollPlayerName(ready.secrets);
     setBusy(false);
     if (!result.ok) {
       setError(result.error);
@@ -76,14 +106,19 @@ export function PlayerName({ initial = null }: { initial?: PlayerSession | null 
     setDraft(result.session.player.name);
   }
 
+  if (!checked) {
+    return <p className="mt-4 text-sm text-chalk/70">Reading this browser.</p>;
+  }
+
   if (!session) {
     return (
       <div className="mt-4">
-        <p className="text-sm text-chalk/70">Your name, streak, and nights come back with your passkey.</p>
+        <p className="text-sm text-chalk/70">{signedIn ? "This browser is signed in. The name has not loaded." : "Your name, streak, and nights come back with your passkey."}</p>
         {error ? <p role="status" className="mt-2 text-sm text-chalk/70">{error}</p> : null}
         <button type="button" disabled={busy} onClick={() => void enter()} className="chalk-focus mt-3 min-h-11 rounded-2xl bg-chalk px-4 py-2 text-sm text-ink disabled:opacity-40">
-          {busy ? "Waiting for your passkey" : "Use your passkey"}
+          {busy ? "Waiting for your passkey" : signedIn ? "Try again" : "Use your passkey"}
         </button>
+        {signedIn ? <button type="button" onClick={logout} className="chalk-focus mt-3 block min-h-11 text-sm text-chalk/70 underline decoration-white/20">Log out</button> : null}
       </div>
     );
   }
@@ -121,6 +156,7 @@ export function PlayerName({ initial = null }: { initial?: PlayerSession | null 
         </ul>
       ) : null}
       {session.line ? <a href={`/p/${encodeURIComponent(session.player.name)}`} className="chalk-focus mt-3 inline-flex min-h-11 items-center text-sm text-chalk/80 underline decoration-white/20">Share your place</a> : null}
+      <button type="button" onClick={logout} className="chalk-focus mt-3 block min-h-11 text-sm text-chalk/70 underline decoration-white/20">Log out</button>
     </div>
   );
 }

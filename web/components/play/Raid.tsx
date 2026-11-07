@@ -9,6 +9,7 @@ import { Countdown } from "@/components/Countdown";
 import { DemoBadge, Money } from "@/components/bits";
 import { DoorScene } from "@/components/DoorScene";
 import { SceneLife } from "@/components/SceneLife";
+import { StreetBar } from "@/components/home/StreetBar";
 import { StreetScroll } from "@/components/home/StreetScroll";
 import { OfficeScene } from "@/components/OfficeScene";
 import { BillBuilder } from "@/components/play/BillBuilder";
@@ -26,11 +27,12 @@ import { guardRule } from "@/lib/rules";
 import type { TokenRead } from "@/lib/page-vault";
 import { TOKEN_FAILED, TOKEN_READING, tokenAmount } from "@/lib/token-label";
 import { decimalToAtomic } from "@/lib/units";
-import { deriveSecrets, unlockDevice } from "@/lib/device-pass";
+import { deriveSecrets } from "@/lib/device-pass";
+import { readHold, unlockHeld } from "@/lib/player-hold";
 import { loadRaid, raidFromDevice, saveRaid, loadTranscript, saveTranscript, type StoredRaid } from "@/lib/session-store";
 import type { Exchange } from "@/lib/raid-transcript";
 import { readStreet } from "@/lib/street";
-import { ACCRA_SETTING, PHONE_STREET, pieceLearn, soundCity, STREET_VIEW } from "@/lib/street-setting";
+import { ACCRA_SETTING, pieceLearn, soundCity, STREET_VIEW } from "@/lib/street-setting";
 import { beatGlow, parallax, startIdle } from "@/lib/idle";
 import { D, E, registerMotion, roll } from "@/lib/motion";
 import { rigTo, rigTween } from "@/lib/rigMotion";
@@ -154,6 +156,13 @@ export default function PlayFrame({
         setNotes(ready.notes);
         return;
       }
+      const held = readHold();
+      if (held) {
+        held.fill(0);
+        setWait("opening");
+        void startWithPasskey();
+        return;
+      }
       setWait("key");
     });
     return () => {
@@ -163,9 +172,10 @@ export default function PlayFrame({
 
   async function startWithPasskey() {
     setBusy(true);
-    const unlocked = await unlockDevice();
+    const unlocked = await unlockHeld();
     if ("error" in unlocked) {
       setBusy(false);
+      setWait("key");
       setDoorError(unlocked.error);
       return;
     }
@@ -173,6 +183,7 @@ export default function PlayFrame({
     unlocked.ikm.fill(0);
     if ("error" in secrets) {
       setBusy(false);
+      setWait("key");
       setDoorError("This phone cannot keep a key in the passkey.");
       return;
     }
@@ -253,7 +264,7 @@ export default function PlayFrame({
     setSoundCity(soundCity(setting));
   }, [setting]);
 
-  // A phone shows the stall, the queue, the door, and the lamp figure together.
+  // A phone keeps the same street scale as the door and swipes sideways.
   // A wide stage opens the viewBox until the suya cart, the chop-bar sign, and the taxi
   // all sit inside it. Height must not widen the element: a tall desktop would otherwise
   // center a too-wide street and crop the shop sign.
@@ -276,12 +287,25 @@ export default function PlayFrame({
     });
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+  }, [playing, gate]);
 
   useEffect(() => {
     const sc = scroller.current;
-    if (sc) sc.scrollLeft = (sc.scrollWidth - sc.clientWidth) / 2;
-  }, [streetW, gate]);
+    if (!sc || gate !== "door") return;
+    let frames = 0;
+    let handle = 0;
+    const place = () => {
+      const next = (sc.scrollWidth - sc.clientWidth) / 2;
+      if (next > 0) {
+        sc.scrollLeft = next;
+        return;
+      }
+      frames += 1;
+      if (frames < 12) handle = requestAnimationFrame(place);
+    };
+    place();
+    return () => cancelAnimationFrame(handle);
+  }, [streetW, gate, playing, narrow]);
 
   // Keep the dock and the invoice above the keyboard. dvh does not shrink for it.
   useEffect(() => {
@@ -694,7 +718,7 @@ export default function PlayFrame({
           <a href={doorHref} className="chalk-focus inline-flex min-h-11 items-center font-sign text-lg">BOUNCER</a>
         </header>
         <div className="relative min-h-0 flex-1">
-          <StreetScroll>
+          <StreetScroll bar>
             <SceneLife className="absolute inset-0">
               <DoorScene sign={signText} look={doorLook} setting={setting} neighbors className="size-full" viewBox={STREET_VIEW} />
             </SceneLife>
@@ -764,15 +788,16 @@ export default function PlayFrame({
 
       {/* The scene: the player writes. Taps do not read a sample ledger. */}
       <section ref={stageRef} className="scene relative min-h-0 flex-1 overflow-hidden bg-[#140f1c]" onClick={onScene}>
-        <div ref={scroller} className="absolute inset-0 overflow-hidden [scrollbar-width:none]">
-          <div ref={scene} key={gate} className="relative h-full" style={{ width: gate === "door" && streetW ? streetW : "100%" }}>
+        <div ref={scroller} className={`absolute inset-0 [scrollbar-width:none] ${narrow && gate === "door" ? "overflow-x-auto overflow-y-hidden" : "overflow-hidden"}`}>
+          <div ref={scene} key={gate} className={`relative h-full ${narrow && gate === "door" ? "w-[240%] min-w-[880px]" : ""}`} style={narrow && gate === "door" ? undefined : { width: gate === "door" && streetW ? streetW : "100%" }}>
             {gate === "door" ? (
-              <DoorScene key={streetKey} setting={setting} sign={signText} look={doorLook} gossip={Boolean(session?.street)} speakingSlots={stage === "play" ? speakingSlots : undefined} viewBox={narrow ? PHONE_STREET : doorView} className="absolute inset-0 size-full" />
+              <DoorScene key={streetKey} setting={setting} sign={signText} look={doorLook} gossip={Boolean(session?.street)} speakingSlots={stage === "play" ? speakingSlots : undefined} viewBox={narrow ? STREET_VIEW : doorView} className="absolute inset-0 size-full" />
             ) : (
               <OfficeScene hints={stage === "play"} className="absolute inset-0 size-full" />
             )}
           </div>
         </div>
+        {narrow && gate === "door" ? <StreetBar scroller={scroller} /> : null}
         <div className="vignette pointer-events-none absolute inset-0 opacity-0 shadow-[inset_0_0_120px_40px_rgb(179_36_58/0.55)]" />
         <div className="spot pointer-events-none absolute inset-0 opacity-0 bg-[radial-gradient(ellipse_32%_42%_at_50%_58%,transparent_55%,rgb(5_3_8/0.82)_100%)]" />
         <div className="redflash pointer-events-none absolute inset-0 bg-rope opacity-0 mix-blend-screen" />

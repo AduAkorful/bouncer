@@ -35,6 +35,8 @@ interface Props {
   ink?: { stroke: string; fill: string };
   /** The sign is inside a link that already names the door. */
   decorative?: boolean;
+  /** Cover the frame and crop the edges. The door pages keep the whole street in view. */
+  fit?: "meet" | "cover";
   /** The green-dress figure at the lamp. The door page moves her clear of the pot board. */
   lampFigureX?: number;
 }
@@ -87,6 +89,7 @@ export function DoorScene({
   ink,
   decorative = false,
   lampFigureX = 318,
+  fit = "meet",
 }: Props) {
   const n = ink ?? NEONS.find((x) => x.value === neon) ?? NEONS[0];
   const street = setting ?? citySetting(city);
@@ -99,7 +102,7 @@ export function DoorScene({
   return (
     <svg
       viewBox={viewBox}
-      preserveAspectRatio="xMidYMax meet"
+      preserveAspectRatio={fit === "cover" ? "xMidYMid slice" : "xMidYMax meet"}
       className={className}
       data-stall={pieces.stall}
       data-ride={pieces.ride}

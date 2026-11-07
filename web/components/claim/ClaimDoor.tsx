@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { apiPost } from "@/lib/api";
 import { Countdown } from "@/components/Countdown";
 import { TryAgain } from "@/components/TryAgain";
@@ -10,8 +10,10 @@ import { TokenAmount, TokenWord } from "@/components/TokenAmount";
 import { unlockDevice, deriveSecrets } from "@/lib/device-pass";
 import { readPayoutAccount, testnetAccountId, writePayoutAccount } from "@/lib/imported-account";
 import { addWalletKey, sendClaim } from "@/lib/send-claim";
+import { PayoutWallet } from "@/components/claim/PayoutWallet";
 import { playableRaid } from "@/lib/door";
-import { loadRaid } from "@/lib/session-store";
+import { payoutExplorerUrl } from "@/lib/explorer";
+import { loadRaid, saveRaid, type StoredRaid } from "@/lib/session-store";
 import type { TokenRead } from "@/lib/page-vault";
 import type { CrackView, VaultView } from "@/lib/vault";
 
@@ -53,12 +55,16 @@ export function ClaimDoor({
   const [keyNote, setKeyNote] = useState<string | null>(null);
   const [namedAccount, setNamedAccount] = useState("");
   const [preference, setPreference] = useState<"unset" | "new" | "existing">("unset");
+  const [payoutHash, setPayoutHash] = useState<string | null>(null);
+  const raidRecord = useRef<StoredRaid | null>(null);
+  const payoutUrl = payoutHash ? payoutExplorerUrl(payoutHash) : null;
 
   useEffect(() => {
     const stored = readPayoutAccount(window.localStorage, storageName);
     if (stored) {
       setNamedAccount(stored);
       setPreference("existing");
+      setPayoutAccount(stored);
     }
   }, [storageName]);
 
@@ -82,7 +88,11 @@ export function ClaimDoor({
         }
         return;
       }
-      if (!cancel) setRaidId(raid.raidId);
+      if (!cancel) {
+        setRaidId(raid.raidId);
+        raidRecord.current = raid;
+        if (raid.payoutHash) setPayoutHash(raid.payoutHash);
+      }
       const sent = await apiPost("/crack", { raid_id: raid.raidId, vault_id: vaultId });
       const body = (sent.ok ? sent.body : null) as {
         ok?: boolean;
@@ -216,8 +226,19 @@ export function ClaimDoor({
       setError(sent.error);
       return;
     }
-    writePayoutAccount(window.localStorage, storageName, chosen);
+    writePayoutAccount(window.localStorage, storageName, sent.accountId);
     setPayoutAccount(sent.accountId);
+    setPayoutHash(sent.transactionHash);
+    const record = raidRecord.current;
+    if (record && payoutExplorerUrl(sent.transactionHash)) {
+      const next = { ...record, payoutHash: sent.transactionHash };
+      raidRecord.current = next;
+      try {
+        await saveRaid(storageName, vaultId, round, next);
+      } catch {
+        // The hash stays on this screen even if this browser cannot store it.
+      }
+    }
     setPhase("paying");
   }
 
@@ -306,11 +327,13 @@ export function ClaimDoor({
         {phase === "paying" && (
           <section className="mt-5 rounded-3xl border border-white/10 bg-night-2 p-5">
             <p className="font-sign text-2xl">The vault is paying.</p>
+            {payoutUrl ? <PaymentLink href={payoutUrl} /> : null}
           </section>
         )}
         {phase === "paid" && (
           <section className="mt-5">
             <p className="font-sign text-2xl">Paid.</p>
+            {payoutUrl ? <PaymentLink href={payoutUrl} /> : null}
           </section>
         )}
         {phase === "closed" && <p className="mt-5 text-sm text-chalk/70">This crack can no longer be claimed.</p>}
@@ -341,12 +364,30 @@ export function ClaimDoor({
             )}
           </section>
         )}
+        {payoutAccount ? (
+          <PayoutWallet
+            accountId={payoutAccount}
+            vaultId={vaultId}
+            round={round}
+            rpcUrl={rpcUrl}
+            contractId={contractId}
+            networkId={networkId}
+          />
+        ) : null}
         {vault && <p className="mt-4 font-mono text-xs text-chalk/80">Round {vault.round}</p>}
         <Link href={doorHref} className="chalk-focus mt-6 inline-flex min-h-11 items-center text-sm text-chalk/80 underline decoration-white/20">
           The door
         </Link>
       </div>
     </main>
+  );
+}
+
+function PaymentLink({ href }: { href: string }) {
+  return (
+    <a href={href} target="_blank" rel="noreferrer" className="chalk-focus mt-4 inline-flex min-h-11 items-center text-sm text-chalk underline decoration-white/20">
+      View the payment
+    </a>
   );
 }
 
