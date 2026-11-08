@@ -33,6 +33,11 @@ export function PlayerName({ initial = null }: { initial?: PlayerSession | null 
       }
       setSession(result.session);
       setDraft(result.session.player.name);
+    }).catch(() => {
+      if (!live) return;
+      setBusy(false);
+      setChecked(true);
+      setError("The player record could not be read.");
     });
     return () => { live = false; };
   }, [initial]);

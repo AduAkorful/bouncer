@@ -50,24 +50,27 @@ test("signing in asks for a passkey, not an empty security-key list", async () =
   const windowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
   const credentialDescriptor = Object.getOwnPropertyDescriptor(globalThis, "PublicKeyCredential");
   const credentialsDescriptor = Object.getOwnPropertyDescriptor(navigator, "credentials");
-  let options: PublicKeyCredentialRequestOptions & { hints?: string[] } | undefined;
+  let options: PublicKeyCredentialRequestOptions | undefined;
+  let gets = 0;
   Object.defineProperty(globalThis, "window", { configurable: true, value: { PublicKeyCredential: Credential, location: { hostname: "localhost" } } });
   Object.defineProperty(globalThis, "PublicKeyCredential", { configurable: true, value: Credential });
   Object.defineProperty(navigator, "credentials", { configurable: true, value: {
     get: async (request: CredentialRequestOptions) => {
-      options = request.publicKey as PublicKeyCredentialRequestOptions & { hints?: string[] };
+      gets += 1;
+      options = request.publicKey;
       return new Credential();
     },
     create: async () => { throw new Error("sign-in must not create a passkey"); },
   } });
   try {
-    try { localStorage.removeItem("bouncer.passkey.credential.v1"); } catch { /* no browser store in this test */ }
+    try { localStorage.setItem("bouncer.passkey.credential.v1", "00112233445566778899aabbccddeeff"); } catch { /* no browser store in this test */ }
     const unlocked = await unlockDevice();
     assert.ok("ikm" in unlocked);
     unlocked.ikm.fill(0);
+    assert.equal(gets, 1);
     assert.equal(options?.allowCredentials, undefined);
-    assert.equal(options?.extensions, undefined);
-    assert.deepEqual(options?.hints, ["client-device"]);
+    assert.equal("hints" in (options ?? {}), false);
+    assert.ok(options?.extensions && "prf" in options.extensions);
   } finally {
     for (const [target, key, descriptor] of [[globalThis, "window", windowDescriptor], [globalThis, "PublicKeyCredential", credentialDescriptor], [navigator, "credentials", credentialsDescriptor]] as const) {
       if (descriptor) Object.defineProperty(target, key, descriptor);

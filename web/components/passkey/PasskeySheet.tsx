@@ -2,12 +2,22 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { deriveSecrets, unlockDevice } from "@/lib/device-pass";
+import { deriveSecrets, unlockDevice, type DeviceSecrets } from "@/lib/device-pass";
 import { holdIkm } from "@/lib/player-hold";
+import { postPlayerSession } from "@/lib/player-session";
 import { PlayerName } from "@/components/profile/PlayerName";
 import { accessMessage, accessOnAccount, testnetAccountId, writePayoutAccount } from "@/lib/imported-account";
 
 type Step = "create" | "signing" | "add" | "done" | "error";
+
+async function keepPlayer(ikm: Uint8Array): Promise<{ secrets: DeviceSecrets } | { error: string }> {
+  holdIkm(ikm);
+  const secrets = await deriveSecrets(ikm, "account", "0");
+  if ("error" in secrets) return { error: "This device cannot keep a key in the passkey." };
+  const session = await postPlayerSession(secrets);
+  if (!session.ok) return { error: session.error };
+  return { secrets };
+}
 
 export function PasskeySheet({
   next,
@@ -57,8 +67,13 @@ export function PasskeySheet({
       setDetail(unlocked.error);
       return;
     }
-    holdIkm(unlocked.ikm);
+    const kept = await keepPlayer(unlocked.ikm);
     unlocked.ikm.fill(0);
+    if ("error" in kept) {
+      setStep("error");
+      setDetail(kept.error);
+      return;
+    }
     writePayoutAccount(window.localStorage, storageName, null);
     setAccountId(null);
     setStep("done");
@@ -86,14 +101,15 @@ export function PasskeySheet({
       setDetail(unlocked.error);
       return;
     }
-    holdIkm(unlocked.ikm);
-    const secrets = await deriveSecrets(unlocked.ikm, "account", "0");
-    unlocked.ikm.fill(0);
-    if ("error" in secrets) {
+    const kept = await keepPlayer(unlocked.ikm);
+    if ("error" in kept) {
+      unlocked.ikm.fill(0);
       setStep("error");
-      setDetail("This device cannot keep a key in the passkey.");
+      setDetail(kept.error);
       return;
     }
+    const secrets = kept.secrets;
+    unlocked.ikm.fill(0);
     setAccountId(named);
     setPublicKey(secrets.accountPublicKey);
     await look(named, secrets.accountPublicKey);

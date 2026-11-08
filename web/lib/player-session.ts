@@ -52,9 +52,15 @@ export function playerHeader(secrets: DeviceSecrets, route: string): string {
     secrets.claimPublicKeyHex,
     String(seconds),
     nonce,
-    Buffer.from(account.sign(message).signature).toString("base64"),
-    Buffer.from(claim.sign(message).signature).toString("base64"),
+    bytesToBase64(account.sign(message).signature),
+    bytesToBase64(claim.sign(message).signature),
   ].join("|");
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
 }
 
 function readSession(result: Awaited<ReturnType<typeof apiPost>>): { ok: true; session: PlayerSession } | { ok: false; error: string } {
