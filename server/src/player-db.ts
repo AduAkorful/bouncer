@@ -16,15 +16,30 @@ export function readSurrealEnv(source: Record<string, string | undefined>): { ok
   return { ok: true, env: { url: values.SURREAL_URL.replace(/\/$/, ""), user: values.SURREAL_USER, pass: values.SURREAL_PASS, ns: values.SURREAL_NS, db: values.SURREAL_DB } };
 }
 
+/** Surreal Cloud accepts the SDK over HTTPS. A websocket from the host was dropping the record. */
+export function playerDbUrl(url: string): string {
+  return url.startsWith("wss:") ? `https:${url.slice("wss:".length)}` : url;
+}
+
 export function surrealPlayers(env: SurrealEnv): PlayerStore {
   let ready: Promise<Surreal> | null = null;
   const db = async (): Promise<Surreal> => {
-    ready ??= open(env);
+    if (!ready) {
+      ready = open(env).catch((error: unknown) => {
+        ready = null;
+        throw error;
+      });
+    }
     return ready;
   };
   const rows = async (sql: string, vars: Record<string, unknown> = {}): Promise<unknown[]> => {
-    const [result] = await (await db()).query(sql, vars).collect<[unknown[]]>();
-    return Array.isArray(result) ? result : [];
+    try {
+      const [result] = await (await db()).query(sql, vars).collect<[unknown[]]>();
+      return Array.isArray(result) ? result : [];
+    } catch (error) {
+      ready = null;
+      throw error;
+    }
   };
   return {
     async findByAccount(publicKey) {
@@ -61,7 +76,7 @@ export function surrealPlayers(env: SurrealEnv): PlayerStore {
 
 async function open(env: SurrealEnv): Promise<Surreal> {
   const db = new Surreal();
-  await db.connect(env.url);
+  await db.connect(playerDbUrl(env.url));
   await db.signin({ username: env.user, password: env.pass });
   await db.use({ namespace: env.ns, database: env.db });
   await db.query([

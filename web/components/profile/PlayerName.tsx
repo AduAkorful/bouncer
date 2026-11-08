@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { loadPlayerSession, rollPlayerName, savePlayerName, type PlayerSession } from "@/lib/player-session";
 import { deriveSecrets, unlockDevice } from "@/lib/device-pass";
 import { clearHold, holdIkm, readHold, unlockHeld } from "@/lib/player-hold";
@@ -13,6 +13,7 @@ export function PlayerName({ initial = null }: { initial?: PlayerSession | null 
   const [busy, setBusy] = useState(false);
   const [checked, setChecked] = useState(initial !== null);
   const [signedIn, setSignedIn] = useState(initial !== null);
+  const [confirming, setConfirming] = useState(false);
 
   useEffect(() => {
     if (initial) return;
@@ -48,6 +49,7 @@ export function PlayerName({ initial = null }: { initial?: PlayerSession | null 
     setDraft("");
     setError(null);
     setSignedIn(false);
+    setConfirming(false);
   }
 
   async function accountSecrets() {
@@ -152,7 +154,8 @@ export function PlayerName({ initial = null }: { initial?: PlayerSession | null 
             </button>
           )}
         </div>
-        {signedIn ? <button type="button" onClick={logout} className="chalk-focus mt-3 block min-h-11 text-sm text-chalk/70 underline decoration-white/20">Log out</button> : null}
+        {signedIn ? <button type="button" onClick={() => setConfirming(true)} className="chalk-focus mt-3 block min-h-11 text-sm text-chalk/70 underline decoration-white/20">Log out</button> : null}
+        {confirming ? <LogoutDialog onStay={() => setConfirming(false)} onLogout={logout} /> : null}
       </div>
     );
   }
@@ -190,7 +193,39 @@ export function PlayerName({ initial = null }: { initial?: PlayerSession | null 
         </ul>
       ) : null}
       {session.line ? <a href={`/p/${encodeURIComponent(session.player.name)}`} className="chalk-focus mt-3 inline-flex min-h-11 items-center text-sm text-chalk/80 underline decoration-white/20">Share your place</a> : null}
-      <button type="button" onClick={logout} className="chalk-focus mt-3 block min-h-11 text-sm text-chalk/70 underline decoration-white/20">Log out</button>
+      <button type="button" onClick={() => setConfirming(true)} className="chalk-focus mt-3 block min-h-11 text-sm text-chalk/70 underline decoration-white/20">Log out</button>
+      {confirming ? <LogoutDialog onStay={() => setConfirming(false)} onLogout={logout} /> : null}
+    </div>
+  );
+}
+
+function LogoutDialog({ onStay, onLogout }: { onStay: () => void; onLogout: () => void }) {
+  const stayRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    stayRef.current?.focus();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onStay();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onStay]);
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-4 sm:items-center" onClick={onStay}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="logout-title"
+        aria-describedby="logout-note"
+        className="w-full max-w-sm rounded-3xl bg-paper p-5 text-on-paper"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <h2 id="logout-title" className="font-sign text-2xl">Log out?</h2>
+        <p id="logout-note" className="mt-2 text-sm">This browser forgets the sign-in. Your passkey and your name stay. Signing in again brings the name back.</p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button ref={stayRef} type="button" onClick={onStay} className="chalk-focus min-h-11 rounded-2xl bg-on-paper px-4 py-2 text-sm text-paper">Stay signed in</button>
+          <button type="button" onClick={onLogout} className="chalk-focus min-h-11 rounded-2xl border border-rule px-4 py-2 text-sm">Log out</button>
+        </div>
+      </div>
     </div>
   );
 }

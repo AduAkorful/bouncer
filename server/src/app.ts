@@ -254,8 +254,17 @@ export function createApp(deps: Deps) {
     return who.ok ? who : null;
   };
   const unavailable = (c: Context) => c.json({ ok: false, error: "record" }, 503);
+  const stored = async (c: Context, run: () => Promise<Response>) => {
+    try {
+      return await run();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "error";
+      console.error("player record", message.replace(/https?:\/\/\S+/g, "[url]").slice(0, 200));
+      return unavailable(c);
+    }
+  };
 
-  app.post("/player/session", async (c) => {
+  app.post("/player/session", (c) => stored(c, async () => {
     if (!take(c, "player", 30, MINUTE)) return slow(c);
     if (!deps.players) return unavailable(c);
     const who = await player(c, "/player/session");
@@ -263,9 +272,9 @@ export function createApp(deps: Deps) {
     const opened = await openSession(deps.players, { ...who, now: deps.now() });
     if (!opened.ok) return c.json(opened, 409);
     return c.json(await playerView(deps.players, opened.player, opened.nights, deps.now()));
-  });
+  }));
 
-  app.post("/player/roll", async (c) => {
+  app.post("/player/roll", (c) => stored(c, async () => {
     if (!take(c, "player", 30, MINUTE)) return slow(c);
     if (!deps.players) return unavailable(c);
     const who = await player(c, "/player/roll");
@@ -274,9 +283,9 @@ export function createApp(deps: Deps) {
     if (!rolled.ok) return c.json(rolled, 409);
     const nights = await deps.players.nightsFor(rolled.player.claimKey);
     return c.json(await playerView(deps.players, rolled.player, nights, deps.now()));
-  });
+  }));
 
-  app.post("/player/name", async (c) => {
+  app.post("/player/name", (c) => stored(c, async () => {
     if (!take(c, "player", 30, MINUTE)) return slow(c);
     if (!deps.players) return unavailable(c);
     const who = await player(c, "/player/name");
@@ -287,9 +296,9 @@ export function createApp(deps: Deps) {
     if (!renamed.ok) return c.json(renamed, 409);
     const nights = await deps.players.nightsFor(renamed.player.claimKey);
     return c.json(await playerView(deps.players, renamed.player, nights, deps.now()));
-  });
+  }));
 
-  app.post("/player/resume", async (c) => {
+  app.post("/player/resume", (c) => stored(c, async () => {
     if (!take(c, "player", 30, MINUTE)) return slow(c);
     if (!deps.players) return unavailable(c);
     const who = await player(c, "/player/resume");
@@ -300,15 +309,15 @@ export function createApp(deps: Deps) {
     if (!validVaultId(vaultId) || !/^[0-9]+$/.test(round)) return c.json({ ok: false, error: "bad request" }, 400);
     const blob = await deps.players.readBlob(who.claimKey, vaultId, round);
     return c.json({ ok: true, blob });
-  });
+  }));
 
-  app.get("/player/board", async (c) => {
+  app.get("/player/board", (c) => stored(c, async () => {
     if (!deps.players) return unavailable(c);
     const board = publicBoard(await deps.players.allPlayers(), utcDay(deps.now()));
     return c.json({ ok: true, players: board.slice(0, 50) });
-  });
+  }));
 
-  app.get("/player/share/:name", async (c) => {
+  app.get("/player/share/:name", (c) => stored(c, async () => {
     if (!deps.players) return unavailable(c);
     const name = playerNameToStore(c.req.param("name"));
     if (!name) return c.json({ ok: false, error: "name" }, 404);
@@ -316,7 +325,7 @@ export function createApp(deps: Deps) {
     const row = board.find((player) => player.name === name);
     if (!row) return c.json({ ok: false, error: "name" }, 404);
     return c.json({ ok: true, player: row });
-  });
+  }));
 
   return app;
 }

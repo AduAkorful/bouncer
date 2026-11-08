@@ -69,8 +69,49 @@ test("signing in asks for a passkey, not an empty security-key list", async () =
     unlocked.ikm.fill(0);
     assert.equal(gets, 1);
     assert.equal(options?.allowCredentials, undefined);
+    assert.equal(options?.extensions, undefined);
     assert.equal("hints" in (options ?? {}), false);
-    assert.ok(options?.extensions && "prf" in options.extensions);
+  } finally {
+    for (const [target, key, descriptor] of [[globalThis, "window", windowDescriptor], [globalThis, "PublicKeyCredential", credentialDescriptor], [navigator, "credentials", credentialsDescriptor]] as const) {
+      if (descriptor) Object.defineProperty(target, key, descriptor);
+      else Reflect.deleteProperty(target, key);
+    }
+  }
+});
+
+test("the secret is read from the passkey that was chosen", async () => {
+  class Credential {
+    rawId = new Uint8Array(16).buffer;
+    prf = false;
+    getClientExtensionResults() {
+      return this.prf ? { prf: { results: { first: new Uint8Array(32).fill(4).buffer } } } : {};
+    }
+  }
+  const windowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const credentialDescriptor = Object.getOwnPropertyDescriptor(globalThis, "PublicKeyCredential");
+  const credentialsDescriptor = Object.getOwnPropertyDescriptor(navigator, "credentials");
+  const seen: PublicKeyCredentialRequestOptions[] = [];
+  Object.defineProperty(globalThis, "window", { configurable: true, value: { PublicKeyCredential: Credential, location: { hostname: "localhost" } } });
+  Object.defineProperty(globalThis, "PublicKeyCredential", { configurable: true, value: Credential });
+  Object.defineProperty(navigator, "credentials", { configurable: true, value: {
+    get: async (request: CredentialRequestOptions) => {
+      const credential = new Credential();
+      seen.push(request.publicKey as PublicKeyCredentialRequestOptions);
+      credential.prf = seen.length > 1;
+      return credential;
+    },
+    create: async () => { throw new Error("sign-in must not create a passkey"); },
+  } });
+  try {
+    const unlocked = await unlockDevice();
+    assert.ok("ikm" in unlocked);
+    unlocked.ikm.fill(0);
+    assert.equal(seen.length, 2);
+    assert.equal(seen[0].extensions, undefined);
+    assert.equal(seen[0].allowCredentials, undefined);
+    assert.equal(seen[1].allowCredentials?.[0]?.transports, undefined);
+    assert.equal(seen[1].allowCredentials?.length, 1);
+    assert.ok(seen[1].extensions && "prf" in seen[1].extensions);
   } finally {
     for (const [target, key, descriptor] of [[globalThis, "window", windowDescriptor], [globalThis, "PublicKeyCredential", credentialDescriptor], [navigator, "credentials", credentialsDescriptor]] as const) {
       if (descriptor) Object.defineProperty(target, key, descriptor);

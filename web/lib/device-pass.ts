@@ -71,10 +71,10 @@ export async function unlockDevice(signal?: AbortSignal, mode: "get" | "create" 
     return await Promise.race([aborted, (async (): Promise<Unlocked> => {
       const salt = await digest(PRF_LABEL);
       active.throwIfAborted();
-      const credential = mode === "create" ? await createPasskey(host, salt, active) : await getPasskey(host, salt, active);
+      const credential = mode === "create" ? await createPasskey(host, salt, active) : await getPasskey(host, salt, active, null);
       active.throwIfAborted();
       if (!credential) return { error: "No passkey was selected. Create one from the passkey page, or try again with your existing passkey." };
-      const ikm = prfBytes(credential);
+      const ikm = prfBytes(credential) ?? (mode === "create" ? null : prfBytes(await getPasskey(host, salt, active, rawId(credential))));
       if (active.aborted) { ikm?.fill(0); active.throwIfAborted(); }
       if (!ikm || ikm.length !== 32) return { error: "This passkey cannot unlock Bouncer. Try a passkey provider that supports secure key derivation (PRF)." };
       return { ikm };
@@ -115,22 +115,29 @@ function prfExtension(salt: Uint8Array) {
   return { prf: { eval: { first: salt } } };
 }
 
-async function getPasskey(host: string, salt: Uint8Array, signal: AbortSignal): Promise<PublicKeyCredential | null> {
+async function getPasskey(host: string, salt: Uint8Array, signal: AbortSignal, id: BufferSource | null): Promise<PublicKeyCredential | null> {
   const challenge = new Uint8Array(32);
   crypto.getRandomValues(challenge);
-  // One discoverable request. A saved id, an internal transport, or a
-  // client-device hint is what makes Windows show the security-key dialog.
-  // The name is derived from PRF, so that extension has to be on this same
-  // prompt. A second prompt is the one a phone can finish without the bytes.
+  // The PRF extension on a discoverable request is what makes Windows show
+  // "Insert your security key." The picker stays a plain passkey request.
+  // PRF is asked only for the passkey the user just chose, with no transport.
   const publicKey: PublicKeyCredentialRequestOptions = {
     challenge,
     rpId: host,
     timeout: 60_000,
-    userVerification: "required",
-    extensions: prfExtension(salt) as AuthenticationExtensionsClientInputs,
+    userVerification: id ? "preferred" : "required",
   };
+  if (id) {
+    publicKey.allowCredentials = [{ type: "public-key", id }];
+    publicKey.extensions = prfExtension(salt) as AuthenticationExtensionsClientInputs;
+  }
   const credential = await navigator.credentials.get({ signal, publicKey });
   return credential instanceof PublicKeyCredential ? credential : null;
+}
+
+function rawId(credential: PublicKeyCredential): BufferSource {
+  const bytes = new Uint8Array(credential.rawId);
+  return owned(bytes);
 }
 
 async function createPasskey(host: string, salt: Uint8Array, signal: AbortSignal): Promise<PublicKeyCredential> {
