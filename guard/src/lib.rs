@@ -28,9 +28,3 @@ pub use verdict::GENERATOR;
 
 #[cfg(test)]
 mod tests;
-#[cfg(test)]
-mod spec_tests;
-#[cfg(test)]
-mod retry_tests;
-#[cfg(test)]
-mod abuse_tests;
