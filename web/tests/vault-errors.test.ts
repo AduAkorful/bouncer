@@ -12,3 +12,7 @@ test("an unknown reason, a bare trap, or nothing never shows raw text", () => {
     assert.equal(reasonOf(input), "The vault refused this. Nothing was changed.");
   }
 });
+
+test("a sponsor's own claim reads as a sentence", () => {
+  assert.equal(reasonOf({ ActionError: { kind: { FunctionCallError: { ExecutionError: "Smart contract panicked: sponsor cannot claim" } } } }), "A door's sponsor or the vault owner cannot be paid from it.");
+});

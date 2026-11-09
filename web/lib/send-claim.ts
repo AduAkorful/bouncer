@@ -4,6 +4,7 @@ import { claimMessage } from "./claim";
 import { deriveSecrets } from "./device-pass";
 import { unlockHeld } from "./player-hold";
 import { accessMessage, accessOnAccount, testnetAccountId } from "./imported-account";
+import { reasonOf } from "./vault-errors";
 
 const CLAIM_GAS = 300_000_000_000_000n;
 
@@ -53,7 +54,7 @@ export async function sendClaim(input: {
     const hash = outcome.transaction?.hash;
     if (!hash) return { ok: false, error: "The claim was not sent." };
     if (outcome.status && typeof outcome.status === "object" && "Failure" in outcome.status) {
-      return { ok: false, error: "The vault refused the claim." };
+      return { ok: false, error: reasonOf(outcome.status) };
     }
     return { ok: true, transactionHash: hash, accountId };
   } catch (error) {
@@ -122,6 +123,7 @@ async function deviceSecrets(
 
 function shortError(error: unknown): string {
   const message = error instanceof Error ? error.message : "The claim was not sent.";
+  if (message.includes("sponsor cannot claim")) return reasonOf(message);
   if (message.length > 180 || message.includes("ed25519:")) return "The claim was not sent.";
   return message;
 }

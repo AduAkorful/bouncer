@@ -1,6 +1,6 @@
 import { doorPaths, isVaultId } from "./door-read.ts";
 
-export type RaidHistoryState = "shut" | "opened" | "in";
+export type RaidHistoryState = "shut" | "opened" | "held" | "in";
 
 export type RaidHistoryRow = {
   vaultId: string;
@@ -17,21 +17,25 @@ export function raidHistoryRow(key: unknown, value: unknown): RaidHistoryRow | n
   const round = key.slice(split + 1);
   if (!isVaultId(vaultId) || !/^[0-9]+$/.test(round)) return null;
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const row = value as { blob?: unknown; verdict?: unknown };
+  const row = value as { blob?: unknown; verdict?: unknown; transactionHash?: unknown; recorded?: unknown };
   const opened = typeof row.blob === "string" && row.blob.length > 0;
-  const gotIn = row.verdict !== null && typeof row.verdict === "object";
-  return { vaultId, round, state: gotIn ? "in" : opened ? "opened" : "shut" };
+  const approved = row.verdict !== null && typeof row.verdict === "object";
+  // An approved bill is only "in" once the vault has recorded it.
+  const recorded = row.recorded === true || (typeof row.transactionHash === "string" && row.transactionHash.length > 0);
+  const state = approved ? (recorded ? "in" : "held") : opened ? "opened" : "shut";
+  return { vaultId, round, state };
 }
 
 export function raidHistoryLabel(state: RaidHistoryState): string {
   if (state === "in") return "Got in";
+  if (state === "held") return "Approved, not recorded";
   if (state === "opened") return "Opened";
   return "Not opened";
 }
 
+/** A win links to the claim for its own round. Anything else links to the door, which knows whether that round is still open. */
 export function raidHistoryHref(row: RaidHistoryRow): string {
   const paths = doorPaths(row.vaultId);
-  if (row.state === "in") return paths.claim;
-  if (row.state === "opened") return paths.play;
+  if (row.state === "in" || row.state === "held") return `${paths.claim}?round=${row.round}`;
   return paths.door;
 }

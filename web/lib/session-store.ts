@@ -22,7 +22,15 @@ export type StoredRaid = {
   raidId: string;
   blob: string | null;
   verdict: unknown | null;
+  /** The guard's signature over `verdict`, kept until the vault records it. */
+  signature?: string | null;
   transactionHash: string | null;
+  /** Messages the guard has counted on this raid. */
+  used?: number;
+  /** A guard call sent and not yet answered. A reload sends it again, and the guard replies from its store. */
+  pending?: { body: Record<string, unknown>; bill: boolean; playerText: string } | null;
+  /** The vault has a crack for this raid, even when the transaction that recorded it was not seen here. */
+  recorded?: boolean;
   /** The claim transaction, once the vault was asked to pay. */
   payoutHash?: string | null;
   street: StoredStreet | null;

@@ -32,6 +32,7 @@ const REASONS: Record<string, string> = {
   "refund pending": "A refund is already on its way.",
   empty: "There is nothing to take back.",
   gas: "The transaction did not carry enough gas.",
+  "sponsor cannot claim": "A door's sponsor or the vault owner cannot be paid from it.",
 };
 
 const GENERIC = "The vault refused this. Nothing was changed.";

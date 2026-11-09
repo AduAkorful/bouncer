@@ -9,7 +9,10 @@ test("a raid record becomes a door, a round, and a state", () => {
     state: "shut",
   });
   assert.equal(raidHistoryRow("qa-coast-05:2", { blob: "sealed", verdict: null })?.state, "opened");
-  assert.equal(raidHistoryRow("velvet-1:1", { blob: "sealed", verdict: { amount: "100" } })?.state, "in");
+  assert.equal(raidHistoryRow("velvet-1:1", { blob: "sealed", verdict: { amount: "100" } })?.state, "held");
+  assert.equal(raidHistoryRow("velvet-1:1", { blob: "sealed", verdict: { amount: "100" }, transactionHash: "abc" })?.state, "in");
+  assert.equal(raidHistoryRow("velvet-1:1", { blob: "sealed", verdict: { amount: "100" }, transactionHash: null, recorded: true })?.state, "in");
+  assert.equal(raidHistoryLabel("held"), "Approved, not recorded");
   assert.equal(raidHistoryLabel("in"), "Got in");
   assert.equal(raidHistoryLabel("opened"), "Opened");
   assert.equal(raidHistoryLabel("shut"), "Not opened");
@@ -25,8 +28,9 @@ test("transcripts and unsafe keys are left out", () => {
 
 test("a raid links to that vault's own pages", () => {
   const opened = { vaultId: "velvet-1", round: "1", state: "opened" as const };
-  assert.equal(raidHistoryHref(opened), "/v/velvet-1/play");
-  assert.equal(raidHistoryHref({ ...opened, state: "in" }), "/v/velvet-1/claim");
+  assert.equal(raidHistoryHref(opened), "/v/velvet-1");
+  assert.equal(raidHistoryHref({ ...opened, state: "in" }), `/v/velvet-1/claim?round=${opened.round}`);
+  assert.equal(raidHistoryHref({ ...opened, state: "held" }), `/v/velvet-1/claim?round=${opened.round}`);
   assert.equal(raidHistoryHref({ ...opened, state: "shut" }), "/v/velvet-1");
-  assert.equal(raidHistoryHref({ vaultId: "qa-coast-05", round: "2", state: "opened" }), "/v/qa-coast-05/play");
+  assert.equal(raidHistoryHref({ vaultId: "qa-coast-05", round: "2", state: "opened" }), "/v/qa-coast-05");
 });
