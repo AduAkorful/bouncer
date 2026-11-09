@@ -195,3 +195,23 @@ fn pay_the_bill_reserves_and_does_not_transfer() {
     assert_eq!(calls().len(), before);
     books(&door.world.contract, &["velvet"]);
 }
+
+/// The relay sends `round` and `amount` as JSON numbers. A quoted amount is what failed on testnet on 9 Nov.
+#[test]
+fn verdict_json_takes_numbers_and_refuses_a_quoted_amount() {
+    let bytes = |n: usize, b: u8| format!("[{}]", vec![b.to_string(); n].join(","));
+    let body = |amount: &str| {
+        format!(
+            r#"{{"vault_id":"osu-night-12","round":1,"raid_id":"r1","player_id":"p1","bill_hash":{},"amount":{},"claim_pk":{},"conversation_hash":{},"guard_version":{}}}"#,
+            bytes(32, 1),
+            amount,
+            bytes(32, 2),
+            bytes(32, 3),
+            bytes(32, 4)
+        )
+    };
+    let parsed: crate::state::VerdictMessage = near_sdk::serde_json::from_str(&body("8550000")).unwrap();
+    assert_eq!(parsed.amount, 8_550_000);
+    assert_eq!(parsed.round, 1);
+    assert!(near_sdk::serde_json::from_str::<crate::state::VerdictMessage>(&body("\"8550000\"")).is_err());
+}

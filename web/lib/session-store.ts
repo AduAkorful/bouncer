@@ -31,6 +31,8 @@ export type StoredRaid = {
   pending?: { body: Record<string, unknown>; bill: boolean; playerText: string } | null;
   /** The vault has a crack for this raid, even when the transaction that recorded it was not seen here. */
   recorded?: boolean;
+  /** Why the vault refused the held verdict. Set, the verdict is not sent again on its own. */
+  refused?: string | null;
   /** The claim transaction, once the vault was asked to pay. */
   payoutHash?: string | null;
   street: StoredStreet | null;

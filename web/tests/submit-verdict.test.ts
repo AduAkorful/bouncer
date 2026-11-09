@@ -20,7 +20,7 @@ function guardVerdict(round: unknown) {
   };
 }
 
-test("the contract gets the round as a JSON number", () => {
+test("the contract gets the round and the amount as JSON numbers", () => {
   for (const round of [5, "5"]) {
     const parsed = parseVerdictSubmission(guardVerdict(round));
     assert.equal(parsed.ok, true);
@@ -29,12 +29,22 @@ test("the contract gets the round as a JSON number", () => {
     assert.ok(args);
     assert.equal(args.verdict.round, 5);
     assert.match(JSON.stringify(args), /"round":5[,}]/);
-    assert.equal(args.verdict.amount, "8550000");
+    // The contract's amount is a u128 read from a JSON number. A quoted amount panics on deserialize.
+    assert.equal(args.verdict.amount, 8550000);
+    assert.match(JSON.stringify(args), /"amount":8550000[,}]/);
   }
 });
 
 test("a round past the safe integer range is not sent", () => {
   const parsed = parseVerdictSubmission(guardVerdict("9007199254740993"));
+  if (!parsed.ok) return;
+  assert.equal(verdictArgs(parsed.verdict, parsed.signature), null);
+});
+
+test("an amount past the safe integer range is not sent", () => {
+  const body = guardVerdict(5);
+  body.verdict.amount = "9007199254740993";
+  const parsed = parseVerdictSubmission(body);
   if (!parsed.ok) return;
   assert.equal(verdictArgs(parsed.verdict, parsed.signature), null);
 });

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { ApiResult } from "../lib/api.ts";
-import { heldVerdict, submitHeld } from "../lib/held-verdict.ts";
+import { heldRefusal, heldVerdict, submitHeld } from "../lib/held-verdict.ts";
 
 const hex = (n: number, byte = "ab") => byte.repeat(n);
 const verdict = {
@@ -76,4 +76,25 @@ test("an unreadable verdict is not sent", async () => {
   const outcome = await submitHeld(heldVerdict(broken)!, "raid-1", "qa-coast-05", post);
   assert.equal(outcome.ok, false);
   assert.equal(calls.length, 0);
+});
+
+test("a contract refusal says why and is not offered again", async () => {
+  const { post, calls } = poster({
+    "/verdict": [reply(422, { ok: false, error: "refused", reason: "Smart contract panicked: not open" })],
+    "/crack": [reply(200, { ok: true, crack: null })],
+  });
+  const outcome = await submitHeld(heldVerdict(raid)!, "raid-1", "qa-coast-05", post);
+  assert.equal(outcome.ok, false);
+  if (outcome.ok) return;
+  assert.equal(outcome.retry, false);
+  assert.equal(outcome.refused, true);
+  assert.match(outcome.message, /^The round is not open\. Sending it again will not change that\.$/);
+  assert.equal(calls.filter((c) => c.path === "/verdict").length, 1);
+});
+
+test("a stored refusal is read back, an empty one is not", () => {
+  assert.equal(heldRefusal({ refused: "The round is not open." }), "The round is not open.");
+  assert.equal(heldRefusal({ refused: "" }), null);
+  assert.equal(heldRefusal({ refused: null }), null);
+  assert.equal(heldRefusal(null), null);
 });
