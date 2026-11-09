@@ -4,7 +4,7 @@ import { RevealGate } from "@/components/gates";
 import { NightShell } from "@/components/NightShell";
 import { doorPaths } from "@/lib/door-read";
 
-export const metadata = screen("Last night's door", "The ledger from the round that closed.");
+export const metadata = screen("The ledger", "A round's ledger, shown once the round has closed.");
 
 export default function Page({ params }: { params: Promise<{ vault: string }> }) {
   return (

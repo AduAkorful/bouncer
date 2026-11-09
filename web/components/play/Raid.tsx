@@ -4,7 +4,7 @@ import { cardLook, type Card } from "@/lib/card";
 import { apiPost, asObject } from "@/lib/api";
 
 import gsap from "gsap";
-import { Suspense, useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "react";
+import { Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "react";
 import { Countdown } from "@/components/Countdown";
 import { DemoBadge, Money } from "@/components/bits";
 import { DoorScene } from "@/components/DoorScene";
@@ -12,7 +12,7 @@ import { SceneLife } from "@/components/SceneLife";
 import { StreetBar } from "@/components/home/StreetBar";
 import { StreetScroll } from "@/components/home/StreetScroll";
 import { OfficeScene } from "@/components/OfficeScene";
-import { BillBuilder } from "@/components/play/BillBuilder";
+import { BillBuilder, forgetBillDraft } from "@/components/play/BillBuilder";
 import { Desk, type Note } from "@/components/play/Desk";
 import { ApprovedStamp, RefusedStamp } from "@/components/Stamp";
 import { TokenBridge } from "@/components/TokenAmount";
@@ -20,6 +20,8 @@ import type { DraftBill } from "@/lib/bill";
 
 type Decision = "ask" | "refused" | "approved" | "none";
 import { Blocked } from "@/components/Blocked";
+import { doorPaths } from "@/lib/door-read";
+import { heldVerdict, submitHeld, verdictAmount } from "@/lib/held-verdict";
 import { doorTitle, playableRaid, playerDetail, playGateStatus, playStop } from "@/lib/door";
 import { resumeRaid, postPlayerSession } from "@/lib/player-session";
 import type { VaultView } from "@/lib/vault";
@@ -40,7 +42,9 @@ import { babble, music, setCity as setSoundCity, setSound, sfx, VOICES } from "@
 import { shortHash } from "@/lib/stamp";
 
 type Gate = "door" | "office";
-type Stage = "play" | "choice" | "end";
+type Stage = "play" | "held" | "choice" | "end";
+/** Where a recorded verdict goes next: the door's celebration, the office's, or straight to the end screen after a reload. */
+type After = "door" | "office" | "end";
 type End = "door" | "office" | "out";
 
 const SPEAKER = { door: { name: "", voice: VOICES.sam, who: "sam" as const }, office: { name: "MADAM EFUA", voice: VOICES.efua, who: "efua" as const } };
@@ -84,6 +88,24 @@ export default function PlayFrame({
   const setting = card?.setting ?? ACCRA_SETTING;
   const streetKey = `${setting.stall}${setting.ride}${setting.passer}${setting.seller}${setting.shop}${setting.weather}${setting.posters}${setting.sound}`;
   const send = (body: Record<string, unknown>) => postGuard(specCt ? { ...body, spec_ct: specCt } : body);
+
+  /**
+   * The guard advances the sealed blob before its reply arrives. The call is stored first, so a reload can send
+   * the same blob and input again, and the guard answers that repeat from its stored reply.
+   */
+  async function guardCall(current: StoredRaid, body: Record<string, unknown>, bill: boolean, playerText: string) {
+    const waiting = { ...current, pending: { body, bill, playerText } };
+    sessionRef.current = waiting;
+    await saveRaid(storageName, vaultId, vault.round, waiting).catch(() => undefined);
+    const { payload, answered } = await send(body);
+    if (!answered) {
+      // The call stays stored. The next load sends it again.
+      setNotice("The guard did not answer. Your message is kept and will be sent again.");
+      setBusy(false);
+      return;
+    }
+    applyGuard({ ...waiting, pending: null }, payload, bill, playerText);
+  }
   const root = useRef<HTMLDivElement>(null);
   const scene = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLElement>(null);
@@ -93,6 +115,8 @@ export default function PlayFrame({
   const muted = useRef(false);
   const leftRef = useRef(messageBudget);
   const sessionRef = useRef<StoredRaid | null>(null);
+  /** A stored raid waiting for its passkey after a log out. */
+  const parked = useRef<StoredRaid | null>(null);
   const transcriptRef = useRef<Exchange[]>([]);
   const transcriptWrites = useRef<Promise<void>>(Promise.resolve());
   const [transcript, setTranscript] = useState<Exchange[]>([]);
@@ -103,11 +127,13 @@ export default function PlayFrame({
   const [end, setEnd] = useState<End>("door");
   const [left, setLeft] = useState(messageBudget);
   const [confirmedLeft, setConfirmedLeft] = useState<number | null>(null);
+  /** A line from the page, not from the guard: errors and recovery. */
+  const [notice, setNotice] = useState<string | null>(null);
   const [session, setSession] = useState<StoredRaid | null>(null);
   const [doorError, setDoorError] = useState<string | null>(null);
   const [signedAmount, setSignedAmount] = useState<string | null>(null);
   const [signedHex, setSignedHex] = useState<string | null>(null);
-  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [holding, setHolding] = useState<{ sending: boolean; message: string | null; retry: boolean; after: After } | null>(null);
   const [busy, setBusy] = useState(false);
   const [line, setLine] = useState(OPENERS.door);
   const [typed, setTyped] = useState(OPENERS.door.length);
@@ -118,7 +144,26 @@ export default function PlayFrame({
   const [seen, setSeen] = useState(0);
   const [heard, setHeard] = useState<Record<string, number>>({});
   const [bubble, setBubble] = useState<{ who: string; text: string; x: number; y: number; learn?: boolean; gloss?: string } | null>(null);
-  const [sheet, setSheet] = useState<"bill" | "desk" | null>(null);
+  const [sheet, setSheetState] = useState<"bill" | "desk" | null>(null);
+  const billDraftKey = `${storageName}:bill:${vaultId}:${vault.round}`;
+  // An open sheet is one history entry, so the phone's Back closes it instead of leaving the raid.
+  const setSheet = useCallback((next: "bill" | "desk" | null) => {
+    const marked = Boolean((window.history.state as { bouncerSheet?: boolean } | null)?.bouncerSheet);
+    if (next && !marked) window.history.pushState({ ...(window.history.state ?? {}), bouncerSheet: true }, "");
+    if (!next && marked) {
+      window.history.back();
+      return;
+    }
+    setSheetState(next);
+  }, []);
+  useEffect(() => {
+    // A reload keeps the marked entry with no sheet open. Unmark it so the next close does not go back a page.
+    const state = window.history.state as { bouncerSheet?: boolean } | null;
+    if (state?.bouncerSheet) window.history.replaceState({ ...state, bouncerSheet: false }, "");
+    const onPop = () => setSheetState(null);
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
   const [saying, setSaying] = useState(false);
   const [draft, setDraft] = useState("");
   const [xp, setXp] = useState(340);
@@ -142,18 +187,15 @@ export default function PlayFrame({
         return;
       }
       if (ready && "playerId" in ready) {
-        try {
-          const history = await loadTranscript(storageName, vaultId, vault.round);
-          if (cancel) return;
-          transcriptRef.current = history;
-          setTranscript(history);
-          const last = history.at(-1);
-          if (last) { setYou(last.player); setLine(last.guard); setTyped(last.guard.length); }
-        } catch { if (!cancel) setTranscriptError(true); }
-        if (cancel) return;
-        sessionRef.current = ready;
-        setSession(ready);
-        setNotes(ready.notes);
+        // A raid on this browser is not reopened for whoever is here: after a log out, the passkey has to match it.
+        const signedIn = readHold();
+        if (!signedIn) {
+          parked.current = ready;
+          setWait("key");
+          return;
+        }
+        signedIn.fill(0);
+        await adoptStored(ready, () => cancel);
         return;
       }
       const held = readHold();
@@ -170,6 +212,36 @@ export default function PlayFrame({
     };
   }, [storageName, vaultId, vault.round]);
 
+  async function adoptStored(ready: StoredRaid, cancelled: () => boolean = () => false) {
+    try {
+      const history = await loadTranscript(storageName, vaultId, vault.round);
+      if (cancelled()) return;
+      transcriptRef.current = history;
+      setTranscript(history);
+      const last = history.at(-1);
+      if (last) { setYou(last.player); setLine(last.guard); setTyped(last.guard.length); }
+    } catch { if (!cancelled()) setTranscriptError(true); }
+    if (cancelled()) return;
+    sessionRef.current = ready;
+    setSession(ready);
+    setNotes(ready.notes);
+    if (typeof ready.used === "number") countFrom(ready.used);
+    if (ready.pending) {
+      const pending = ready.pending;
+      setYou(pending.playerText);
+      setNotice("Getting the guard's last reply…");
+      setBusy(true);
+      void guardCall(ready, pending.body, pending.bill, pending.playerText);
+      return;
+    }
+    const held = heldVerdict(ready);
+    if (held) {
+      setSignedAmount(verdictAmount(held.verdict));
+      setSignedHex(held.signature);
+      void recordHeld("end");
+    }
+  }
+
   async function startWithPasskey() {
     setBusy(true);
     const unlocked = await unlockHeld();
@@ -185,6 +257,19 @@ export default function PlayFrame({
       setBusy(false);
       setWait("key");
       setDoorError("This device cannot keep a key in the passkey.");
+      return;
+    }
+    const stored = parked.current;
+    if (stored) {
+      setBusy(false);
+      if (secrets.raidId !== stored.raidId) {
+        // The stored raid may hold someone's unrecorded win. It is not overwritten.
+        setWait("key");
+        setDoorError("This browser holds another player's raid for tonight. Use that player's passkey to continue it.");
+        return;
+      }
+      parked.current = null;
+      await adoptStored(stored);
       return;
     }
     await postPlayerSession(secrets);
@@ -215,7 +300,7 @@ export default function PlayFrame({
       setDoorError("The door did not answer.");
       return;
     }
-    const payload = await send({
+    const { payload } = await send({
       op: "open",
       vault_id: vaultId,
       round,
@@ -229,16 +314,11 @@ export default function PlayFrame({
       if (!current.blob) setDoorError(playerDetail(typeof payload.error === "string" ? payload.error : "guard"));
       return;
     }
-    const next = { ...current, blob: payload.blob, street: readStreet(payload.street) ?? current.street };
+    const next = { ...current, blob: payload.blob, street: readStreet(payload.street) ?? current.street, ...(typeof payload.used === "number" ? { used: payload.used } : {}) };
     sessionRef.current = next;
     setSession(next);
     await saveRaid(storageName, vaultId, vault.round, next);
-    if (typeof payload.used === "number") {
-      const remain = Math.max(0, messageBudget - payload.used);
-      leftRef.current = remain;
-      setLeft(remain);
-      setConfirmedLeft(remain);
-    }
+    if (typeof payload.used === "number") countFrom(payload.used);
   }
 
   const speaker = gate === "door" ? { ...SPEAKER.door, name: doorName.toUpperCase() } : SPEAKER[gate];
@@ -464,10 +544,24 @@ export default function PlayFrame({
     });
   }
 
+  /** An unanswered call goes first. A new message on the same blob would be refused as a replay. */
+  function resendPending(): boolean {
+    const current = sessionRef.current;
+    if (!current?.pending) return false;
+    setBusy(true);
+    setSheet(null);
+    setYou(current.pending.playerText);
+    setNotice("Sending your last message again…");
+    void guardCall(current, current.pending.body, current.pending.bill, current.pending.playerText);
+    return true;
+  }
+
   function talk(text: string) {
     const current = sessionRef.current;
     if (busy || stage !== "play" || leftRef.current === 0 || !text.trim() || !current?.blob) return;
+    if (resendPending()) return;
     setBusy(true);
+    setNotice(null);
     setSaying(false);
     setDraft("");
     setYou(text.trim());
@@ -475,20 +569,21 @@ export default function PlayFrame({
     spend(() => {
       say("…");
       readPose(0.5);
-      void send({
+      void guardCall(current, {
         op: "say",
         vault_id: vaultId,
         round: Number(vault.round),
         player_id: current.playerId,
         blob: current.blob,
         text: text.trim(),
-      }).then((payload) => applyGuard(current, payload, false, text.trim()));
+      }, false, text.trim());
     });
   }
 
   async function handOver(b: DraftBill) {
     const current = sessionRef.current;
     if (busy || stage !== "play" || leftRef.current === 0 || !current?.blob) return;
+    if (resendPending()) return;
     const resolved = tokenLabel ?? await token;
     if (sessionRef.current !== current || stage !== "play" || leftRef.current === 0) return;
     if (!resolved.ok) {
@@ -502,7 +597,9 @@ export default function PlayFrame({
       return;
     }
     setSheet(null);
+    forgetBillDraft(billDraftKey);
     setBusy(true);
+    setNotice(null);
     setRefused(false);
     setYou(`BILL: ${b.payee} · ${b.reference} · ${b.item} · ${b.qty} × ${b.unit}`);
     spend(() => {
@@ -516,7 +613,7 @@ export default function PlayFrame({
         gsap.fromTo(".vignette", { opacity: 0 }, { opacity: 1, duration: 0.4, yoyo: true, repeat: 3, ease: "sine.inOut" });
         gsap.timeline().to(".spot", { opacity: 1, duration: 0.5, ease: E("settle") }).to(".spot", { opacity: 0, duration: 0.3 }, 1.9);
       });
-      void send({
+      void guardCall(current, {
         op: "bill",
         vault_id: vaultId,
         round: Number(vault.round),
@@ -528,45 +625,63 @@ export default function PlayFrame({
         item: b.item,
         qty,
         unit,
-      }).then((payload) => applyGuard(current, payload, true, `BILL: ${b.payee} · ${b.reference} · ${b.item} · ${b.qty} × ${b.unit}`));
+      }, true, `BILL: ${b.payee} · ${b.reference} · ${b.item} · ${b.qty} × ${b.unit}`);
     });
   }
 
-  function applyGuard(current: StoredRaid, payload: Record<string, unknown>, bill: boolean, playerText: string) {
+  function countFrom(used: number) {
+    const remain = Math.max(0, messageBudget - used);
+    leftRef.current = remain;
+    setLeft(remain);
+    setConfirmedLeft(remain);
+  }
+
+  function applyGuard(answered: StoredRaid, payload: Record<string, unknown>, bill: boolean, playerText: string) {
+    setNotice(null);
+    // The guard's count is saved with the raid, so a reload shows the messages that are really left.
+    const current = typeof payload.used === "number" ? { ...answered, used: payload.used } : answered;
     if (payload.ok === true && typeof payload.reply === "string" && payload.reply && typeof payload.blob === "string") {
       const history = [...transcriptRef.current, { player: playerText, guard: payload.reply }].slice(-12);
       transcriptRef.current = history;
       setTranscript(history);
       transcriptWrites.current = transcriptWrites.current.catch(() => {}).then(() => saveTranscript(storageName, vaultId, vault.round, history)).catch(() => { setTranscriptError(true); });
     }
+    if (typeof payload.blob !== "string" && current.pending === null) {
+      sessionRef.current = current;
+      void saveRaid(storageName, vaultId, vault.round, current).catch(() => undefined);
+    }
     if (typeof payload.blob === "string") {
-      const next = { ...current, blob: payload.blob, verdict: payload.verdict ?? current.verdict };
+      const signed = payload.ok === true && typeof payload.signature === "string" && payload.verdict;
+      const next = signed
+        ? { ...current, blob: payload.blob, verdict: payload.verdict, signature: payload.signature as string, transactionHash: null, recorded: false }
+        : { ...current, blob: payload.blob, verdict: payload.verdict ?? current.verdict };
       sessionRef.current = next;
       setSession(next);
       void saveRaid(storageName, vaultId, vault.round, next);
     }
-    if (typeof payload.used === "number") {
-      const remain = Math.max(0, messageBudget - payload.used);
-      leftRef.current = remain;
-      setLeft(remain);
-      setConfirmedLeft(remain);
+    if (typeof payload.used === "number") countFrom(payload.used);
+    if (payload.ok !== true && typeof payload.reply !== "string") {
+      // An error is the page's line, not the guard's. A message the guard did not count is given back.
+      const error = typeof payload.error === "string" ? payload.error : "guard";
+      if (error === "spent") countFrom(messageBudget);
+      else if (typeof payload.used !== "number") {
+        leftRef.current = Math.min(messageBudget, leftRef.current + 1);
+        setLeft(leftRef.current);
+      }
+      say(transcriptRef.current.at(-1)?.guard ?? OPENERS[gate]);
+      setNotice(guardNotice(error));
+      setBusy(false);
+      return;
     }
     if (payload.ok === true && payload.signature && payload.verdict) {
       const amount = verdictAmount(payload.verdict);
       setSignedAmount(amount);
       setSignedHex(typeof payload.signature === "string" ? payload.signature : null);
-      void submitSigned(payload).then((error) => {
-        setSubmitError(error);
-        if (bill) {
-          if (gate === "door") approveDoor();
-          else approveOffice();
-          return;
-        }
-        setBusy(false);
-      });
+      say(typeof payload.reply === "string" && payload.reply ? payload.reply : "Approved.");
+      void recordHeld(gate === "door" ? "door" : "office");
       return;
     }
-    const reply = typeof payload.reply === "string" ? payload.reply : playerDetail(typeof payload.error === "string" ? payload.error : "guard");
+    const reply = typeof payload.reply === "string" ? payload.reply : OPENERS[gate];
     if (bill && reply === "Not approved.") refuse();
     else {
       say(reply);
@@ -574,22 +689,41 @@ export default function PlayFrame({
     }
   }
 
-  async function submitSigned(payload: Record<string, unknown>): Promise<string | null> {
-    if (vault.ticketed) return "A ticketed door is submitted by the signed-in account.";
-    const verdict = payload.verdict;
-    const signature = typeof payload.signature === "string" ? hexBytes(payload.signature) : null;
-    if (!verdict || !signature) return "verdict";
-    const sent = await apiPost("/verdict", { verdict: verdictWire(verdict), signature });
-    const body = (sent.ok ? sent.body : null) as { ok?: boolean; error?: string; transactionHash?: string } | null;
-    if (!body?.ok) return body?.error ?? "rpc";
+  /** The win is celebrated only after the vault has recorded the verdict. Until then it is held on this device. */
+  async function recordHeld(after: After) {
+    const held = heldVerdict(sessionRef.current);
     const current = sessionRef.current;
-    if (current && body.transactionHash) {
-      const next = { ...current, transactionHash: body.transactionHash };
-      sessionRef.current = next;
-      setSession(next);
-      await saveRaid(storageName, vaultId, vault.round, next);
+    if (!held || !current) return;
+    setBusy(true);
+    setStage("held");
+    setHolding({ sending: true, message: null, retry: false, after });
+    if (vault.ticketed) {
+      setHolding({ sending: false, message: "A ticketed door is submitted by the signed-in account.", retry: false, after });
+      setBusy(false);
+      return;
     }
-    return null;
+    let outcome = await submitHeld(held, current.raidId, vaultId, apiPost);
+    for (let attempt = 0; !outcome.ok && outcome.retry && attempt < 2; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      outcome = await submitHeld(held, current.raidId, vaultId, apiPost);
+    }
+    if (!outcome.ok) {
+      setHolding({ sending: false, message: outcome.message, retry: outcome.retry, after });
+      setBusy(false);
+      return;
+    }
+    const next = { ...(sessionRef.current ?? current), transactionHash: outcome.transactionHash, recorded: true };
+    sessionRef.current = next;
+    setSession(next);
+    await saveRaid(storageName, vaultId, vault.round, next).catch(() => undefined);
+    setHolding(null);
+    if (after === "door") approveDoor();
+    else if (after === "office") approveOffice();
+    else {
+      setEnd("door");
+      setStage("end");
+      setBusy(false);
+    }
   }
 
   function refuse() {
@@ -619,6 +753,7 @@ export default function PlayFrame({
   }
 
   function approveDoor() {
+    setStage("play");
     say("Approved.");
     setGrid((g) => [...g, "approved"]);
     award(100, "you got in");
@@ -665,6 +800,7 @@ export default function PlayFrame({
   }
 
   function approveOffice() {
+    setStage("play");
     say("…Fine. Approved.");
     setGrid((g) => [...g, "approved"]);
     award(250, "cracked the office");
@@ -734,7 +870,7 @@ export default function PlayFrame({
             >
               {busy ? "Waiting for your passkey" : "Use your device passkey"}
             </button>
-            <a href="/passkey" className="mt-3 inline-flex min-h-11 items-center text-sm text-chalk/80 underline decoration-white/20">
+            <a href={`/passkey?next=play&door=${encodeURIComponent(vaultId)}`} className="mt-3 inline-flex min-h-11 items-center text-sm text-chalk/80 underline decoration-white/20">
               New here? Create a passkey
             </a>
           </div>
@@ -742,7 +878,7 @@ export default function PlayFrame({
           <p role="status" className="px-4 py-6 text-center text-sm text-chalk/70">{playGateStatus(wait)}</p>
         )}
         <p className="px-4 pb-6 text-center">
-          <a href={doorHref} className="text-sm text-chalk/80 underline decoration-white/20">
+          <a href={doorHref} className="chalk-focus inline-flex min-h-11 items-center px-2 text-sm text-chalk/80 underline decoration-white/20">
             The door
           </a>
         </p>
@@ -755,6 +891,8 @@ export default function PlayFrame({
       <Suspense fallback={null}>
         <TokenBridge token={token} onReady={setTokenLabel} />
       </Suspense>
+      {/* The raid screen is a picture and a HUD, so its heading is for screen readers. */}
+      <h1 className="sr-only">{signText} · round {vault.round}</h1>
       {/* HUD */}
       <header className="z-20 flex items-center justify-between gap-2 px-3 pb-2 pt-3 sm:gap-3 sm:px-4">
         <a href={doorHref} className="chalk-focus inline-flex min-h-11 min-w-0 flex-col justify-center leading-none">
@@ -780,7 +918,7 @@ export default function PlayFrame({
           <span className="flex items-center gap-1 rounded-full bg-night-3 px-2 py-1 font-mono text-[11px]">
             Round {vault.round}
           </span>
-          <button onClick={toggleSound} data-sound-toggle className="shrink-0 whitespace-nowrap rounded-full bg-night-3 px-2 py-1 font-mono text-[11px] sm:px-2.5 sm:text-xs" aria-pressed={sound}>
+          <button onClick={toggleSound} data-sound-toggle className="relative shrink-0 whitespace-nowrap rounded-full bg-night-3 px-2 py-1 font-mono text-[11px] after:absolute after:-inset-x-1 after:-inset-y-2.5 after:content-[''] sm:px-2.5 sm:text-xs" aria-pressed={sound}>
             {sound ? "♪ on" : "♪ off"}
           </button>
         </div>
@@ -803,7 +941,7 @@ export default function PlayFrame({
         <div className="redflash pointer-events-none absolute inset-0 bg-rope opacity-0 mix-blend-screen" />
         <div className="flood pointer-events-none absolute left-1/2 top-[52%] size-[70vmin] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-0 mix-blend-screen bg-[radial-gradient(circle,rgb(185_162_255/0.95),rgb(143_107_255/0.5)_40%,transparent_70%)]" />
         <div className="flood-gold pointer-events-none absolute right-[8%] top-[55%] size-[60vmin] -translate-y-1/2 rounded-full opacity-0 mix-blend-screen bg-[radial-gradient(circle,rgb(255_230_160/0.95),rgb(207_163_73/0.45)_40%,transparent_70%)]" />
-        <div className="slam pointer-events-none absolute left-1/2 top-[58%] -translate-x-1/2 opacity-0">
+        <div aria-hidden="true" className="slam pointer-events-none absolute left-1/2 top-[58%] -translate-x-1/2 opacity-0">
           <div className="scale-[2.2]">
             <RefusedStamp />
           </div>
@@ -853,9 +991,10 @@ export default function PlayFrame({
             {line === "…" ? <Thinking /> : line.slice(0, typed)}
           </p>
           {refused && !busy && <RefusedStamp className="shrink-0" />}
-          {busy && <span role="status" className="text-xs text-chalk/70">Waiting for the guard…</span>}
+          {busy && <GuardWait />}
         </div>
         {you && <div className="mt-1 truncate font-mono text-[11px] text-chalk/45">You: {you}</div>}
+        {notice && <p role="status" className="mt-2 text-xs text-chalk/80">{notice}</p>}
         {transcriptError && <p role="status" className="mt-2 text-xs text-chalk/70">Conversation could not be saved or loaded on this device.</p>}
         {transcript.length > 0 && <details className="mt-2 text-xs text-chalk/70"><summary className="cursor-pointer">Conversation on this device</summary><ol className="mt-2 max-h-40 space-y-2 overflow-y-auto">{transcript.map((turn, i) => <li key={i}><p>You: {turn.player}</p><p>Guard: {turn.guard}</p></li>)}</ol></details>}
 
@@ -942,9 +1081,11 @@ export default function PlayFrame({
               <BillBuilder
                 payees={session?.street?.payees ?? []}
                 payout="chosen when you claim"
+                currency={tokenLabel?.ok ? tokenLabel.symbol : ""}
                 venue={signText}
                 left={left}
                 onSubmit={handOver}
+                draftKey={billDraftKey}
                 onClose={() => setSheet(null)}
               />
             ) : (
@@ -962,6 +1103,34 @@ export default function PlayFrame({
                 onMark={(id, mark) => setNotes((ns) => ns.map((x) => (x.id === id ? { ...x, mark } : x)))}
                 onClose={() => setSheet(null)}
               />
+            )}
+          </div>
+        </div>
+      )}
+
+      {stage === "held" && holding && (
+        <div role="status" aria-live="polite" className="absolute inset-0 z-30 flex flex-col items-center justify-end bg-[linear-gradient(to_bottom,rgb(13_10_18/0)_0%,rgb(13_10_18/0.6)_35%,rgb(13_10_18/0.97)_60%)] px-6 pb-8 text-center">
+          <h1 className="font-sign text-4xl leading-none">Approved.</h1>
+          <AmountLine shown={cutShown} empty="No signed amount yet." className="text-2xl text-chalk" block />
+          <p className="mt-3 max-w-sm text-sm text-chalk/70">
+            {holding.sending
+              ? "Recording the verdict with the vault…"
+              : `${holding.message ?? "The vault did not record the verdict."} The signed verdict stays on this device.`}
+          </p>
+          <p className="mt-2 max-w-sm text-xs text-chalk/55">You are not in until the vault records it.</p>
+          <div className="mt-5 flex w-full max-w-sm flex-col gap-3">
+            {!holding.sending && holding.retry && (
+              <button
+                onClick={() => void recordHeld(holding.after)}
+                className="rounded-2xl bg-chalk py-4 font-sign text-lg text-ink shadow-[0_6px_0_#9c9483] transition active:translate-y-1"
+              >
+                Send it again
+              </button>
+            )}
+            {!holding.sending && (
+              <a href={doorHref} className="rounded-2xl border border-chalk/30 py-3 text-sm">
+                The door
+              </a>
             )}
           </div>
         </div>
@@ -1012,7 +1181,7 @@ export default function PlayFrame({
           round={vault.round}
           venueId={signText}
           guardName={doorName}
-          submitError={submitError}
+          claimHref={doorPaths(vaultId).claim}
           crackCount={vault.crackCount}
           closesAt={vault.closesAt}
           doorHref={doorHref}
@@ -1049,7 +1218,7 @@ function EndScreen({
   round,
   venueId,
   guardName,
-  submitError,
+  claimHref,
   crackCount,
   closesAt,
   doorHref,
@@ -1063,7 +1232,7 @@ function EndScreen({
   round: string;
   venueId: string;
   guardName: string;
-  submitError: string | null;
+  claimHref: string;
   crackCount: number;
   closesAt: string;
   doorHref: string;
@@ -1117,9 +1286,7 @@ function EndScreen({
           <div className="font-mono text-xs uppercase tracking-[0.25em] text-chalk/80">Signed amount</div>
           {amountNote ? <p className="text-sm text-chalk/60">{amountNote}</p> : cutText ? <Money text={cutText} currency={currency} className="neon-brass text-4xl" /> : <p className="text-sm text-chalk/60">No signed amount.</p>}
           <p className="mt-2 max-w-xs text-sm text-chalk/60">
-            {submitError
-              ? `The verdict is still on this device. Submission failed: ${submitError}`
-              : `${crackCount} got in before this bill. The verdict is signed. It is not paid until the lock opens.`}
+            {`${crackCount} got in before this bill. The vault has recorded it. It is not paid until the lock opens.`}
           </p>
         </div>
       )}
@@ -1129,8 +1296,8 @@ function EndScreen({
             The door
           </a>
         ) : (
-          <a href="/passkey?next=claim" className="rounded-2xl bg-chalk py-4 font-sign text-lg text-ink shadow-[0_6px_0_#9c9483]">
-            Save the claim
+          <a href={claimHref} className="rounded-2xl bg-chalk py-4 font-sign text-lg text-ink shadow-[0_6px_0_#9c9483]">
+            Go to the claim
           </a>
         )}
       </div>
@@ -1156,34 +1323,36 @@ function Thinking() {
   );
 }
 
-async function postGuard(body: Record<string, unknown>): Promise<Record<string, unknown>> {
-  return asObject(await apiPost("/guard", body));
+/** `answered` is false only when no reply came back, so the same call can be sent again. */
+async function postGuard(body: Record<string, unknown>): Promise<{ payload: Record<string, unknown>; answered: boolean }> {
+  const result = await apiPost("/guard", body);
+  const answered = result.ok && result.status < 500 && Boolean(result.body) && typeof result.body === "object";
+  return { payload: asObject(result), answered };
 }
 
-function hexBytes(hex: string): number[] | null {
-  if (hex.length === 0 || hex.length % 2 !== 0 || !/^[0-9a-f]+$/i.test(hex)) return null;
-  const out: number[] = [];
-  for (let i = 0; i < hex.length; i += 2) out.push(Number.parseInt(hex.slice(i, i + 2), 16));
-  return out;
+
+/** Guard error codes as sentences. A message the guard did not count was given back. */
+function guardNotice(error: string): string {
+  if (error === "replay") return "This raid moved on in another tab or after a refresh. Reload the page to pick it up.";
+  if (error === "spent") return "No messages left.";
+  if (error === "model") return "The guard did not answer. No message was used. Try again.";
+  if (error === "busy" || error.startsWith("The door is busy")) return "The door is busy. No message was used. Try again in a minute.";
+  return "The door did not answer. No message was used. Try again.";
 }
 
-function verdictWire(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== "object") return null;
-  const row = value as Record<string, unknown>;
-  const hash = (key: string) => {
-    const hex = row[key];
-    return typeof hex === "string" ? hexBytes(hex) : null;
-  };
-  const billHash = hash("bill_hash");
-  const claimPk = hash("claim_pk");
-  const conversationHash = hash("conversation_hash");
-  const guardVersion = hash("guard_version");
-  if (!billHash || !claimPk || !conversationHash || !guardVersion) return null;
-  return { ...row, bill_hash: billHash, claim_pk: claimPk, conversation_hash: conversationHash, guard_version: guardVersion };
-}
-
-function verdictAmount(value: unknown): string | null {
-  if (!value || typeof value !== "object") return null;
-  const amount = (value as { amount?: unknown }).amount;
-  return typeof amount === "string" && /^[0-9]+$/.test(amount) ? amount : null;
+/** A guard reply can take most of a minute. The line moves on so a long wait does not look stuck. */
+function GuardWait() {
+  const [seconds, setSeconds] = useState(0);
+  useEffect(() => {
+    const started = Date.now();
+    const timer = window.setInterval(() => setSeconds(Math.floor((Date.now() - started) / 1000)), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const text = seconds < 8 ? "Waiting for the guard…" : seconds < 25 ? "The guard is reading it." : "Still reading. This can take up to a minute.";
+  return (
+    <span role="status" className="max-w-[9rem] text-right text-xs text-chalk/70">
+      {text}
+      {seconds >= 8 ? <span className="block font-mono text-[10px] text-chalk/50">{seconds}s</span> : null}
+    </span>
+  );
 }

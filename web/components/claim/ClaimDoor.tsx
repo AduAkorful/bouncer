@@ -13,12 +13,15 @@ import { readPayoutAccount, testnetAccountId, writePayoutAccount } from "@/lib/i
 import { addWalletKey, sendClaim } from "@/lib/send-claim";
 import { PayoutWallet } from "@/components/claim/PayoutWallet";
 import { playableRaid } from "@/lib/door";
+import { heldVerdict, submitHeld } from "@/lib/held-verdict";
 import { payoutExplorerUrl } from "@/lib/explorer";
 import { loadRaid, saveRaid, type StoredRaid } from "@/lib/session-store";
 import type { TokenRead } from "@/lib/page-vault";
 import type { CrackView, VaultView } from "@/lib/vault";
 
 type Phase = "locked" | "ready" | "paying" | "paid" | "closed";
+
+const HELD = "Your bill was approved, but the vault has not recorded it yet. It cannot be claimed until it is.";
 
 export function ClaimDoor({
   vaultId,
@@ -57,6 +60,7 @@ export function ClaimDoor({
   const [namedAccount, setNamedAccount] = useState("");
   const [preference, setPreference] = useState<"unset" | "new" | "existing">("unset");
   const [payoutHash, setPayoutHash] = useState<string | null>(null);
+  const [held, setHeld] = useState(false);
   const raidRecord = useRef<StoredRaid | null>(null);
   const payoutUrl = payoutHash ? payoutExplorerUrl(payoutHash) : null;
 
@@ -110,7 +114,11 @@ export function ClaimDoor({
         return;
       }
       if (!body.crack) {
-        if (!cancel) setError("No crack is recorded for this raid.");
+        if (!cancel) {
+          const holding = Boolean(heldVerdict(raid));
+          setHeld(holding);
+          setError(holding ? HELD : "No crack is recorded for this raid.");
+        }
         return;
       }
       if (!cancel) {
@@ -162,9 +170,12 @@ export function ClaimDoor({
     }
     if (!body.crack) {
       setRetry(false);
-      setError("No crack is recorded for this raid.");
+      const holding = Boolean(heldVerdict(raidRecord.current));
+      setHeld(holding);
+      setError(holding ? HELD : "No crack is recorded for this raid.");
       return;
     }
+    setHeld(false);
     setRetry(false);
     setMissing(false);
     setCrack(body.crack);
@@ -194,6 +205,26 @@ export function ClaimDoor({
     await readCrack(secrets.raidId);
   }
 
+  async function sendHeld() {
+    const record = raidRecord.current;
+    const verdict = heldVerdict(record);
+    if (!record || !verdict) return;
+    setBusy(true);
+    setError(null);
+    const outcome = await submitHeld(verdict, record.raidId, vaultId, apiPost);
+    if (!outcome.ok) {
+      setBusy(false);
+      setHeld(outcome.retry);
+      setError(`${outcome.message} The signed verdict stays on this device.`);
+      return;
+    }
+    const next = { ...record, transactionHash: outcome.transactionHash, recorded: true };
+    raidRecord.current = next;
+    await saveRaid(storageName, vaultId, round, next).catch(() => undefined);
+    await readCrack(record.raidId);
+    setBusy(false);
+  }
+
   function payoutChoice(): string | null | "invalid" {
     if (preference === "new") return null;
     const raw = preference === "existing" ? namedAccount : (readPayoutAccount(window.localStorage, storageName) ?? "");
@@ -209,6 +240,10 @@ export function ClaimDoor({
     const chosen = payoutChoice();
     if (chosen === "invalid") {
       setError("That account name cannot be used.");
+      return;
+    }
+    if (chosen && vault && chosen === vault.sponsor) {
+      setError("A door's sponsor cannot be paid from it. Choose another account.");
       return;
     }
     setBusy(true);
@@ -275,6 +310,11 @@ export function ClaimDoor({
             <TryAgain href={retryHref} />
           </div>
         ) : null}
+        {held && (
+          <button disabled={busy} onClick={() => void sendHeld()} className="mt-4 w-full rounded-2xl bg-chalk py-4 font-sign text-lg text-ink disabled:opacity-40">
+            {busy ? "Sending the verdict…" : "Send the verdict again"}
+          </button>
+        )}
         {missing && (
           <button disabled={busy} onClick={() => void recover()} className="mt-4 w-full rounded-2xl bg-chalk py-4 font-sign text-lg text-ink disabled:opacity-40">
             {busy ? "Waiting for your passkey" : "Use your device passkey"}
@@ -365,7 +405,7 @@ export function ClaimDoor({
             )}
           </section>
         )}
-        {payoutAccount ? (
+        {payoutAccount && phase === "paid" ? (
           <PayoutWallet
             accountId={payoutAccount}
             vaultId={vaultId}

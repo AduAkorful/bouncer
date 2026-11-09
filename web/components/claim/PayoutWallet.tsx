@@ -96,15 +96,18 @@ export function PayoutWallet({
   return (
     <section className="mt-5 rounded-3xl border border-white/10 bg-night-2 p-5">
       <h2 className="font-sign text-xl">This account</h2>
-      <p className="mt-2 break-all font-mono text-[12px] text-chalk/70">{accountId}</p>
+      <p className="mt-2 font-mono text-[12px] text-chalk/70 [overflow-wrap:anywhere]">{accountParts(accountId)}</p>
       <p className="mt-3 text-sm text-chalk/70">
         {balanceError ? balanceError : shown ? `${shown} ${symbol ?? ""}${opened ? "" : ". This account is not on testnet yet."}`.trim() : "Reading the balance."}
       </p>
+      <details className="mt-4 group">
+        <summary className="chalk-focus inline-flex min-h-11 cursor-pointer items-center text-sm text-chalk/80 underline decoration-white/20">Move your winnings</summary>
+        <p className="mt-2 text-sm text-chalk/60">Send the token to another testnet account, or take this account to another wallet. You do not need either to be paid.</p>
       <div className="mt-4">
         <button type="button" disabled={busy !== null} onClick={() => void showKey()} className="chalk-focus min-h-11 rounded-2xl border border-chalk/30 px-4 py-2 text-sm disabled:opacity-40">
           {busy === "key" ? "Waiting for your passkey" : "Export the key"}
         </button>
-        <p className="mt-2 text-sm text-chalk/60">Anyone with this key can spend the account. There is no seed phrase.</p>
+        <p className="mt-2 text-sm text-chalk/60">Only for using this account in another wallet. Anyone with this key can spend everything in the account. Never paste it into a site or share it.</p>
         {secret ? (
           <div className="mt-3">
             <p className="break-all font-mono text-[12px] text-chalk">{secret}</p>
@@ -132,6 +135,7 @@ export function PayoutWallet({
           {busy === "send" ? "Sending" : "Send"}
         </button>
       </form>
+      </details>
       {note ? <p role="status" className="mt-3 text-sm text-chalk/70">{note}</p> : null}
       {payment ? (
         <a href={payment} target="_blank" rel="noreferrer" className="chalk-focus mt-3 inline-flex min-h-11 items-center text-sm text-chalk underline decoration-white/20">
@@ -140,4 +144,14 @@ export function PayoutWallet({
       ) : null}
     </section>
   );
+}
+
+/** A line break is offered before each dot, so `.relay.….testnet` moves down whole before the name itself is split. */
+function accountParts(accountId: string) {
+  return accountId.split(".").map((part, index) => (
+    <span key={index}>
+      {index > 0 ? <><wbr />.</> : null}
+      {part}
+    </span>
+  ));
 }

@@ -4,9 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { loadPlayerSession, rollPlayerName, savePlayerName, type PlayerSession } from "@/lib/player-session";
 import { deriveSecrets, unlockDevice } from "@/lib/device-pass";
 import { clearHold, holdIkm, readHold, unlockHeld } from "@/lib/player-hold";
+import { writePayoutAccount } from "@/lib/imported-account";
 
 /** The name, streak, and nights come back with the passkey. This browser is not the record. */
-export function PlayerName({ initial = null }: { initial?: PlayerSession | null }) {
+export function PlayerName({ initial = null, storageName = "" }: { initial?: PlayerSession | null; storageName?: string }) {
   const [session, setSession] = useState<PlayerSession | null>(initial);
   const [draft, setDraft] = useState(initial?.player.name ?? "");
   const [error, setError] = useState<string | null>(null);
@@ -45,11 +46,14 @@ export function PlayerName({ initial = null }: { initial?: PlayerSession | null 
 
   function logout() {
     clearHold();
+    // The saved payout account goes too, so the next person on this browser does not see its key or Send.
+    writePayoutAccount(window.localStorage, storageName, null);
     setSession(null);
     setDraft("");
     setError(null);
     setSignedIn(false);
     setConfirming(false);
+    window.location.reload();
   }
 
   async function accountSecrets() {
@@ -174,7 +178,13 @@ export function PlayerName({ initial = null }: { initial?: PlayerSession | null 
         className="mt-2 w-full rounded-2xl border border-white/10 bg-night px-3 py-3 text-sm read-only:text-chalk/70"
       />
       {error ? <p role="status" className="mt-2 text-sm text-chalk/70">{error}</p> : null}
-      <p className="mt-3 font-sign text-xl">{session.player.streak} day streak · {session.player.nights} {session.player.nights === 1 ? "night" : "nights"} in{session.place ? ` · ${session.line}` : ""}</p>
+      {/* The tiles show only what the player record holds. Before it loads they are not drawn at all. */}
+      <div className="mt-4 grid grid-cols-3 gap-2">
+        <Stat k="Streak" v={`${session.player.streak} ${session.player.streak === 1 ? "day" : "days"}`} />
+        <Stat k="Nights in" v={String(session.player.nights)} />
+        <Stat k="Place" v={session.place ? `#${session.place}` : "Not yet"} />
+      </div>
+      {session.line ? <p className="mt-2 text-sm text-chalk/70">{session.line}</p> : null}
       {session.player.renameUsed ? <p className="mt-2 text-sm text-chalk/60">This name was changed once. It stays.</p> : (
         <div className="mt-3 flex flex-wrap gap-2">
           <button type="button" disabled={busy} onClick={() => void save(draft)} className="chalk-focus min-h-11 rounded-2xl bg-chalk px-4 py-2 text-sm text-ink disabled:opacity-40">Save name</button>
@@ -220,12 +230,21 @@ function LogoutDialog({ onStay, onLogout }: { onStay: () => void; onLogout: () =
         onClick={(event) => event.stopPropagation()}
       >
         <h2 id="logout-title" className="font-sign text-2xl">Log out?</h2>
-        <p id="logout-note" className="mt-2 text-sm">This browser forgets the sign-in. Your passkey and your name stay. Signing in again brings the name back.</p>
+        <p id="logout-note" className="mt-2 text-sm">This browser forgets the sign-in and the saved payout account. Your passkey, your name, and your account stay. Signing in again brings them back.</p>
         <div className="mt-4 flex flex-wrap gap-2">
           <button ref={stayRef} type="button" onClick={onStay} className="chalk-focus min-h-11 rounded-2xl bg-on-paper px-4 py-2 text-sm text-paper">Stay signed in</button>
           <button type="button" onClick={onLogout} className="chalk-focus min-h-11 rounded-2xl border border-rule px-4 py-2 text-sm">Log out</button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function Stat({ k, v }: { k: string; v: string }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-night-2 px-3 py-3">
+      <div className="font-mono text-xs uppercase tracking-wider text-chalk/80">{k}</div>
+      <div className="mt-1 font-sign text-xl">{v}</div>
     </div>
   );
 }

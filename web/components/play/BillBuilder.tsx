@@ -1,7 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import { usd } from "@/components/bits";
+import { useEffect, useState } from "react";
 import type { DraftBill } from "@/lib/bill";
 import { sfx } from "@/lib/sfx";
 
@@ -13,16 +12,25 @@ export function BillBuilder({
   onSubmit,
   onClose,
   left,
+  currency = "",
+  draftKey = "",
 }: {
+  /** Where a half-written bill waits in this tab, so a refresh does not lose it. Empty keeps nothing. */
+  draftKey?: string;
   payees: string[];
+  /** The pot's token symbol. The total is shown in it, never in dollars. */
+  currency?: string;
   payout: string;
   venue: string;
   onSubmit: (b: DraftBill) => void;
   onClose: () => void;
   left: number;
 }) {
-  const [b, setB] = useState<DraftBill>({ payee: "", reference: "", item: "", qty: 1, unit: 0 });
-  const [unitText, setUnitText] = useState("");
+  const [b, setB] = useState<DraftBill>(() => readDraft(draftKey)?.bill ?? { payee: "", reference: "", item: "", qty: 1, unit: 0 });
+  const [unitText, setUnitText] = useState(() => readDraft(draftKey)?.unitText ?? "");
+  useEffect(() => {
+    writeDraft(draftKey, { bill: b, unitText });
+  }, [draftKey, b, unitText]);
   const set = <K extends keyof DraftBill>(k: K, v: DraftBill[K]) => setB((x) => ({ ...x, [k]: v }));
   const setUnit = (raw: string) => {
     const clean = raw.replace(/[^\d.]/g, "");
@@ -83,7 +91,7 @@ export function BillBuilder({
         </div>
         <div className="flex items-baseline justify-between border-t-2 border-rule pt-2">
           <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-on-paper/50">Total</span>
-          <span className="font-mono text-2xl tnum">{usd(total)}</span>
+          <span className="font-mono text-2xl tnum">{total.toFixed(2)}{currency ? ` ${currency}` : ""}</span>
         </div>
         <div className="rounded-lg bg-on-paper/5 px-3 py-2 font-mono text-[11px] text-on-paper/60">
           Pay to: {payout} · your wallet, fixed. Payout details can&apos;t be changed.
@@ -99,4 +107,36 @@ export function BillBuilder({
       <p className="mt-2 text-center text-xs text-on-paper/50">Costs 1 message · {left} left</p>
     </div>
   );
+}
+
+type StoredDraft = { bill: DraftBill; unitText: string };
+
+function readDraft(key: string): StoredDraft | null {
+  if (!key) return null;
+  try {
+    const raw = window.sessionStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<StoredDraft> & { bill?: Partial<DraftBill> };
+    const bill = parsed.bill;
+    if (!bill || typeof bill.payee !== "string" || typeof bill.reference !== "string" || typeof bill.item !== "string") return null;
+    if (typeof bill.qty !== "number" || typeof bill.unit !== "number" || typeof parsed.unitText !== "string") return null;
+    return { bill: { payee: bill.payee, reference: bill.reference, item: bill.item, qty: bill.qty, unit: bill.unit }, unitText: parsed.unitText };
+  } catch {
+    return null;
+  }
+}
+
+function writeDraft(key: string, draft: StoredDraft | null) {
+  if (!key) return;
+  try {
+    if (draft) window.sessionStorage.setItem(key, JSON.stringify(draft));
+    else window.sessionStorage.removeItem(key);
+  } catch {
+    // A tab that cannot store keeps the bill in memory only.
+  }
+}
+
+/** Called once the bill is handed over. */
+export function forgetBillDraft(key: string) {
+  writeDraft(key, null);
 }

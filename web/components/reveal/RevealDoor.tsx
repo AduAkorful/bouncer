@@ -40,10 +40,12 @@ export function RevealDoor({
   retryHref: string;
 }) {
   const [lines, setLines] = useState<Line[] | null>(null);
-  const [problem, setProblem] = useState<"none" | "failed" | null>(null);
+  const [problem, setProblem] = useState<"none" | "failed" | "open" | null>(shut ? null : "open");
   const [timedOut, setTimedOut] = useState(false);
 
   useEffect(() => {
+    // The guard opens a ledger only after the round closes. Asking earlier reads as a failure.
+    if (!shut) return;
     let cancel = false;
     const timer = window.setTimeout(() => {
       if (!cancel) setTimedOut(true);
@@ -68,7 +70,8 @@ export function RevealDoor({
       });
       const body = (sent.ok ? sent.body : null) as Record<string, unknown> | null;
       if (!body || body.ok !== true) {
-        if (!cancel) setProblem("failed");
+        // "view": the chain still has this round open, though the clock has passed its close.
+        if (!cancel) setProblem(body?.error === "view" ? "open" : "failed");
         return;
       }
       const checked = await revealChecksOut({
@@ -108,7 +111,7 @@ export function RevealDoor({
       cancel = true;
       window.clearTimeout(timer);
     };
-  }, [storageName, vaultId, vault.round, vault.guardPk, vault.commitment, venueId, specCt]);
+  }, [storageName, vaultId, vault.round, vault.guardPk, vault.commitment, venueId, specCt, shut]);
 
   const waiting = lines === null && problem === null;
   const stalled = waiting && timedOut;
@@ -121,7 +124,8 @@ export function RevealDoor({
           <p className="font-mono text-xs uppercase tracking-[0.22em] text-chalk/80">Round {vault.round}</p>
           <NetworkTag label={networkTag} className="text-chalk/70" />
         </div>
-        <h1 className="mt-2 font-sign text-3xl leading-none">Last night&apos;s door</h1>
+        <h1 className="mt-2 font-sign text-3xl leading-none">{problem === "open" ? "Tonight\u2019s ledger" : "Last night\u2019s door"}</h1>
+        {problem === "open" && <p className="mt-4 text-sm text-chalk/70">The ledger opens when this round closes.</p>}
         {problem === "none" && <p className="mt-4 text-sm text-chalk/70">No raid is stored on this device. The ledger stays shut.</p>}
         {failed && <p className="mt-4 text-sm text-chalk/70">The door did not answer. The ledger stays shut.</p>}
         {failed && (

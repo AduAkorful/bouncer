@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { doorPaths } from "@/lib/door-read";
 import { useEffect, useRef, useState } from "react";
 import { deriveSecrets, unlockDevice, type DeviceSecrets } from "@/lib/device-pass";
 import { holdIkm } from "@/lib/player-hold";
@@ -21,11 +22,13 @@ async function keepPlayer(ikm: Uint8Array): Promise<{ secrets: DeviceSecrets } |
 
 export function PasskeySheet({
   next,
+  door,
   rpcUrl,
   networkId,
   storageName,
 }: {
-  next: "claim" | "profile";
+  next: "claim" | "play" | "profile";
+  door?: string;
   rpcUrl: string;
   networkId: string;
   storageName: string;
@@ -137,7 +140,7 @@ export function PasskeySheet({
     <main className="flex min-h-dvh items-end bg-night px-4 pb-24 pt-10 text-chalk sm:items-center sm:justify-center">
       <div className="mx-auto w-full max-w-md rounded-3xl border border-white/10 bg-night-2 p-6 shadow-2xl">
         <p className="font-mono text-xs uppercase tracking-[0.22em] text-chalk/80">Account</p>
-        <h1 className="mt-2 font-sign text-3xl leading-none">{step === "done" ? "Saved." : step === "add" ? "Add this key" : "Save your streak"}</h1>
+        <h1 className="mt-2 font-sign text-3xl leading-none">{step === "done" ? "Saved." : step === "add" ? "Add this key" : "Your passkey"}</h1>
         {step === "create" && (
           <>
             <p className="mt-3 text-sm text-chalk/70">Use a passkey from your device or password manager. No seed phrase, no password. Clearing this site does not remove it.</p>
@@ -145,7 +148,8 @@ export function PasskeySheet({
             <button onClick={() => void create()} className="mt-6 w-full rounded-2xl bg-chalk py-4 font-sign text-lg text-ink shadow-[0_5px_0_#9c9483]">
               Create passkey
             </button>
-            <p className="mt-6 text-sm text-chalk/70">Use an account you already have. A passkey will be created for it.</p>
+            <h2 className="mt-8 border-t border-white/10 pt-5 font-sign text-lg">Already have a testnet account?</h2>
+            <p className="mt-2 text-sm text-chalk/70">Name it, and a passkey is made for that account instead of a new one.</p>
             <label htmlFor="existing-account-id" className="mt-3 block text-sm text-chalk/80">
               Existing account ID
             </label>
@@ -164,7 +168,7 @@ export function PasskeySheet({
             />
             {nameError ? <p id="existing-account-error" className="mt-2 text-sm text-chalk/70">{nameError}</p> : null}
             <button onClick={() => void bind()} className="mt-3 w-full rounded-2xl border border-chalk/30 py-3 text-sm">
-              Create a passkey for it
+              Link a passkey to this account
             </button>
           </>
         )}
@@ -206,12 +210,12 @@ export function PasskeySheet({
         {step === "done" && (
           <>
             {accountId ? <p className="mt-3 text-sm text-chalk/70">This device can sign for {accountId}.</p> : null}
-            <Link href={next === "claim" ? "/claim" : "/profile"} className="mt-6 block rounded-2xl bg-chalk py-4 text-center font-sign text-lg text-ink">
+            <Link href={next === "profile" ? "/profile" : doorPaths(door)[next]} className="mt-6 block rounded-2xl bg-chalk py-4 text-center font-sign text-lg text-ink">
               Continue
             </Link>
           </>
         )}
-        <Link href="/home" className="mt-6 inline-block text-sm text-chalk/70 underline decoration-white/20">
+        <Link href={doorPaths(door).door} className="chalk-focus mt-6 inline-flex min-h-11 items-center text-sm text-chalk/70 underline decoration-white/20">
           Back to the door
         </Link>
       </div>

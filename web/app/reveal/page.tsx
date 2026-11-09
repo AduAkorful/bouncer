@@ -3,7 +3,7 @@ import { Suspense } from "react";
 import { RevealGate } from "@/components/gates";
 import { NightShell } from "@/components/NightShell";
 
-export const metadata = screen("Last night's door", "The ledger from the round that closed.");
+export const metadata = screen("The ledger", "A round's ledger, shown once the round has closed.");
 
 export default function RevealPage() {
   return (

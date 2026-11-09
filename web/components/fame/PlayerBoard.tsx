@@ -26,7 +26,8 @@ export function PlayerBoard({ highlight = "" }: { highlight?: string }) {
   }, []);
 
   const shown = highlight ? rows?.filter((row) => row.name === highlight) ?? [] : rows ?? [];
-  const line = shown[0]?.line;
+  // Only a single player's page has a line to copy. The full board has no "your" row, since it does not know who is reading.
+  const line = highlight ? shown[0]?.line : undefined;
 
   async function copy() {
     if (!line) return;
@@ -57,7 +58,7 @@ export function PlayerBoard({ highlight = "" }: { highlight?: string }) {
       </ol>
       {line ? (
         <button type="button" onClick={() => void copy()} className="chalk-focus mt-4 min-h-11 rounded-2xl bg-chalk px-4 py-2 text-sm text-ink">
-          {copied ? "Copied" : "Copy your place"}
+          {copied ? "Copied" : "Copy this place"}
         </button>
       ) : null}
     </div>

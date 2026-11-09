@@ -18,7 +18,7 @@ type Tab = (typeof TABS)[number];
 const pick = <T,>(xs: readonly T[]) => xs[Math.floor(Math.random() * xs.length)]!;
 
 export default function CreatorFrame() {
-  const root = useRef<HTMLDivElement>(null);
+  const root = useRef<HTMLElement>(null);
   const [look, setLook] = useState<Look>(DEFAULT_DRAFT.look);
   const [sign, setSign] = useState(DEFAULT_DRAFT.sign);
   const [neon, setNeon] = useState<Neon>(DEFAULT_DRAFT.neon);
@@ -111,12 +111,12 @@ export default function CreatorFrame() {
   }
 
   return (
-    <div ref={root} className="min-h-dvh bg-night pb-24 text-chalk lg:grid lg:h-dvh lg:grid-cols-[1.2fr_1fr] lg:pb-0">
+    <main ref={root} className="min-h-dvh bg-night pb-24 text-chalk lg:grid lg:h-dvh lg:grid-cols-[1.2fr_1fr] lg:pb-0">
       {/* Live preview at the door. Shorter on a phone so Save sits on the first screen. */}
       <section className="scene-box relative h-[34dvh] min-h-[220px] bg-[#1a1424] sm:h-[48dvh] sm:min-h-[340px] lg:h-full">
         <header className="absolute inset-x-0 top-0 z-10 flex items-center justify-between px-4 py-3">
           <div className="leading-none">
-            <div className="font-sign text-lg">Bouncer studio</div>
+            <h1 className="font-sign text-lg">Bouncer studio</h1>
             <div className="mt-1 font-mono text-xs uppercase tracking-[0.2em] text-chalk/80">Design your bouncer</div>
             <Link href="/home" className="chalk-focus mt-2 inline-flex min-h-11 items-center text-sm text-chalk/80 underline decoration-white/20">
               The door
@@ -128,7 +128,7 @@ export default function CreatorFrame() {
               setSoundOn(!sound);
               setSaved(false);
             }}
-            className="shrink-0 rounded-full bg-black/50 px-2 py-1 font-mono text-[11px] sm:px-2.5 sm:text-xs"
+            className="relative shrink-0 rounded-full bg-black/50 px-2 py-1 font-mono text-[11px] after:absolute after:-inset-x-1 after:-inset-y-2.5 after:content-[''] sm:px-2.5 sm:text-xs"
             aria-pressed={sound}
           >
             {sound ? "♪ on" : "♪ off"}
@@ -137,18 +137,18 @@ export default function CreatorFrame() {
         <SceneLife key={`${city}-${look.build}`} className="absolute inset-0">
           <DoorScene city={city} sign={sign.toUpperCase() || "YOUR VENUE"} neon={neon} look={look} p="cr" className="size-full" label={`${look.name} at the door of ${sign}`} />
         </SceneLife>
-        <div className="absolute left-3 top-[20%] max-w-[55%] animate-[fadeIn_.35s_ease-out] rounded-2xl rounded-bl-sm bg-chalk px-3 py-2 text-[13px] text-ink shadow-lg">
+        <div className="absolute left-3 top-[42%] max-w-[55%] sm:top-[20%] animate-[fadeIn_.35s_ease-out] rounded-2xl rounded-bl-sm bg-chalk px-3 py-2 text-[13px] text-ink shadow-lg">
           “{look.catchphrase}”
         </div>
         <div className="absolute bottom-2 left-1/2 flex w-max max-w-[calc(100%-1rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-1.5 lg:bottom-16">
           <span className="rounded bg-chalk px-2 py-1 font-sign text-xs text-ink">{look.name.toUpperCase() || "NAMELESS"}</span>
-          <button onClick={() => react("read")} className="whitespace-nowrap rounded-full bg-black/60 px-2.5 py-1.5 text-xs backdrop-blur">
+          <button onClick={() => react("read")} className="min-h-11 whitespace-nowrap rounded-full bg-black/60 px-3 py-1.5 text-xs backdrop-blur">
             Read
           </button>
-          <button onClick={() => react("refuse")} className="whitespace-nowrap rounded-full bg-black/60 px-2.5 py-1.5 text-xs backdrop-blur">
+          <button onClick={() => react("refuse")} className="min-h-11 whitespace-nowrap rounded-full bg-black/60 px-3 py-1.5 text-xs backdrop-blur">
             Refuse
           </button>
-          <button onClick={() => react("approve")} className="whitespace-nowrap rounded-full bg-black/60 px-2.5 py-1.5 text-xs backdrop-blur">
+          <button onClick={() => react("approve")} className="min-h-11 whitespace-nowrap rounded-full bg-black/60 px-3 py-1.5 text-xs backdrop-blur">
             Let in
           </button>
         </div>
@@ -161,12 +161,12 @@ export default function CreatorFrame() {
             <button
               key={t}
               onClick={() => setTab(t)}
-              className={`shrink-0 rounded-full px-3.5 py-1.5 text-sm ${t === tab ? "bg-chalk font-semibold text-ink" : "text-chalk/70"}`}
+              className={`min-h-11 shrink-0 rounded-full px-3.5 py-1.5 text-sm ${t === tab ? "bg-chalk font-semibold text-ink" : "text-chalk/70"}`}
             >
               {t}
             </button>
           ))}
-          <button onClick={randomize} className="ml-auto shrink-0 rounded-full border border-chalk/25 px-3 py-1.5 text-sm">
+          <button onClick={randomize} className="ml-auto min-h-11 shrink-0 rounded-full border border-chalk/25 px-3 py-1.5 text-sm">
             🎲 Random
           </button>
         </nav>
@@ -253,7 +253,7 @@ export default function CreatorFrame() {
                         setSaved(false);
                         sfx.tick();
                       }}
-                      className={`rounded-xl border px-4 py-2 text-sm ${city === c ? "border-chalk bg-chalk text-ink" : "border-white/15"}`}
+                      className={`min-h-11 rounded-xl border px-4 py-2 text-sm ${city === c ? "border-chalk bg-chalk text-ink" : "border-white/15"}`}
                     >
                       {CITIES[c].name}
                     </button>
@@ -267,7 +267,7 @@ export default function CreatorFrame() {
                     <button
                       key={n.value}
                       onClick={() => { setNeon(n.value); setSaved(false); }}
-                      className={`rounded-xl border px-4 py-2 text-sm ${neon === n.value ? "border-chalk" : "border-white/15"}`}
+                      className={`min-h-11 rounded-xl border px-4 py-2 text-sm ${neon === n.value ? "border-chalk" : "border-white/15"}`}
                       style={{ color: n.fill, textShadow: `0 0 8px ${n.stroke}` }}
                     >
                       {n.label}
@@ -325,7 +325,7 @@ export default function CreatorFrame() {
           <DemoBadge />
         </div>
       </section>
-    </div>
+    </main>
   );
 }
 
@@ -347,7 +347,7 @@ function Choices<T extends string>({ opts, value, onPick }: { opts: Option<T>[];
           disabled={!!o.locked}
           onClick={() => onPick(o.value)}
           title={o.locked ? `Earned: ${o.locked}` : undefined}
-          className={`rounded-xl border px-3.5 py-2 text-sm transition active:scale-95 ${
+          className={`min-h-11 rounded-xl border px-3.5 py-2 text-sm transition active:scale-95 ${
             o.value === value ? "border-chalk bg-chalk text-ink" : "border-white/15"
           } disabled:cursor-not-allowed disabled:opacity-50`}
         >
@@ -366,7 +366,7 @@ function Swatch({ color, active, onClick, label }: { color: string; active: bool
       onClick={onClick}
       aria-label={label}
       aria-pressed={active}
-      className={`size-10 rounded-full border-2 transition active:scale-90 ${active ? "border-chalk ring-2 ring-chalk/40" : "border-white/10"}`}
+      className={`size-11 rounded-full border-2 transition active:scale-90 ${active ? "border-chalk ring-2 ring-chalk/40" : "border-white/10"}`}
       style={{ background: color }}
     />
   );

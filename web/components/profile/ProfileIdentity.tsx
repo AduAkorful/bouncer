@@ -22,7 +22,11 @@ export function ProfileIdentity({ storageName, heading = "Your profile" }: { sto
       {state === null ? <p className="mt-2 text-sm text-chalk/60">Reading this browser.</p> : state.error ? (
         <p role="status" className="mt-2 text-sm text-chalk/70">The account name could not be read on this browser.</p>
       ) : state.account ? (
-        <p className="mt-2 break-all text-sm text-chalk/70">Account name saved on this browser: {state.account}. Its access has not been checked here.</p>
+        <div className="mt-2 text-sm text-chalk/70">
+          <p>Account name saved on this browser. Its access has not been checked here.</p>
+          {/* A passkey account name is one long word, so only it may break anywhere. */}
+          <p className="mt-1 break-all font-mono text-[12px]">{state.account}</p>
+        </div>
       ) : (
         <p className="mt-2 text-sm text-chalk/70">Use your passkey when you need your account. A testnet account can be created when needed.</p>
       )}

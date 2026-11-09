@@ -16,7 +16,7 @@ export function ReplaySample() {
         <h1 className="mt-2 font-sign text-3xl leading-none">A patched refusal</h1>
         <p className="mt-3 text-sm text-chalk/70">{REPLAY_NOTE}</p>
         <article className={`mt-6 rounded-3xl border p-5 ${leak ? "border-rope/60" : "border-white/10"} bg-night-2`}>
-          <p className={`font-mono text-xs uppercase tracking-[0.2em] ${leak ? "text-rope" : "text-chalk/80"}`}>{step.mark}</p>
+          <p className={`font-mono text-xs uppercase tracking-[0.2em] ${leak ? "text-[#ff6b7e]" : "text-chalk/80"}`}>{step.mark}</p>
           <p className="mt-3 text-sm text-chalk/80">{REPLAY_BILL}</p>
           <p className={`mt-3 rounded-2xl px-3 py-2 text-sm font-semibold ${leak ? "bg-rope/20" : "bg-chalk text-ink"}`}>{step.reply}</p>
         </article>

@@ -25,7 +25,7 @@ export default function VipPage() {
         <p className="mt-2 text-sm text-chalk/65">A sponsor funds the pot. Players still have to get past the bouncer. The unpaid list stays off this page.</p>
       </div>
       <Suspense fallback={<p className="mx-auto mt-6 max-w-lg px-4 text-sm text-chalk/70">Reading the doors.</p>}>
-        <VipDoors contractId={labels.env.contractId} rpcUrl={labels.env.rpcUrl} />
+        <VipDoors contractId={labels.env.contractId} rpcUrl={labels.env.rpcUrl} fallbackUrl={labels.env.rpcFallbackUrl} />
       </Suspense>
       <div className="mx-auto max-w-lg px-4">
         <Link href="/home" className="chalk-focus mt-6 inline-flex min-h-11 items-center text-sm text-chalk/80 underline decoration-white/20">
@@ -36,10 +36,10 @@ export default function VipPage() {
   );
 }
 
-async function VipDoors({ contractId, rpcUrl }: { contractId: string; rpcUrl: string }) {
+async function VipDoors({ contractId, rpcUrl, fallbackUrl }: { contractId: string; rpcUrl: string; fallbackUrl: string | null }) {
   await connection();
   const index = await readDoorIndex(
-    httpRpc(rpcUrl, fetch, { signal: AbortSignal.timeout(PAGE_READ_MS) }),
+    httpRpc(rpcUrl, fetch, { signal: AbortSignal.timeout(PAGE_READ_MS), fallbackUrl }),
     contractId,
     Date.now(),
   );

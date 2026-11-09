@@ -15,7 +15,7 @@ export default function ProfilePage() {
       <div className="mx-auto max-w-lg">
         <p className="font-mono text-xs uppercase tracking-[0.22em] text-chalk/80">Profile</p>
         <ProfileIdentity storageName={process.env.NEXT_PUBLIC_STORAGE_NAME ?? ""} />
-        <PlayerName />
+        <PlayerName storageName={process.env.NEXT_PUBLIC_STORAGE_NAME ?? ""} />
         {labels.ok ? (
           <ProfileWallet
             rpcUrl={labels.env.rpcUrl}
@@ -24,12 +24,6 @@ export default function ProfilePage() {
             storageName={labels.env.storageName}
           />
         ) : null}
-
-        <div className="mt-5 grid grid-cols-3 gap-2">
-          <Stat k="Streak" v="—" />
-          <Stat k="Rank" v="—" />
-          <Stat k="Tickets" v="—" />
-        </div>
 
         <section className="mt-5 rounded-3xl border border-white/10 bg-night-2 p-5">
           <h2 className="font-sign text-lg">History</h2>
@@ -53,14 +47,5 @@ export default function ProfilePage() {
         </div>
       </div>
     </main>
-  );
-}
-
-function Stat({ k, v }: { k: string; v: string }) {
-  return (
-    <div className="rounded-2xl border border-white/10 bg-night-2 px-3 py-3">
-      <div className="font-mono text-xs uppercase tracking-wider text-chalk/80">{k}</div>
-      <div className="mt-1 font-sign text-xl">{v}</div>
-    </div>
   );
 }

@@ -1,12 +1,32 @@
 "use client";
 
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { TryAgain } from "@/components/TryAgain";
 
-export function Blocked({ title, detail, href = "/home", retryHref, kicker = "Unavailable" }: { title: string; detail: string; href?: string; retryHref?: string; kicker?: string }) {
+export function Blocked({
+  title,
+  detail,
+  href = "/home",
+  retryHref,
+  kicker = "Unavailable",
+  door,
+  children,
+}: {
+  title: string;
+  detail: string;
+  href?: string;
+  retryHref?: string;
+  kicker?: string;
+  /** The door's sign, so a closed page says which door it is. */
+  door?: string;
+  /** Below the card, such as the doors that are open instead. */
+  children?: ReactNode;
+}) {
   return (
     <main className="min-h-dvh overflow-x-clip bg-night px-4 pb-24 pt-8 text-chalk">
       <div className="mx-auto max-w-lg rounded-3xl border border-white/10 bg-night-2 p-6">
+        {door ? <p className="mb-3 font-sign text-xl leading-none text-chalk/90">{door}</p> : null}
         <p className="font-mono text-xs uppercase tracking-[0.22em] text-chalk/80">{kicker}</p>
         <h1 className="mt-2 font-sign text-3xl leading-none">{title}</h1>
         <p className="mt-3 text-sm text-chalk/70">{detail}</p>
@@ -19,6 +39,7 @@ export function Blocked({ title, detail, href = "/home", retryHref, kicker = "Un
           Back to the door
         </Link>
       </div>
+      {children ? <div className="mx-auto max-w-lg [&>section]:px-0">{children}</div> : null}
     </main>
   );
 }

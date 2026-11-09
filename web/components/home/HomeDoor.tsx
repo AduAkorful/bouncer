@@ -1,8 +1,11 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { Countdown } from "@/components/Countdown";
+import { CloseTime, Countdown } from "@/components/Countdown";
 import { NetworkTag } from "@/components/bits";
+import { RULES } from "@/lib/rules";
+import { TonightRaid } from "@/components/home/TonightRaid";
 import { DoorScene } from "@/components/DoorScene";
+import { QueueBar } from "@/components/home/QueueBar";
 import { StreetScroll } from "@/components/home/StreetScroll";
 import { TokenAmount, TokenPotGlyph } from "@/components/TokenAmount";
 import { STREET_VIEW } from "@/lib/street-setting";
@@ -57,7 +60,8 @@ export function HomeDoor({
   const title = doorTitle(card, vaultId);
   const shut = vault ? doorShut(vault, Date.now()) : false;
   const phase = !vault ? "closed" : shut ? "closed" : vault.crackCount > 0 ? "cracked" : "open";
-  const atomic = vault ? (phase === "cracked" || vault.open ? vault.dayPot : vault.pot) : null;
+  // A shut door has no pot tonight, even when the chain still lists the round as open past its close.
+  const atomic = vault && !shut ? (phase === "cracked" || vault.open ? vault.dayPot : vault.pot) : null;
   const commitment = commitmentFooter(vault?.commitment);
   return (
     <main className="min-h-dvh overflow-x-clip bg-night pb-24 text-chalk">
@@ -73,8 +77,7 @@ export function HomeDoor({
         </Link>
         <div className="order-3 flex w-full items-center gap-1.5 sm:order-2 sm:ml-auto sm:w-auto sm:flex-nowrap sm:justify-end sm:gap-2">
           <NetworkTag label={networkTag} className="whitespace-nowrap bg-black/40 text-chalk/80 backdrop-blur" />
-          <span className="cursor-default select-none font-mono text-xs text-chalk/80">Queue</span>
-          {vault ? <span className="font-mono text-xs text-chalk/80">{vault.crackCount} in</span> : null}
+          {vault && vault.crackCount > 0 ? <span className="font-mono text-xs text-chalk/80">{vault.crackCount} got in tonight</span> : null}
         </div>
         <div className="order-2 flex items-center gap-1.5 sm:order-3">
           <Link href="/sponsors" className="chalk-focus inline-flex min-h-11 items-center whitespace-nowrap rounded-full bg-black/50 px-3 font-mono text-xs backdrop-blur">
@@ -115,12 +118,12 @@ export function HomeDoor({
               </g>
             }
             front={
-              <g aria-label="Tonight's pot">
+              <g>
                 <path d="M282,224 L290,166 M330,224 L322,166" stroke="#5a4630" strokeWidth="3" />
                 <rect x="281" y="156" width="50" height="58" rx="3" fill="#1b2420" stroke="#5a4630" strokeWidth="3" />
                 <g transform="rotate(-3 306 185)">
                   <text x="306" y="170" textAnchor="middle" fontFamily="var(--font-jetbrains)" fontSize="4.4" letterSpacing="0.3" fill="#efe8da" opacity="0.85">
-                    TONIGHT&apos;S POT
+                    {shut ? "CLOSED" : "TONIGHT\u2019S POT"}
                   </text>
                   {atomic ? <TokenPotGlyph token={token} atomic={atomic} /> : null}
                 </g>
@@ -133,8 +136,10 @@ export function HomeDoor({
         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-b from-transparent to-night" />
       </section>
 
-      <section id="door" tabIndex={-1} className="relative z-10 mx-auto -mt-6 max-w-lg scroll-mt-6 px-4 outline-none">
-        <div className="rounded-3xl border border-white/10 bg-night-2 p-5 shadow-2xl">
+      <section id="door" tabIndex={-1} className="relative z-10 mx-auto -mt-6 max-w-lg scroll-mt-6 lg:max-w-5xl px-4 outline-none">
+        <div className="rounded-3xl border border-white/10 bg-night-2 p-5 shadow-2xl lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)] lg:gap-8 lg:p-7">
+          {/* Wide screens: the door on the left, the rules and links on the right, lined up with the door list below. */}
+          <div>
           <h1 className="font-sign text-3xl leading-none">{title.sign}</h1>
           <div className="mt-3 flex items-center justify-between gap-3">
             {title.name ? <span className="shrink-0 whitespace-nowrap rounded bg-chalk px-1.5 py-0.5 font-sign text-[10px] text-ink">{title.name.toUpperCase()}</span> : <span />}
@@ -145,18 +150,20 @@ export function HomeDoor({
               <div className="font-mono text-xs uppercase tracking-[0.2em] text-chalk/80">
                 {vault ? (phase === "cracked" ? "Splitting now" : phase === "closed" ? "Closed" : "Tonight's pot") : "No vault"}
               </div>
-              {atomic ? <TokenAmount token={token} atomic={atomic} className="text-2xl text-brass" /> : <p className="text-sm text-chalk/60">No pot is stored.</p>}
+              {atomic ? <TokenAmount token={token} atomic={atomic} className="text-2xl text-brass" /> : <p className="text-sm text-chalk/60">{shut && vault ? "No pot tonight." : "No pot is stored."}</p>}
             </div>
             {vault && !shut ? (
               <div className="text-right">
-                <div className="font-mono text-xs uppercase tracking-wider text-chalk/80">Closes</div>
+                <div className="font-mono text-xs uppercase tracking-wider text-chalk/80">Closes in</div>
                 <Countdown endsAtNs={vault.closesAt} className="text-chalk" />
+                <CloseTime endsAtNs={vault.closesAt} className="block font-mono text-[11px] text-chalk/60" />
               </div>
             ) : null}
           </div>
           <p className="mt-3 font-sign text-xl leading-tight sm:text-2xl">{notice ?? (card?.pitch || phaseCopy[phase].line)}</p>
           {vault && !shut ? (
             <a
+              id="join-queue"
               href={`${base}/play`}
               className="chalk-focus mt-5 block rounded-2xl bg-chalk py-4 text-center font-sign text-xl text-ink shadow-[0_6px_0_#9c9483] transition hover:bg-[#f4efe4] active:translate-y-1 active:shadow-[0_2px_0_#9c9483]"
             >
@@ -167,10 +174,27 @@ export function HomeDoor({
               {vault ? "The queue is closed" : "The queue is not open"}
             </p>
           )}
+          {vault && !shut ? <QueueBar href={`${base}/play`} targetId="join-queue" /> : null}
+          {vault && wallet ? <TonightRaid storageName={wallet.storageName} vaultId={vaultId} round={vault.round} playHref={`${base}/play`} /> : null}
           {wallet ? <WalletChip {...wallet} /> : null}
           <p className="mt-3 text-center text-sm text-chalk/60">{vault ? phaseCopy[phase].note : "Nothing on this door was filled in."}</p>
+          </div>
+          <div className="lg:border-l lg:border-white/10 lg:pl-8">
+          {/* A shared link can land here first, so the rules are on the door, not only on the front page. */}
+          <section aria-labelledby="door-rules" className="mt-4 rounded-2xl border lg:mt-0 border-white/10 px-4 py-3">
+            <h2 id="door-rules" className="font-mono text-xs uppercase tracking-[0.2em] text-chalk/80">How to play</h2>
+            <ol className="mt-2 space-y-1.5 text-sm">
+              {RULES.map((rule, index) => (
+                <li key={rule.title} className="grid grid-cols-[1.1rem_minmax(0,1fr)] gap-2">
+                  <span className="font-sign text-[#ff6b7e]">{index + 1}</span>
+                  <span><span className="font-sign">{rule.title}</span> <span className="text-chalk/70">{rule.text}</span></span>
+                </li>
+              ))}
+            </ol>
+            <p className="mt-2 text-xs text-chalk/60">A wrong bill only hears &ldquo;Not approved.&rdquo;</p>
+          </section>
           <p className="mt-3 text-center text-xs leading-relaxed text-chalk/70">Test tokens have no cash value. Playing costs no money.</p>
-          <p className="text-center">
+          <p className="flex flex-wrap justify-center gap-x-5">
             <Link href="/sponsors" className="chalk-focus inline-flex min-h-11 items-center text-sm text-chalk/80 underline decoration-white/20">
               Sponsor a door
             </Link>
@@ -178,16 +202,12 @@ export function HomeDoor({
               Hall of fame
             </Link>
           </p>
-          <p className="text-center">
-            <Link href="/#how-to-play" className="chalk-focus inline-flex min-h-11 items-center text-sm text-chalk/80 underline decoration-white/20">
-              How to play
-            </Link>
-          </p>
           <p className="mt-2 text-center text-sm">
             <Link href={`${base}/reveal`} className="chalk-focus inline-flex min-h-11 items-center text-chalk/80 underline decoration-white/20">
-              Last night&apos;s door
+              {shut && vault ? `Round ${vault.round} ledger` : "Tonight\u2019s ledger"}
             </Link>
           </p>
+          </div>
         </div>
       </section>
 

@@ -64,6 +64,9 @@ const BULBS = [
   ...Array.from({ length: 11 }, (_, i) => [253.5, 79 + i * 13] as const),
 ];
 
+const SIGN_ROOM = 150;
+const SIGN_EM = 0.69;
+
 /**
  * The door at night: brick wall, neon sign, a frame of bulbs, two doors with the party showing through the
  * portholes, the queue, the bouncer, the rope, and wet pavement giving all of it back.
@@ -97,7 +100,10 @@ export function DoorScene({
   const shop = shopCopy(street);
   const slips = posterLines(street, sign);
   const speaks = (slot: number) => speakingSlots?.[slot] ?? false;
-  const fs = sign.length > 12 ? 14 : sign.length > 10 ? 17 : 22;
+  // Bungee Inline runs about 0.69 em a letter (QA measured 165–171 units for 18 letters at 14).
+  // The frame is 162 wide; 150 leaves room for the tube. Long signs shrink, and textLength holds the last few.
+  const fs = Math.min(sign.length > 12 ? 14 : sign.length > 10 ? 17 : 22, SIGN_ROOM / (Math.max(1, sign.length) * SIGN_EM));
+  const signFit = sign.length * fs * SIGN_EM > SIGN_ROOM ? { textLength: SIGN_ROOM, lengthAdjust: "spacingAndGlyphs" as const } : {};
   const leaf = (hinge: number) => (open ? `translate(${hinge} 0) scale(0.14 1) translate(${-hinge} 0)` : undefined);
   return (
     <svg
@@ -203,6 +209,8 @@ export function DoorScene({
           <circle cx="222" cy="86" r="7" />
         </clipPath>
       </defs>
+      {/* The scene is one picture with one label. Its painted words are not read out one by one. */}
+      <g aria-hidden="true">
 
       {/* The wall */}
       <rect x="-1000" y="-1000" width="2400" height="1222" fill={`url(#${p}-brick)`} />
@@ -248,15 +256,15 @@ export function DoorScene({
       </g>
       <g id="sign">
         <rect x="119" y="22" width="162" height="34" rx="5" fill="none" stroke={n.stroke} strokeWidth="7" strokeOpacity="0.28" />
-        <text x="200" y="48" textAnchor="middle" fontFamily="var(--font-bungee-inline)" fontSize={fs} fill={n.stroke} opacity="0.35">
+        <text x="200" y="48" textAnchor="middle" fontFamily="var(--font-bungee-inline)" fontSize={fs} {...signFit} fill={n.stroke} opacity="0.35">
           {sign}
         </text>
         <rect x="119" y="22" width="162" height="34" rx="5" fill="none" stroke={n.stroke} strokeWidth="1.8" />
         <rect x="119" y="22" width="162" height="34" rx="5" fill="none" stroke="#fff" strokeOpacity="0.85" strokeWidth="0.6" />
-        <text x="200" y="48" textAnchor="middle" fontFamily="var(--font-bungee-inline)" fontSize={fs} fill={n.fill}>
+        <text x="200" y="48" textAnchor="middle" fontFamily="var(--font-bungee-inline)" fontSize={fs} {...signFit} fill={n.fill}>
           {sign}
         </text>
-        <text x="200" y="48" textAnchor="middle" fontFamily="var(--font-bungee-inline)" fontSize={fs} fill="#fff" opacity="0.55">
+        <text x="200" y="48" textAnchor="middle" fontFamily="var(--font-bungee-inline)" fontSize={fs} {...signFit} fill="#fff" opacity="0.55">
           {sign}
         </text>
       </g>
@@ -409,6 +417,7 @@ export function DoorScene({
         <path d="M-60,250 L40,110 L120,110 L20,250 Z" fill={`url(#${p}-beam)`} />
       </g>
       <rect x="-1000" y="-1000" width="2400" height="1600" fill={`url(#${p}-vignette)`} pointerEvents="none" />
+      </g>
     </svg>
   );
 }

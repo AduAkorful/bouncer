@@ -1,0 +1,32 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { raidHistoryHref, raidHistoryRow, type RaidHistoryRow } from "@/lib/raid-history";
+import { loadRaid } from "@/lib/session-store";
+
+/** What this browser already did at this door tonight. Nothing is drawn for a newcomer. */
+export function TonightRaid({ storageName, vaultId, round, playHref }: { storageName: string; vaultId: string; round: string; playHref: string }) {
+  const [row, setRow] = useState<RaidHistoryRow | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    loadRaid(storageName, vaultId, round).then((found) => {
+      if (!live || !found || "error" in found) return;
+      setRow(raidHistoryRow(`${vaultId}:${round}`, found));
+    }).catch(() => undefined);
+    return () => { live = false; };
+  }, [storageName, vaultId, round]);
+
+  if (!row || row.state === "shut") return null;
+  const copy = row.state === "in"
+    ? { line: "You got in tonight.", link: "Your cut", href: raidHistoryHref(row) }
+    : row.state === "held"
+      ? { line: "Your bill was approved. The vault has not recorded it yet.", link: "Send it again", href: raidHistoryHref(row) }
+      : { line: "Your raid tonight is still open on this browser.", link: "Back to your raid", href: playHref };
+  return (
+    <p role="status" className="mt-4 rounded-2xl border border-uv/40 bg-uv/10 px-4 py-3 text-sm">
+      {copy.line}{" "}
+      <a href={copy.href} className="chalk-focus inline-flex min-h-11 items-center font-semibold underline decoration-white/30">{copy.link}</a>
+    </p>
+  );
+}

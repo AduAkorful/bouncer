@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* A phone on its side: too short for the stacked poster, so it takes the desktop's side-by-side layout. */
+@custom-variant short (@media (orientation: landscape) and (max-height: 540px));
+
 @source "../app";
 @source "../components";
 @source "../lib";

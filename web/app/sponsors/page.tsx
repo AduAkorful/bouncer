@@ -55,6 +55,9 @@ export default function SponsorsPage() {
           <Link href="/home" className="chalk-focus inline-flex min-h-11 items-center text-sm text-chalk/80 underline decoration-white/20">
             The door
           </Link>
+          <Link href="/creator" className="chalk-focus inline-flex min-h-11 items-center text-sm text-chalk/80 underline decoration-white/20">
+            Try the look builder
+          </Link>
         </div>
       </div>
     </main>
