@@ -113,19 +113,19 @@ export function PosterWall({ x, hints, slips }: { x: number; hints: boolean; sli
         <g transform="rotate(2 0 90)">
           <rect x="-19" y="58" width="38" height="62" fill="#efe8da" />
           <rect x="-19" y="58" width="38" height="11" fill="#17141c" />
-          <text x="0" y="66" textAnchor="middle" fontFamily="var(--font-bungee)" fontSize={slips.signSize} fill="#cbb8ff">
+          <text x="0" y="66" textAnchor="middle" {...fitPoster(slips.sign, slips.signSize)} fontFamily="var(--font-bungee)" fill="#cbb8ff">
             {slips.sign}
           </text>
-          <text x="0" y="78" textAnchor="middle" fontFamily="var(--font-bungee)" fontSize="3.2" fill="#17141c">
+          <text x="0" y="78" textAnchor="middle" {...fitPoster(slips.cream[0], 3.2)} fontFamily="var(--font-bungee)" fill="#17141c">
             {slips.cream[0]}
           </text>
-          <text x="0" y="89" textAnchor="middle" fontFamily="var(--font-bungee)" fontSize="5" fill="#b3243a">
+          <text x="0" y="89" textAnchor="middle" {...fitPoster(slips.cream[1], 5)} fontFamily="var(--font-bungee)" fill="#b3243a">
             {slips.cream[1]}
           </text>
-          <text x="0" y="99" textAnchor="middle" fontFamily="var(--font-bungee)" fontSize="4.2" fill="#17141c">
+          <text x="0" y="99" textAnchor="middle" {...fitPoster(slips.cream[2], 4.2)} fontFamily="var(--font-bungee)" fill="#17141c">
             {slips.cream[2]}
           </text>
-          <text x="0" y="110" textAnchor="middle" fontFamily="var(--font-jetbrains)" fontSize="3.2" fill="#17141c">
+          <text x="0" y="110" textAnchor="middle" {...fitPoster(slips.cream[3], 3.2, 0.6)} fontFamily="var(--font-jetbrains)" fill="#17141c">
             {slips.cream[3]}
           </text>
         </g>
@@ -519,4 +519,15 @@ export function Rain() {
       })}
     </g>
   );
+}
+
+/**
+ * The cream poster is 38 units wide. A line shrinks to fit about 34 of them (Bungee is about 0.69 em per
+ * letter), and a long one is also held to that width, so it never runs past the paper.
+ */
+function fitPoster(text: string, size: number, em = 0.69): { fontSize: number; textLength?: number; lengthAdjust?: "spacingAndGlyphs" } {
+  const room = 34;
+  const fontSize = Math.min(size, room / Math.max(1, text.length * em));
+  const wide = text.length * em * fontSize;
+  return wide > room * 0.92 ? { fontSize, textLength: room, lengthAdjust: "spacingAndGlyphs" } : { fontSize };
 }

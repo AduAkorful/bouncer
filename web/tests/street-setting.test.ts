@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { CITIES } from "../lib/cities.ts";
 import { buildCard, parseCard } from "../lib/card.ts";
-import { ACCRA_SETTING, pieceLearn, posterLines, readSetting, streetPieces } from "../lib/street-setting.ts";
+import { ACCRA_SETTING, defaultStreet, pieceLearn, placeFromPitch, posterLines, readSetting, streetPieces } from "../lib/street-setting.ts";
 
 const look = { build: 0, skin: 1, head: 0, outfit: 0, eyewear: 0 };
 
@@ -30,7 +30,7 @@ test("a bad setting falls back to Accra, and a stored 1 is kept", () => {
 });
 
 test("the second choice on every piece is the London street, and the cream poster uses the door sign", () => {
-  const setting = { stall: 1, ride: 1, passer: 1, seller: 1, shop: 1, weather: 1, posters: 1, sound: 1 };
+  const setting = { stall: 1, ride: 1, passer: 1, seller: 1, shop: 1, weather: 1, posters: 1, sound: 1, place: 0, crowd: 1 };
   const pieces = streetPieces(setting);
   assert.deepEqual(pieces, {
     stall: "kebab",
@@ -41,6 +41,8 @@ test("the second choice on every piece is the London street, and the cream poste
     weather: "rain",
     posters: "london",
     sound: "london",
+    place: "street",
+    crowd: "london",
   });
   const slips = posterLines(setting, "COASTLINE NIGHT");
   assert.equal(slips.sign, "COASTLINE NIGHT");
@@ -67,9 +69,21 @@ test("a full card with a setting still fits the card limit", () => {
       name: "B".repeat(24),
       pitch: "C".repeat(160),
       look: { build: 1, skin: 2, head: 3, outfit: 1, eyewear: 2 },
-      setting: { stall: 1, ride: 1, passer: 1, seller: 1, shop: 1, weather: 1, posters: 1, sound: 1 },
+      setting: { stall: 1, ride: 1, passer: 1, seller: 1, shop: 1, weather: 1, posters: 1, sound: 1, place: 0, crowd: 1 },
     },
     600,
   );
   assert.equal(built.ok, true);
+});
+
+test("place and crowd: an old card follows its pitch and its posters, a bad index stays the street", () => {
+  assert.equal(placeFromPitch("Beach bar at Labadi"), 1);
+  assert.equal(placeFromPitch("Rooftop on Oxford Street"), 2);
+  assert.equal(placeFromPitch("Basement bar off Old Compton Street"), 3);
+  assert.equal(placeFromPitch("Crew night at the Coastline."), 0);
+  assert.equal(readSetting({ posters: 1 }).crowd, 1);
+  assert.equal(readSetting({ posters: 1, crowd: 0 }).crowd, 0);
+  assert.equal(readSetting({ place: 9 }).place, 0);
+  assert.equal(defaultStreet(readSetting({})), true);
+  assert.equal(defaultStreet(readSetting({ place: 2 })), false);
 });

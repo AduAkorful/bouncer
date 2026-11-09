@@ -1,4 +1,7 @@
-/** A door's street. Eight indexes, mixed freely. Missing or bad values stay the Accra street. */
+/**
+ * A door's street. Small indexes, mixed freely. Missing or bad values stay the Accra street.
+ * `place` is the kind of venue (street, beach, rooftop, basement) and `crowd` is how the queue dresses.
+ */
 
 import { CITIES, type CityId } from "./cities.ts";
 
@@ -11,7 +14,12 @@ export type StreetSetting = {
   weather: number;
   posters: number;
   sound: number;
+  place: number;
+  crowd: number;
 };
+
+export const PLACES = ["street", "beach", "rooftop", "basement"] as const;
+export type Place = (typeof PLACES)[number];
 
 export const ACCRA_SETTING: StreetSetting = {
   stall: 0,
@@ -22,6 +30,8 @@ export const ACCRA_SETTING: StreetSetting = {
   weather: 0,
   posters: 0,
   sound: 0,
+  place: 0,
+  crowd: 0,
 };
 
 export const SETTING_FIELDS = [
@@ -33,7 +43,9 @@ export const SETTING_FIELDS = [
   { key: "weather", label: "Weather", options: ["Clear", "Rain"] },
   { key: "posters", label: "Posters", options: ["Accra slips", "London slips"] },
   { key: "sound", label: "Sound", options: ["Accra bed", "London bed"] },
-] as const satisfies readonly { key: keyof StreetSetting; label: string; options: readonly [string, string] }[];
+  { key: "place", label: "Place", options: ["Street front", "Beach bar", "Rooftop", "Basement"] },
+  { key: "crowd", label: "Crowd", options: ["Accra night out", "London night out"] },
+] as const satisfies readonly { key: keyof StreetSetting; label: string; options: readonly string[] }[];
 
 /** The whole street, from the food stall through the shop and the taxi. */
 export const STREET_VIEW = "-230 -40 900 320";
@@ -70,11 +82,13 @@ export type StreetPieces = {
   weather: "clear" | "rain";
   posters: "accra" | "london";
   sound: "accra" | "london";
+  place: Place;
+  crowd: "accra" | "london";
 };
 
 export function citySetting(city: CityId): StreetSetting {
   if (city === "london") {
-    return { stall: 1, ride: 1, passer: 1, seller: 1, shop: 1, weather: 1, posters: 1, sound: 1 };
+    return { stall: 1, ride: 1, passer: 1, seller: 1, shop: 1, weather: 1, posters: 1, sound: 1, place: 0, crowd: 1 };
   }
   return { ...ACCRA_SETTING };
 }
@@ -91,7 +105,25 @@ export function readSetting(value: unknown): StreetSetting {
     weather: bit(row.weather),
     posters: bit(row.posters),
     sound: bit(row.sound),
+    place: index(row.place, PLACES.length),
+    // A card saved before the crowd choice existed dresses its queue the way its posters read.
+    crowd: row.crowd === undefined ? bit(row.posters) : bit(row.crowd),
   };
+}
+
+function index(value: unknown, count: number): number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 && value < count ? value : 0;
+}
+
+/**
+ * A card saved before the place choice existed takes it from its pitch, so "Beach bar at Labadi" is not drawn
+ * as a brick street. Only the plain words are read; anything else stays the street.
+ */
+export function placeFromPitch(pitch: string): number {
+  if (/\b(beach|shore|seaside|sand)\b/i.test(pitch)) return 1;
+  if (/\b(rooftop|roof|terrace)\b/i.test(pitch)) return 2;
+  if (/\b(basement|cellar|underground|downstairs)\b/i.test(pitch)) return 3;
+  return 0;
 }
 
 export function streetPieces(setting: StreetSetting): StreetPieces {
@@ -105,7 +137,15 @@ export function streetPieces(setting: StreetSetting): StreetPieces {
     weather: safe.weather === 1 ? "rain" : "clear",
     posters: safe.posters === 1 ? "london" : "accra",
     sound: safe.sound === 1 ? "london" : "accra",
+    place: PLACES[safe.place] ?? "street",
+    crowd: safe.crowd === 1 ? "london" : "accra",
   };
+}
+
+/** True when every piece is left at its default: the door looks like every other default door. */
+export function defaultStreet(setting: StreetSetting): boolean {
+  const safe = readSetting(setting);
+  return (Object.keys(ACCRA_SETTING) as (keyof StreetSetting)[]).every((key) => safe[key] === ACCRA_SETTING[key]);
 }
 
 export function shopCopy(setting: StreetSetting): { ad: [string, string, string]; kiosk: string; shutter: string } {

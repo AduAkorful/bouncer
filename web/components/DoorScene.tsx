@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { PlaceBack, PlaceFront } from "@/components/PlaceBackdrop";
 import { SAM, NEONS, type Look, type Neon } from "@/lib/look";
 import { Bouncer } from "./Bouncer";
 import { Goer, type GoerLook } from "./Goer";
@@ -58,6 +59,22 @@ const CROWD: { x: number; s: number; look: GoerLook; dark: number }[] = [
   { x: 46, s: 0.74, dark: 0.4, look: { skin: "#c99a72", top: "#efe8da", bottom: "#3b4a8f", hair: "braids", hairColor: "#2a1a10", outfit: "tee", pose: "dance" } },
 ];
 
+/** A London queue on a cold night: coats and jackets in darker colours, and a wider spread of skin tones. */
+const LONDON_COATS = ["#2a2234", "#3a3f4a", "#5b3a2e", "#1f3a4a", "#4a2a3a", "#2e3a2a"];
+const LONDON_SKIN = ["#f1c9a5", "#c99a72", "#6b4430", "#e0b08a", "#3b2417", "#a8754f", "#f5d6bc", "#8a5a3c", "#d9a07a", "#4a2e1f"];
+function londonLook(look: GoerLook, index: number): GoerLook {
+  const outfit = look.outfit === "dress" ? "dress" : look.outfit === "hoodie" ? "hoodie" : "jacket";
+  return {
+    ...look,
+    outfit,
+    top: LONDON_COATS[index % LONDON_COATS.length],
+    bottom: "#17141c",
+    skin: LONDON_SKIN[index % LONDON_SKIN.length],
+    hair: look.hair === "headwrap" ? "bun" : look.hair,
+    accent: outfit === "jacket" ? "#efe8da" : look.accent,
+  };
+}
+
 const BULBS = [
   ...Array.from({ length: 9 }, (_, i) => [150 + i * 12.5, 66] as const),
   ...Array.from({ length: 11 }, (_, i) => [146.5, 79 + i * 13] as const),
@@ -97,6 +114,7 @@ export function DoorScene({
   const n = ink ?? NEONS.find((x) => x.value === neon) ?? NEONS[0];
   const street = setting ?? citySetting(city);
   const pieces = streetPieces(street);
+  const dress = (look: GoerLook, index: number) => (pieces.crowd === "london" ? londonLook(look, index) : look);
   const shop = shopCopy(street);
   const slips = posterLines(street, sign);
   const speaks = (slot: number) => speakingSlots?.[slot] ?? false;
@@ -234,6 +252,8 @@ export function DoorScene({
         <rect x="70" y="-1000" width="1.2" height="1222" fill={n.stroke} opacity="0.12" />
       </g>
 
+      <PlaceBack place={pieces.place} p={p} />
+
       {neighbors ? <NextDoor x={372} p={p} ad={shop.ad} kiosk={shop.kiosk} shutter={shop.shutter} hints={gossip} /> : null}
       {neighbors ? <PosterWall x={-30} hints={gossip} slips={slips} /> : null}
 
@@ -359,16 +379,17 @@ export function DoorScene({
       <ellipse className="puddle-ring" cx="150" cy="238" rx="6" ry="0.8" fill="none" stroke={n.stroke} strokeWidth="0.6" opacity="0" />
       <ellipse className="puddle-ring" cx="262" cy="244" rx="5" ry="0.7" fill="none" stroke={n.stroke} strokeWidth="0.6" opacity="0" />
       <ellipse id="door-pool" cx="200" cy="225" rx="74" ry="9" fill={`url(#${p}-uvPool)`} opacity={open ? 1 : 0.5} style={{ mixBlendMode: "screen" }} />
+      <PlaceFront place={pieces.place} />
 
       {queue && (
         <g id="queue">
           {pieces.stall === "kebab" ? <KebabVan x={-176} p={p} gossip={gossip} speaks={speaks(4)} index={4} /> : <SuyaStand x={-170} p={p} rim={n.stroke} gossip={gossip} speaks={speaks(4)} index={4} />}
           {CROWD.map((c, i) => (
-            <Goer key={i} x={c.x} y={216} s={c.s} look={c.look} rim={n.stroke} dark={c.dark} />
+            <Goer key={i} x={c.x} y={216} s={c.s} look={dress(c.look, i)} rim={n.stroke} dark={c.dark} />
           ))}
-          <Goer x={66} s={0.78} look={P.yellow} rim={n.stroke} dark={0.22} index={0} gossip={speaks(0)} />
-          <Goer x={90} s={0.78} look={P.puff} rim={n.stroke} dark={0.2} index={1} gossip={speaks(1)} />
-          <Goer x={114} s={0.8} look={P.cap} rim={n.stroke} dark={0.18} index={2} gossip={speaks(2)} />
+          <Goer x={66} s={0.78} look={dress(P.yellow, 6)} rim={n.stroke} dark={0.22} index={0} gossip={speaks(0)} />
+          <Goer x={90} s={0.78} look={dress(P.puff, 7)} rim={n.stroke} dark={0.2} index={1} gossip={speaks(1)} />
+          <Goer x={114} s={0.8} look={dress(P.cap, 8)} rim={n.stroke} dark={0.18} index={2} gossip={speaks(2)} />
           {pieces.seller === "roses" ? <RoseSeller x={-96} rim={n.stroke} gossip={speaks(6)} index={6} /> : <WaterSeller x={-96} rim={n.stroke} gossip={speaks(6)} index={6} />}
           {/* Visitors by the shutter, clear of the kiosk's service window. */}
           <g className="street-pair">
@@ -376,7 +397,7 @@ export function DoorScene({
             <Goer x={584} s={0.72} look={{ skin: "#8a5a3c", top: "#efe8da", bottom: "#17141c", hair: "puff", hairColor: "#2a1a10", outfit: "dress", pose: "hold" }} rim={n.stroke} dark={0.3} flip />
           </g>
           <Goer x={612} s={0.76} look={{ skin: "#3b2417", top: "#3b4a8f", bottom: "#2a2234", hair: "locs", hairColor: "#1c120c", outfit: "hoodie", pose: "phone" }} rim="#ffe2a0" dark={0.35} flip />
-          <Goer x={lampFigureX} s={0.76} look={P.braids} rim={n.stroke} dark={0.2} index={3} gossip={speaks(3)} flip />
+          <Goer x={lampFigureX} s={0.76} look={dress(P.braids, 9)} rim={n.stroke} dark={0.2} index={3} gossip={speaks(3)} flip />
         </g>
       )}
 

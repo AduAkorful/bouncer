@@ -1,7 +1,7 @@
 /** A sponsor's public card. Plain text and small indexes only. Nothing here is ever rendered as HTML or a link. */
 
 import { HEAD_COLORS, PARTS, SKINS, type Look } from "./look.ts";
-import { readSetting, type StreetSetting } from "./street-setting.ts";
+import { placeFromPitch, readSetting, type StreetSetting } from "./street-setting.ts";
 
 export type CardLook = { build: number; skin: number; head: number; outfit: number; eyewear: number };
 export type Card = { sign: string; name: string; pitch: string; look: CardLook; setting: StreetSetting };
@@ -32,7 +32,10 @@ export function parseCard(text: string | null | undefined): { ok: true; card: Ca
   const name = typeof row.name === "string" ? row.name : "";
   const pitch = typeof row.pitch === "string" ? row.pitch : "";
   if (!validSign(sign) || !validName(name) || !validPitch(pitch)) return { ok: false };
-  return { ok: true, card: { sign, name, pitch, look: readLook(row.look), setting: readSetting(row.setting) } };
+  const setting = readSetting(row.setting);
+  const savedPlace = row.setting && typeof row.setting === "object" && "place" in (row.setting as object);
+  if (!savedPlace) setting.place = placeFromPitch(pitch);
+  return { ok: true, card: { sign, name, pitch, look: readLook(row.look), setting } };
 }
 
 export function buildCard(card: Card, maxBytes: number): { ok: true; text: string } | { ok: false; error: string } {
