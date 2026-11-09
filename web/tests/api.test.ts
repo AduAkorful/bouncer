@@ -42,6 +42,19 @@ test("one retry on a network error or a 5xx with the same body, none on a 4xx", 
   assert.equal(n, 2);
 });
 
+test("a retry builds signed headers again", async () => {
+  const seen: string[] = [];
+  let n = 0;
+  let signed = 0;
+  const flaky = (async (_url: unknown, init: RequestInit) => {
+    seen.push((init.headers as Record<string, string>)["x-player-auth"]);
+    return ++n === 1 ? reply(500) : reply(200, { ok: true });
+  }) as typeof fetch;
+  const out = await postJson("https://s.test", flaky, "/player/session", {}, () => ({ "x-player-auth": `sig-${++signed}` }));
+  assert.equal(out.ok, true);
+  assert.deepEqual(seen, ["sig-1", "sig-2"]);
+});
+
 test("a transport failure reads as the flat guard failure", () => {
   assert.deepEqual(asObject({ ok: false, error: "network" }), { ok: false, error: "guard" });
   assert.deepEqual(asObject({ ok: true, status: 200, body: [1] }), { ok: false, error: "guard" });

@@ -24,19 +24,19 @@ export async function loadPlayerSession(): Promise<{ ok: true; session: PlayerSe
 }
 
 export async function postPlayerSession(secrets: DeviceSecrets): Promise<{ ok: true; session: PlayerSession } | { ok: false; error: string }> {
-  return readSession(await apiPost("/player/session", {}, { "x-player-auth": playerHeader(secrets, "/player/session") }));
+  return readSession(await apiPost("/player/session", {}, () => ({ "x-player-auth": playerHeader(secrets, "/player/session") })));
 }
 
 export async function savePlayerName(secrets: DeviceSecrets, name: string): Promise<{ ok: true; session: PlayerSession } | { ok: false; error: string }> {
-  return readSession(await apiPost("/player/name", { name }, { "x-player-auth": playerHeader(secrets, "/player/name") }));
+  return readSession(await apiPost("/player/name", { name }, () => ({ "x-player-auth": playerHeader(secrets, "/player/name") })));
 }
 
 export async function rollPlayerName(secrets: DeviceSecrets): Promise<{ ok: true; session: PlayerSession } | { ok: false; error: string }> {
-  return readSession(await apiPost("/player/roll", {}, { "x-player-auth": playerHeader(secrets, "/player/roll") }));
+  return readSession(await apiPost("/player/roll", {}, () => ({ "x-player-auth": playerHeader(secrets, "/player/roll") })));
 }
 
 export async function resumeRaid(secrets: DeviceSecrets, vaultId: string, round: string): Promise<string | null> {
-  const result = await apiPost("/player/resume", { vaultId, round }, { "x-player-auth": playerHeader(secrets, "/player/resume") });
+  const result = await apiPost("/player/resume", { vaultId, round }, () => ({ "x-player-auth": playerHeader(secrets, "/player/resume") }));
   const body = result.ok && result.body && typeof result.body === "object" ? result.body as { blob?: unknown } : null;
   return typeof body?.blob === "string" && body.blob.length > 0 ? body.blob : null;
 }

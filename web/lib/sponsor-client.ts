@@ -7,7 +7,7 @@ import { apiPost } from "./api.ts";
 import { buildAuthHeader } from "./sponsor-auth.ts";
 import { type Rpc } from "./chain.ts";
 import { deriveSecrets } from "./device-pass.ts";
-import { unlockHeld } from "./player-hold.ts";
+import { createHeld, unlockHeld } from "./player-hold.ts";
 import { accessMessage, accessOnAccount, readPayoutAccount } from "./imported-account.ts";
 import { parseBalance, parseLimits, parseTokenMeta, type LimitsView, type TokenMeta } from "./sponsor-views.ts";
 import { byteCostFromConfig, protocolConfigRequest } from "./storage-cost.ts";
@@ -23,9 +23,9 @@ export type Sponsor = {
   send: (call: Call) => Promise<{ ok: true; hash: string } | { ok: false; error: string }> };
 
 /** The sponsor's account: the named testnet account this device holds a key for, or the passkey account the relay creates. */
-export async function connectSponsor(input: { rpcUrl: string; networkId: string; storageName: string }): Promise<{ ok: true; sponsor: Sponsor } | { ok: false; error: string }> {
+export async function connectSponsor(input: { rpcUrl: string; networkId: string; storageName: string; create?: boolean }): Promise<{ ok: true; sponsor: Sponsor } | { ok: false; error: string }> {
   if (input.networkId !== "testnet") return { ok: false, error: "The passkey network is not testnet." };
-  const unlocked = await unlockHeld();
+  const unlocked = input.create ? await createHeld() : await unlockHeld();
   if ("error" in unlocked) return { ok: false, error: unlocked.error };
   const secrets = await deriveSecrets(unlocked.ikm, "sponsor", "0");
   unlocked.ikm.fill(0);
@@ -36,6 +36,9 @@ export async function connectSponsor(input: { rpcUrl: string; networkId: string;
     const check = await accessOnAccount(input.rpcUrl, named, secrets.accountPublicKey);
     if (check !== "full") return { ok: false, error: accessMessage(check) };
   } else {
+    accountId = await existingPasskeyAccount(input.rpcUrl, secrets.accountPublicKey);
+  }
+  if (!accountId) {
     const created = await apiPost("/passkey/create-account", { publicKey: secrets.accountPublicKey });
     const body = (created.ok ? created.body : null) as { ok?: boolean; accountId?: string } | null;
     if (!body?.ok || typeof body.accountId !== "string") return { ok: false, error: "The passkey account was not created." };
@@ -162,4 +165,15 @@ export async function chainNowNs(rpcUrl: string): Promise<bigint | null> {
   } catch {
     return null;
   }
+}
+
+/**
+ * A returning sponsor on a cleared browser already has an account. Looking it up first keeps the
+ * relay's daily creation allowance for new accounts.
+ */
+async function existingPasskeyAccount(rpcUrl: string, publicKey: string): Promise<string | null> {
+  const looked = await apiPost("/passkey/account", { publicKey });
+  const body = (looked.ok ? looked.body : null) as { ok?: boolean; accountId?: string } | null;
+  if (!body?.ok || typeof body.accountId !== "string") return null;
+  return (await accessOnAccount(rpcUrl, body.accountId, publicKey)) === "full" ? body.accountId : null;
 }

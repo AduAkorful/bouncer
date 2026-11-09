@@ -11,14 +11,17 @@ export function readApiBase(value: string | undefined): string | null {
  * One POST. A network error or a 5xx is tried once more with the same body, because the guard answers
  * a repeat of a call it already ran from its stored reply. A 4xx comes back as it is.
  */
-export async function postJson(base: string | null, fetchImpl: typeof fetch, path: string, body: unknown, headers: Record<string, string> = {}): Promise<ApiResult> {
+/** Signed headers are a function, so a retry signs again: the server refuses a signature it has already seen. */
+export type ApiHeaders = Record<string, string> | (() => Record<string, string>);
+
+export async function postJson(base: string | null, fetchImpl: typeof fetch, path: string, body: unknown, headers: ApiHeaders = {}): Promise<ApiResult> {
   if (!base) return { ok: false, error: "no server" };
   const attempt = async (): Promise<{ result: ApiResult; retry: boolean }> => {
     let response: Response;
     try {
       response = await fetchImpl(`${base}${path}`, {
         method: "POST",
-        headers: { "content-type": "application/json", ...headers },
+        headers: { "content-type": "application/json", ...(typeof headers === "function" ? headers() : headers) },
         body: JSON.stringify(body),
       });
     } catch {
@@ -33,7 +36,7 @@ export async function postJson(base: string | null, fetchImpl: typeof fetch, pat
   return (await attempt()).result;
 }
 
-export function apiPost(path: string, body: unknown, headers: Record<string, string> = {}): Promise<ApiResult> {
+export function apiPost(path: string, body: unknown, headers: ApiHeaders = {}): Promise<ApiResult> {
   return postJson(readApiBase(process.env.NEXT_PUBLIC_API_URL), fetch, path, body, headers);
 }
 

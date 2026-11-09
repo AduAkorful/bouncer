@@ -60,3 +60,10 @@ export async function unlockHeld(signal?: AbortSignal): Promise<{ ikm: Uint8Arra
   if ("ikm" in unlocked) holdIkm(unlocked.ikm);
   return unlocked;
 }
+
+/** Makes a new passkey on this device and keeps the sign-in, the same as the profile's Create a passkey. */
+export async function createHeld(signal?: AbortSignal): Promise<{ ikm: Uint8Array } | { error: string }> {
+  const created = await unlockDevice(signal, "create");
+  if ("ikm" in created) holdIkm(created.ikm);
+  return created;
+}
