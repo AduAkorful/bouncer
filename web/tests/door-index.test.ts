@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Rpc } from "../lib/chain.ts";
-import { frontDoor, readDoorIndex } from "../lib/door-index.ts";
+import { frontDoor, orderDoors, readDoorIndex } from "../lib/door-index.ts";
 
 const key = Array.from({ length: 32 }, (_, i) => i);
 const card = JSON.stringify({ v: 1, sign: "COASTLINE NIGHT", name: "Kwame", pitch: "We owe.", look: {} });
@@ -55,6 +55,9 @@ test("a vault that does not read stays an id", async () => {
       sponsored: false,
       read: false,
       card: null,
+      dayPot: null,
+      round: null,
+      closesAt: null,
     });
   }
 });
@@ -83,12 +86,22 @@ test("a full page says the list stopped and does not read the next id", async ()
 });
 
 test("the front door is an open vault, not a configured id", () => {
-  const closed = { id: "velvet-1", href: "/v/velvet-1", sign: "velvet-1", name: "velvet-1", line: "Closed", shut: true, sponsored: false, read: true, card: null };
-  const open = { id: "qa-coast-05", href: "/v/qa-coast-05", sign: "COASTLINE NIGHT", name: "Kwame", line: "Open", shut: false, sponsored: true, read: true, card: null };
+  const closed = { id: "velvet-1", href: "/v/velvet-1", sign: "velvet-1", name: "velvet-1", line: "Closed", shut: true, sponsored: false, read: true, card: null, dayPot: "20000000", round: "1", closesAt: "1" };
+  const open = { id: "qa-coast-05", href: "/v/qa-coast-05", sign: "COASTLINE NIGHT", name: "Kwame", line: "Open", shut: false, sponsored: true, read: true, card: null, dayPot: "20000000", round: "5", closesAt: "9" };
   const unread = { ...open, id: "miss", read: false, shut: true, line: "Could not be read" };
   assert.equal(frontDoor([closed, open])?.id, "qa-coast-05");
   assert.equal(frontDoor([open, closed])?.id, "qa-coast-05");
   assert.equal(frontDoor([closed, { ...closed, id: "later" }])?.id, "velvet-1");
   assert.equal(frontDoor([unread]), null);
   assert.equal(frontDoor([]), null);
+});
+
+test("the biggest open pot is the front door, and open doors are listed first", () => {
+  const base = { href: "/v/x", sign: "X", name: "X", line: "Open", sponsored: true, read: true, card: null, round: "1", closesAt: "9" };
+  const small = { ...base, id: "small", shut: false, dayPot: "5000000" };
+  const big = { ...base, id: "big", shut: false, dayPot: "20000000" };
+  const shut = { ...base, id: "shut", shut: true, line: "Closed", dayPot: "90000000" };
+  assert.equal(frontDoor([small, shut, big])?.id, "big");
+  assert.equal(frontDoor([small, { ...big, dayPot: "5000000" }])?.id, "small");
+  assert.deepEqual(orderDoors([shut, small, big]).map((door) => door.id), ["big", "small", "shut"]);
 });

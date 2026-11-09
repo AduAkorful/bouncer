@@ -15,6 +15,18 @@ function untilUtcMidnight() {
   return remaining(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
 }
 
+/** The close as a clock time in the viewer's own zone, e.g. "at 00:00 GMT". Rendered after mount, so the server and browser agree. */
+export function CloseTime({ className = "", endsAtNs, prefix = "at" }: { className?: string; endsAtNs: string; prefix?: string }) {
+  const [text, setText] = useState<string | null>(null);
+  useEffect(() => {
+    if (!/^[0-9]+$/.test(endsAtNs)) return;
+    const ms = Number(BigInt(endsAtNs) / 1_000_000n);
+    if (!Number.isSafeInteger(ms)) return;
+    setText(`${prefix} ${new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit", hour12: false, timeZoneName: "short" }).format(new Date(ms))}`);
+  }, [endsAtNs, prefix]);
+  return text ? <span className={className}>{text}</span> : null;
+}
+
 /** Counts down to `endsAtNs` when the vault supplied one. Otherwise the copied screens count to 00:00 UTC. */
 export function Countdown({ className = "", endsAtNs }: { className?: string; endsAtNs?: string }) {
   const [left, setLeft] = useState<string | null>(null);

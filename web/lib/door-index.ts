@@ -22,12 +22,34 @@ export type ListedDoor = {
   /** False when this vault's own read failed. The id still came from the chain. */
   read: boolean;
   card: Card | null;
+  /** Tonight's pot in base units, the round, and the close. Null when the vault was not read. */
+  dayPot: string | null;
+  round: string | null;
+  closesAt: string | null;
 };
 
-/** The door a plain URL should open. An open vault wins. A closed list keeps chain order. The env id is not consulted. */
+/**
+ * The door a plain URL should open. An open vault wins, and among open vaults the biggest pot tonight.
+ * A tie, or a closed list, keeps chain order. The env id is not consulted.
+ */
 export function frontDoor(doors: ListedDoor[]): ListedDoor | null {
   const readable = doors.filter((door) => door.read);
-  return readable.find((door) => !door.shut) ?? readable[0] ?? null;
+  let best: ListedDoor | null = null;
+  for (const door of readable) {
+    if (door.shut) continue;
+    if (!best || potOf(door) > potOf(best)) best = door;
+  }
+  return best ?? readable[0] ?? null;
+}
+
+/** Open doors first, biggest pot first among them. Closed and unread doors keep chain order after. */
+export function orderDoors(doors: ListedDoor[]): ListedDoor[] {
+  const open = doors.filter((door) => !door.shut).sort((a, b) => (potOf(b) > potOf(a) ? 1 : potOf(b) < potOf(a) ? -1 : 0));
+  return [...open, ...doors.filter((door) => door.shut)];
+}
+
+function potOf(door: ListedDoor): bigint {
+  return door.dayPot && /^[0-9]+$/.test(door.dayPot) ? BigInt(door.dayPot) : 0n;
 }
 
 export async function readDoorIndex(
@@ -57,7 +79,7 @@ async function readListed(rpc: Rpc, contractId: string, id: string, nowMs: numbe
   const href = doorPaths(id).door;
   const result = await rpc(viewRequest(contractId, "get_vault", { vault_id: id }));
   const parsed = result.ok ? parseVault(result.value) : null;
-  if (!parsed || !parsed.ok) return { id, href, sign: id, name: id, line: "Could not be read", shut: true, sponsored: false, read: false, card: null };
+  if (!parsed || !parsed.ok) return { id, href, sign: id, name: id, line: "Could not be read", shut: true, sponsored: false, read: false, card: null, dayPot: null, round: null, closesAt: null };
   const card = parseCard(parsed.vault.card);
   const known = card.ok ? card.card : null;
   const state = doorState(parsed.vault, nowMs);
@@ -71,6 +93,9 @@ async function readListed(rpc: Rpc, contractId: string, id: string, nowMs: numbe
     sponsored: parsed.vault.specHash !== null,
     read: true,
     card: known,
+    dayPot: parsed.vault.dayPot,
+    round: parsed.vault.round,
+    closesAt: parsed.vault.closesAt,
   };
 }
 
