@@ -10,6 +10,12 @@ type RpcOptions = {
   retryDelaysMs?: readonly number[];
   /** Where a failed read is reported. The reason never reaches the page. */
   log?: (line: string) => void;
+  /**
+   * Reuse a successful answer for the life of this client. Pages make one client per request, so the
+   * door list and the door read share one `get_vault` instead of asking the node twice. Never set on a
+   * long-lived client, whose answers would go stale.
+   */
+  keep?: boolean;
 };
 
 /** One chain call, including its body. A page read is two of these rounds. */
@@ -126,14 +132,23 @@ function defaultLog(line: string) {
 }
 
 export function httpRpc(rpcUrl: string, fetchImpl: typeof fetch = fetch, options: RpcOptions = {}): Rpc {
+  const kept = new Map<string, Promise<RpcResult>>();
   return (request) => {
     const key = `${rpcUrl}\n${JSON.stringify(request)}`;
+    const known = kept.get(key);
+    if (known) return known;
     const current = flights.get(key);
     if (current) return current;
     const run = readWithRetry(rpcUrl, fetchImpl, options, request).finally(() => {
       if (flights.get(key) === run) flights.delete(key);
     });
     flights.set(key, run);
+    if (options.keep) {
+      kept.set(key, run);
+      void run.then((result) => {
+        if (!result.ok) kept.delete(key);
+      });
+    }
     return run;
   };
 }

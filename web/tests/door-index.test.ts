@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Rpc } from "../lib/chain.ts";
-import { frontDoor, orderDoors, readDoorIndex } from "../lib/door-index.ts";
+import { doorCandidates, frontDoor, orderDoors, readDoorIndex } from "../lib/door-index.ts";
 
 const key = Array.from({ length: 32 }, (_, i) => i);
 const card = JSON.stringify({ v: 1, sign: "COASTLINE NIGHT", name: "Kwame", pitch: "We owe.", look: {} });
@@ -104,4 +104,8 @@ test("the biggest open pot is the front door, and open doors are listed first", 
   assert.equal(frontDoor([small, shut, big])?.id, "big");
   assert.equal(frontDoor([small, { ...big, dayPot: "5000000" }])?.id, "small");
   assert.deepEqual(orderDoors([shut, small, big]).map((door) => door.id), ["big", "small", "shut"]);
+  // A plain URL tries readable doors in front-door order and skips unread ones.
+  const unread = { ...shut, id: "unread", read: false };
+  assert.deepEqual(doorCandidates([unread, shut, small, big]).map((door) => door.id), ["big", "small", "shut"]);
+  assert.equal(doorCandidates([unread, shut, small, big])[0].id, frontDoor([unread, shut, small, big])?.id);
 });

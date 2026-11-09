@@ -42,6 +42,14 @@ export function frontDoor(doors: ListedDoor[]): ListedDoor | null {
   return best ?? readable[0] ?? null;
 }
 
+/**
+ * The doors a plain URL may open, best first: readable open doors by pot, then readable closed ones.
+ * The first is the front door. The rest are tried when its read fails, so one bad read does not blank the page.
+ */
+export function doorCandidates(doors: ListedDoor[]): ListedDoor[] {
+  return orderDoors(doors.filter((door) => door.read));
+}
+
 /** Open doors first, biggest pot first among them. Closed and unread doors keep chain order after. */
 export function orderDoors(doors: ListedDoor[]): ListedDoor[] {
   const open = doors.filter((door) => !door.shut).sort((a, b) => (potOf(b) > potOf(a) ? 1 : potOf(b) < potOf(a) ? -1 : 0));

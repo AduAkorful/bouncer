@@ -156,3 +156,19 @@ test("one failed parallel door view fails the entire read", async () => {
   assert.deepEqual(methods.sort(), ["get_owner", "get_vault"]);
   assert.deepEqual(result, failure);
 });
+
+test("a page client reuses a good answer, and a long-lived client does not", async () => {
+  let calls = 0;
+  const fetchImpl = (async () => {
+    calls += 1;
+    return new Response(JSON.stringify(rpcBody("owner.testnet")), { status: 200 });
+  }) as typeof fetch;
+  const page = httpRpc("https://rpc.example", fetchImpl, { ...quick, keep: true });
+  assert.equal((await page(request)).ok, true);
+  assert.equal((await page(request)).ok, true);
+  assert.equal(calls, 1);
+  const server = httpRpc("https://rpc.example", fetchImpl, quick);
+  await server(request);
+  await server(request);
+  assert.equal(calls, 3);
+});
