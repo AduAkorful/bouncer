@@ -69,21 +69,38 @@ export function nextStreak(streak: number, lastDay: string | null, today: string
 }
 
 export function shareLine(name: string, place: number, nights: number, streak: number): string {
-  return `${name} · ${ordinal(place)} on Bouncer · ${nights} ${nights === 1 ? "night" : "nights"} in · streak ${streak}`;
+  return `${name} · ${ordinal(place)} on Bouncer · ${nights} ${nights === 1 ? "night" : "nights"} in · ${streak}-day streak`;
 }
 
+/** How the board is ordered, in the words the board shows. */
+export const BOARD_RULE = "Ranked by nights in, then by streak. Players level on both share a place.";
+
+/**
+ * Only players who have opened a raid are on the board; an account alone does not put a name there.
+ * Players level on nights and streak share a place (1, 1, 3), and are listed oldest account first.
+ */
 export function publicBoard(players: PlayerRow[], today: string): PublicPlayer[] {
-  const ranked = [...players].sort((a, b) => {
+  const played = players.filter((player) => player.lastDay !== null || player.nightsIn > 0);
+  const ranked = [...played].sort((a, b) => {
     if (b.nightsIn !== a.nightsIn) return b.nightsIn - a.nightsIn;
     const streak = shownStreak(b.streak, b.lastDay, today) - shownStreak(a.streak, a.lastDay, today);
     if (streak !== 0) return streak;
     return a.created < b.created ? -1 : a.created > b.created ? 1 : 0;
   });
+  let place = 0;
+  let previous: { nights: number; streak: number } | null = null;
   return ranked.map((player, index) => {
     const streak = shownStreak(player.streak, player.lastDay, today);
-    const place = index + 1;
+    if (!previous || previous.nights !== player.nightsIn || previous.streak !== streak) place = index + 1;
+    previous = { nights: player.nightsIn, streak };
     return { name: player.name, place, nights: player.nightsIn, streak, line: shareLine(player.name, place, player.nightsIn, streak) };
   });
+}
+
+/** One name on the board, matched without regard to letter case, since the board draws names in capitals. */
+export function boardEntry(board: PublicPlayer[], name: string): PublicPlayer | null {
+  const wanted = name.trim().toLowerCase();
+  return board.find((entry) => entry.name.toLowerCase() === wanted) ?? null;
 }
 
 export async function openSession(store: PlayerStore, input: { publicKey: string; claimKey: string; now: number; random?: () => number }): Promise<{ ok: true; player: PlayerRow; nights: NightRow[] } | { ok: false; error: string }> {

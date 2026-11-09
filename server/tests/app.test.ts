@@ -126,6 +126,16 @@ test("/verdict refuses a relay that owns the vault", async () => {
   assert.equal(res.status, 409);
 });
 
+test("/verdict answers a contract refusal with 422, so the browser does not send it again", async () => {
+  const { deps } = testDeps();
+  deps.submitVerdict = async () => ({ ok: false, error: "refused", reason: "Smart contract panicked: not open" });
+  const res = await createApp(deps).request("/verdict", post("/verdict", verdict("anchor")));
+  assert.equal(res.status, 422);
+  assert.deepEqual(await res.json(), { ok: false, error: "refused", reason: "Smart contract panicked: not open" });
+  deps.submitVerdict = async () => ({ ok: false, error: "rpc" });
+  assert.equal((await createApp(deps).request("/verdict", post("/verdict", verdict("anchor")))).status, 502);
+});
+
 test("/crack defaults to the env vault and takes a vault id", async () => {
   const { deps, views } = testDeps();
   const app = createApp(deps);

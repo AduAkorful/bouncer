@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { KeyPair } from "near-api-js";
 import { createPlayerAuth, playerChallenge } from "../src/player-auth.ts";
-import { memoryPlayers, nextStreak, openSession, publicBoard, recordGotIn, recordOpen, renamePlayer, shownStreak, utcDay } from "../src/player-record.ts";
+import { boardEntry, memoryPlayers, nextStreak, openSession, publicBoard, recordGotIn, recordOpen, renamePlayer, shownStreak, utcDay } from "../src/player-record.ts";
 
 const DAY = 24 * 60 * 60 * 1000;
 const START = Date.parse("2026-11-01T12:00:00.000Z");
@@ -85,3 +85,20 @@ function pair(): { publicKey: string; claimKey: string } {
   const claim = KeyPair.fromRandom("ed25519");
   return { publicKey: account.getPublicKey().toString(), claimKey: Buffer.from(claim.getPublicKey().data).toString("hex") };
 }
+
+test("the board lists only players who opened a raid, and level players share a place", () => {
+  const row = (name: string, nightsIn: number, streak: number, lastDay: string | null, created: string) =>
+    ({ publicKey: "", claimKey: "", name, renameUsed: false, streak, lastDay, nightsIn, created });
+  const today = "2026-11-09";
+  const board = publicBoard([
+    row("Quiet1", 0, 0, null, "2026-11-01"),
+    row("Alpha", 0, 1, today, "2026-11-02"),
+    row("Bravo", 0, 1, today, "2026-11-03"),
+    row("Charlie", 2, 1, today, "2026-11-04"),
+    row("Delta", 0, 0, "2026-11-01", "2026-11-05"),
+  ], today);
+  assert.deepEqual(board.map((p) => [p.name, p.place]), [["Charlie", 1], ["Alpha", 2], ["Bravo", 2], ["Delta", 4]]);
+  assert.equal(boardEntry(board, "ALPHA")?.name, "Alpha");
+  assert.equal(boardEntry(board, "quiet1"), null);
+  assert.match(board[1].line, /2nd on Bouncer · 0 nights in · 1-day streak/);
+});

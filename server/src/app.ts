@@ -13,7 +13,7 @@ import type { Budget, Counter, Limiter } from "./limits.ts";
 import { draftFitsCap } from "./sponsor-draft.ts";
 import { createAuthenticator } from "./auth.ts";
 import { createPlayerAuth } from "./player-auth.ts";
-import { openSession, publicBoard, recordGotIn, recordOpen, renamePlayer, rollName, utcDay, viewOf, type NightRow, type PlayerRow, type PlayerStore } from "./player-record.ts";
+import { BOARD_RULE, boardEntry, openSession, publicBoard, recordGotIn, recordOpen, renamePlayer, rollName, utcDay, viewOf, type NightRow, type PlayerRow, type PlayerStore } from "./player-record.ts";
 import { playerNameToStore } from "../../web/lib/player-name.ts";
 import { accountIdForPublicKey } from "../../web/lib/passkey-account.ts";
 
@@ -30,7 +30,7 @@ export type Deps = {
   marks: Map<string, Mark>;
   /** Absent until SurrealDB is configured. The phone is not the record. */
   players?: PlayerStore;
-  submitVerdict: (verdict: VerdictBody, signature: number[]) => Promise<{ ok: true; transactionHash: string } | { ok: false; error: string }>;
+  submitVerdict: (verdict: VerdictBody, signature: number[]) => Promise<{ ok: true; transactionHash: string } | { ok: false; error: string; reason?: string }>;
   createAccount: (publicKey: string) => Promise<unknown & { ok: boolean }>;
   signTransaction: (body: unknown) => Promise<unknown & { ok: boolean }>;
   chainNowMs: () => Promise<{ ok: true; nowMs: number } | { ok: false; error: string }>;
@@ -114,7 +114,8 @@ export function createApp(deps: Deps) {
     const allowed = submissionAllowed(door.vault, door.owner, env.relay.accountId, parsed.verdict, parsed.verdict.vault_id);
     if (!allowed.ok) return c.json(allowed, 409);
     const sent = await deps.submitVerdict(parsed.verdict, parsed.signature);
-    if (!sent.ok) return c.json(sent, 502);
+    // A refusal will be the same on every send, so it is a 422 and the browser does not retry it.
+    if (!sent.ok) return c.json(sent, sent.error === "refused" || sent.error === "number" ? 422 : 502);
     if (deps.players) {
       await recordGotIn(deps.players, { claimKey: parsed.verdict.player_id, vaultId: parsed.verdict.vault_id, round: parsed.verdict.round, now: deps.now() }).catch(() => undefined);
     }
@@ -177,19 +178,30 @@ export function createApp(deps: Deps) {
     }
     if (op === "draft_spec" && deps.generateDraft) {
       const requestedCap = input.cap as string | undefined;
-      const spec = await deps.generateDraft(input.story as string, input.decimals as number, requestedCap);
-      if (!specFits(spec)) return c.json({ ok: false, error: "model" }, 422);
-      const cap = requestedCap ?? MAX_CAP.toString();
-      const checked = await deps.post(sponsorCall(env.guard, "check_spec", { spec, cap }));
-      if (!checked.ok) return c.json({ ok: false, error: "guard" }, 502);
-      const report = checked.body as { ok?: boolean; spec_hash?: string; pass?: boolean } | null;
-      if (report?.ok !== true || typeof report.spec_hash !== "string") {
-        return c.json({ ok: false, error: "spec" }, 422);
+      // The model sometimes writes a story the guard will not read. One more draft is tried before giving up,
+      // inside the same allowance, so the sponsor does not have to press again.
+      let failure: { status: 422 | 502; body: Record<string, unknown> } = { status: 422, body: { ok: false, error: "model" } };
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const spec = await deps.generateDraft(input.story as string, input.decimals as number, requestedCap);
+        if (!specFits(spec)) {
+          failure = { status: 422, body: { ok: false, error: "model" } };
+          continue;
+        }
+        const cap = requestedCap ?? MAX_CAP.toString();
+        const checked = await deps.post(sponsorCall(env.guard, "check_spec", { spec, cap }));
+        if (!checked.ok) return c.json({ ok: false, error: "guard" }, 502);
+        const report = checked.body as { ok?: boolean; spec_hash?: string; pass?: boolean } | null;
+        if (report?.ok !== true || typeof report.spec_hash !== "string") {
+          failure = { status: 422, body: { ok: false, error: "spec" } };
+          continue;
+        }
+        if (requestedCap !== undefined && (report.pass !== true || !draftFitsCap(spec, BigInt(requestedCap), input.decimals as number))) {
+          failure = { status: 422, body: { ok: false, error: "spec", detail: "The draft did not pass the fairness check for your cap. Try again or edit the spec by hand." } };
+          continue;
+        }
+        return c.json({ ok: true, spec });
       }
-      if (requestedCap !== undefined && (report.pass !== true || !draftFitsCap(spec, BigInt(requestedCap), input.decimals as number))) {
-        return c.json({ ok: false, error: "spec", detail: "The draft did not pass the fairness check for your cap. Try again or edit the spec by hand." }, 422);
-      }
-      return c.json({ ok: true, spec });
+      return c.json(failure.body, failure.status);
     }
     const posted = await deps.post(sponsorCall(env.guard, op, input));
     if (!posted.ok) return c.json({ ok: false, error: "guard" }, 502);
@@ -314,7 +326,18 @@ export function createApp(deps: Deps) {
   app.get("/player/board", (c) => stored(c, async () => {
     if (!deps.players) return unavailable(c);
     const board = publicBoard(await deps.players.allPlayers(), utcDay(deps.now()));
-    return c.json({ ok: true, players: board.slice(0, 50) });
+    const limit = Math.min(100, Math.max(1, Number.parseInt(c.req.query("limit") ?? "50", 10) || 50));
+    const offset = Math.max(0, Number.parseInt(c.req.query("offset") ?? "0", 10) || 0);
+    return c.json({ ok: true, players: board.slice(offset, offset + limit), total: board.length, offset, rule: BOARD_RULE });
+  }));
+
+  /** One player's place, so a place page does not download the whole board. */
+  app.get("/player/place/:name", (c) => stored(c, async () => {
+    if (!deps.players) return unavailable(c);
+    const name = c.req.param("name");
+    if (name.length < 1 || name.length > 40) return c.json({ ok: false, error: "name" }, 400);
+    const board = publicBoard(await deps.players.allPlayers(), utcDay(deps.now()));
+    return c.json({ ok: true, player: boardEntry(board, name), total: board.length, rule: BOARD_RULE });
   }));
 
   app.get("/player/share/:name", (c) => stored(c, async () => {
@@ -342,7 +365,7 @@ function specFits(spec: unknown): boolean {
 async function playerView(store: PlayerStore, player: PlayerRow, nights: NightRow[], now: number) {
   const today = utcDay(now);
   const board = publicBoard(await store.allPlayers(), today);
-  const place = board.find((entry) => entry.name === player.name) ?? null;
+  const place = boardEntry(board, player.name);
   return {
     ok: true as const,
     player: viewOf(player, today),
