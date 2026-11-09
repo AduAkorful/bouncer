@@ -25,6 +25,13 @@ export function fromBaseUnits(units: bigint, decimals: number): string {
   return fraction ? `${whole}.${fraction}` : whole.toString();
 }
 
+/** A short reading for a balance: at most `places` decimals, rounded down. */
+export function shortUnits(units: bigint, decimals: number, places: number): string {
+  if (decimals <= places) return fromBaseUnits(units, decimals);
+  const drop = 10n ** BigInt(decimals - places);
+  return fromBaseUnits((units / drop) * drop, decimals);
+}
+
 export function storageRequest(tokenId: string, accountId: string) {
   return viewRequest(tokenId, "storage_balance_of", { account_id: accountId });
 }

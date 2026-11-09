@@ -5,6 +5,7 @@
 
 import type { LimitsView } from "./sponsor-views.ts";
 import type { VaultView } from "./vault.ts";
+import { fromBaseUnits } from "./token.ts";
 
 export type Check = { ok: true } | { ok: false; error: string };
 
@@ -68,11 +69,15 @@ export function preflightSetSpec(input: {
 }
 
 /** Mirrors `ft_on_transfer`, which refunds a deposit from anyone but the sponsor. */
-export function preflightFund(input: { vault: VaultView; accountId: string; amount: bigint; funds: Funds; vaultRegistered: boolean }): Check {
+export function preflightFund(input: { vault: VaultView; accountId: string; amount: bigint; funds: Funds; vaultRegistered: boolean; token?: { symbol: string; decimals: number } }): Check {
   if (input.accountId !== input.vault.sponsor) return no("Only the vault's sponsor can fund it.");
   if (input.amount <= 0n) return no("Enter an amount above zero.");
   if (!input.vaultRegistered) return no("The vault account is not registered with the token, so it cannot receive funds yet.");
-  if (input.funds.tokenUnits < input.amount) return no("The account does not hold that much of the token.");
+  if (input.funds.tokenUnits < input.amount) {
+    if (!input.token) return no("The account does not hold that much of the token.");
+    const { symbol, decimals } = input.token;
+    return no(`The account holds ${fromBaseUnits(input.funds.tokenUnits, decimals)} ${symbol}, and this needs ${fromBaseUnits(input.amount, decimals)} ${symbol}. Add ${symbol} to the account, then refresh balances.`);
+  }
   if (input.funds.nearYocto < GAS_RESERVE_YOCTO) return no("The account needs a little NEAR for the transaction.");
   return OK;
 }

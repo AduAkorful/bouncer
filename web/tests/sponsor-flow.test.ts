@@ -103,6 +103,8 @@ test("fund, keeper, and reclaim follow the contract", () => {
   assert.equal(preflightFund({ ...f, amount: 0n }).ok, false);
   assert.equal(preflightFund({ ...f, vaultRegistered: false }).ok, false);
   assert.equal(preflightFund({ ...f, funds: { ...rich, tokenUnits: 1n } }).ok, false);
+  const empty = preflightFund({ ...f, funds: { ...rich, tokenUnits: 0n }, token: { symbol: "USDC", decimals: 6 } });
+  assert.deepEqual(empty, { ok: false, error: "The account holds 0 USDC, and this needs 10 USDC. Add USDC to the account, then refresh balances." });
   assert.equal(preflightFund({ ...f, funds: { ...rich, nearYocto: GAS_RESERVE_YOCTO - 1n } }).ok, false);
   assert.equal(preflightKeeper({ vault: vault(), accountId: "sponsor.testnet" }).ok, true);
   assert.equal(preflightKeeper({ vault: vault(), accountId: "keeper.testnet" }).ok, false);

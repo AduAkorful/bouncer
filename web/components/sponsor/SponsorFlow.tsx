@@ -15,7 +15,7 @@ import { sponsorStep } from "@/lib/sponsor-state";
 import { runSponsorAction, sponsorDetail } from "@/lib/sponsor-action";
 import { confirmSponsorVault, type VaultChange } from "@/lib/sponsor-confirmation";
 import { createBytes, depositFor, specBytes } from "@/lib/storage-cost";
-import { fromBaseUnits, toBaseUnits } from "@/lib/token";
+import { fromBaseUnits, shortUnits, toBaseUnits } from "@/lib/token";
 import { commitRound, createSponsorVault, fund, reclaim, setKeeper, setSpec, type Call } from "@/lib/vault-calls";
 import type { VaultView } from "@/lib/vault";
 
@@ -116,9 +116,9 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
     if (refreshAfter) await refresh();
   };
 
-  const connect = () =>
+  const connect = (create = false) =>
     run(async () => {
-      const result = await connectSponsor({ rpcUrl, networkId, storageName });
+      const result = await connectSponsor({ rpcUrl, networkId, storageName, create });
       if (!result.ok) return result.error;
       const read = await readChain(rpc, rpcUrl, contractId);
       if (!read.ok) return read.error;
@@ -170,7 +170,7 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
     await run(async () => {
       const cap = toBaseUnits(capText, decimals);
       if (cap === null || cap <= 0n) return "Enter a cap above zero before drafting.";
-      const answer = await apiPost("/sponsor/draft", { story, decimals, cap: cap.toString() }, sponsor?.authHeaders("/sponsor/draft"));
+      const answer = await apiPost("/sponsor/draft", { story, decimals, cap: cap.toString() }, sponsor ? () => sponsor.authHeaders("/sponsor/draft") : undefined);
       const body = (answer.ok ? answer.body : null) as { ok?: boolean; spec?: unknown; detail?: string; error?: string } | null;
       if (!body?.ok || !body.spec || typeof body.spec !== "object" || Array.isArray(body.spec)) return sponsorDetail(body, "The draft did not come back. Write it by hand or try again.");
       setSpecText(JSON.stringify(body.spec, null, 2));
@@ -197,7 +197,7 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
       const cap = toBaseUnits(capText, decimals);
       if (!spec) return "The story is not valid JSON.";
       if (cap === null || cap <= 0n) return "Enter a cap above zero.";
-      const answer = await apiPost("/sponsor/check", { spec, cap: cap.toString() }, sponsor?.authHeaders("/sponsor/check"));
+      const answer = await apiPost("/sponsor/check", { spec, cap: cap.toString() }, sponsor ? () => sponsor.authHeaders("/sponsor/check") : undefined);
       const body = (answer.ok ? answer.body : null) as { ok?: boolean; pass?: boolean; failures?: string[]; warnings?: string[]; detail?: string } | null;
       if (!body?.ok || typeof body.pass !== "boolean" || !Array.isArray(body.failures) || !body.failures.every((f) => typeof f === "string") || !Array.isArray(body.warnings) || !body.warnings.every((w) => typeof w === "string")) return sponsorDetail(body, "The test did not run. Try again.");
       setSpecText(JSON.stringify(spec, null, 2));
@@ -230,7 +230,7 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
       const capUnits = toBaseUnits(capText, decimals);
       if (capUnits === null || capUnits <= 0n) return "Enter a cap above zero.";
       if (spec.hint !== undefined && !ackHint) return "Confirm the hint first.";
-      const sealed = await apiPost("/sponsor/seal", { vault_id: vaultId, spec, cap: capUnits.toString(), ack_hint: ackHint }, sponsor.authHeaders("/sponsor/seal"));
+      const sealed = await apiPost("/sponsor/seal", { vault_id: vaultId, spec, cap: capUnits.toString(), ack_hint: ackHint }, () => sponsor.authHeaders("/sponsor/seal"));
       const body = (sealed.ok ? sealed.body : null) as { ok?: boolean; spec_ct?: string; spec_hash?: string; detail?: string } | null;
       if (!body?.ok || typeof body.spec_ct !== "string" || typeof body.spec_hash !== "string") return sponsorDetail(body, "The story could not be sealed.");
       const ctBytes = body.spec_ct.length / 2;
@@ -248,7 +248,11 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
       const amount = toBaseUnits(fundText, decimals);
       if (amount === null) return "Enter an amount with at most " + decimals + " decimals.";
       const registered = await vaultRegistered(rpc, chain.tokenId, contractId);
-      const check = preflightFund({ vault, accountId: sponsor.accountId, amount, funds, vaultRegistered: registered });
+      let check = preflightFund({ vault, accountId: sponsor.accountId, amount, funds, vaultRegistered: registered, token: symbol ? { symbol, decimals } : undefined });
+      // Point at the faucet note under the balances when that is where test USDC comes from.
+      if (!check.ok && funds.tokenUnits < amount && networkId === "testnet" && symbol.toUpperCase() === "USDC") {
+        check = { ...check, error: `${check.error} The Circle faucet steps are under the balances.` };
+      }
       return sendChecked(check, () => fund(chain.tokenId, contractId, vaultId, amount), "Funded.");
     });
   }
@@ -271,7 +275,7 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
     await run(async () => {
       if (!chain || !vault || !sponsor) return "Create the vault first.";
       setVaultActionStatus("Getting the guard’s signature…");
-      const signed = await apiPost("/sponsor/commit", { vault_id: vaultId }, sponsor.authHeaders("/sponsor/commit"));
+      const signed = await apiPost("/sponsor/commit", { vault_id: vaultId }, () => sponsor.authHeaders("/sponsor/commit"));
       const body = (signed.ok ? signed.body : null) as { ok?: boolean; commitment?: string; guard_version?: string; signature?: string; round?: number; error?: string } | null;
       if (!body?.ok || !body.commitment || !body.guard_version || !body.signature || !Number.isSafeInteger(body.round) || Number(body.round) < 1) return typeof body?.error === "string" && body.error.length > 3 && !/^[a-z ]+$/.test(body.error) ? body.error : "The guard did not sign this round.";
       const now = await chainNowNs(rpcUrl);
@@ -319,7 +323,8 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
         </p>
         <div role="status" className="rounded-xl border border-white/20 px-4 py-3 text-sm text-chalk/90">
           {sponsorAvailabilityMessage(availability)}
-          {availability !== "loading" ? <button className="chalk-focus ml-2 min-h-11 underline" onClick={() => { setAvailability("loading"); setAvailabilityCheck((n) => n + 1); }}>Check again</button> : null}
+          {/* An open registry needs no second look. Closed and unread can change, so they keep the button. */}
+          {availability === "closed" || availability === "unknown" ? <button className="chalk-focus ml-2 min-h-11 underline" onClick={() => { setAvailability("loading"); setAvailabilityCheck((n) => n + 1); }}>Check again</button> : null}
         </div>
         {busy && !vaultActionStatus ? <p role="status" className="text-sm text-chalk/80">Working on this step…</p> : null}
         {notice ? <p ref={noticeRef} role="status" className="rounded-xl border border-white/15 px-4 py-3 text-sm">{notice.text}</p> : null}
@@ -333,12 +338,16 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
               <button className={button} disabled={busy} onClick={() => void connect()}>
                 Use your device passkey
               </button>
+              <p className="mt-4 text-sm text-chalk/70">New here? Make a passkey on this device. The site makes a testnet account for it. There is no seed phrase.</p>
+              <button className="chalk-focus mt-3 inline-flex min-h-11 items-center rounded-2xl border border-chalk/30 px-5 font-sign disabled:opacity-40" disabled={busy} onClick={() => void connect(true)}>
+                Create a passkey
+              </button>
             </>
           ) : (
             <div className="mt-2 space-y-1 text-sm">
               <p className="font-mono break-all">{sponsor.accountId}</p>
               <p className="text-chalk/70">
-                {nothing ? (readNotice ? "Balances unavailable." : "Reading balances…") : `${fromBaseUnits(funds.nearYocto, 24)} NEAR · ${fromBaseUnits(funds.tokenUnits, decimals)} ${symbol}`}
+                {nothing ? (readNotice ? "Balances unavailable." : "Reading balances…") : `${shortUnits(funds.nearYocto, 24, 4)} NEAR · ${fromBaseUnits(funds.tokenUnits, decimals)} ${symbol}`}
               </p>
               <p className="text-chalk/60">You need {symbol} for the pot and a little NEAR for storage. This site does not send you either.</p>
               {networkId === "testnet" && symbol.toUpperCase() === "USDC" && (
