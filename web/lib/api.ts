@@ -40,11 +40,12 @@ export function apiPost(path: string, body: unknown, headers: ApiHeaders = {}): 
   return postJson(readApiBase(process.env.NEXT_PUBLIC_API_URL), fetch, path, body, headers);
 }
 
-export async function apiGet(path: string): Promise<ApiResult> {
+/** A read from the server. `timeoutMs` turns a hung read into a plain failure the page can offer to retry. */
+export async function apiGet(path: string, timeoutMs?: number): Promise<ApiResult> {
   const base = readApiBase(process.env.NEXT_PUBLIC_API_URL);
   if (!base) return { ok: false, error: "no server" };
   try {
-    const response = await fetch(`${base}${path}`);
+    const response = await fetch(`${base}${path}`, timeoutMs ? { signal: AbortSignal.timeout(timeoutMs) } : undefined);
     const parsed = await response.json().catch(() => null);
     if (!response.ok) return { ok: false, error: "server" };
     return { ok: true, status: response.status, body: parsed };

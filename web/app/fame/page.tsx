@@ -2,7 +2,7 @@ import { screen } from "@/lib/screen";
 import Link from "next/link";
 import { PlayerBoard } from "@/components/fame/PlayerBoard";
 
-export const metadata = screen("Names, not ledgers.", "A crack shows the night. The bill that worked stays off this page.", { index: false });
+export const metadata = screen("Hall of fame · Bouncer", "The players who got bills past the door, ranked by nights in. The bill that worked stays off this page.", { path: "/fame" });
 
 export default function FamePage() {
   return (
@@ -12,9 +12,14 @@ export default function FamePage() {
         <h1 className="mt-1 font-sign text-3xl leading-tight">Names, not ledgers.</h1>
         <p className="mt-2 text-sm text-chalk/65">A place shows the nights and the streak. It never shows the bill that worked.</p>
         <PlayerBoard />
-        <Link href="/home" className="chalk-focus mt-6 inline-flex min-h-11 items-center text-sm text-chalk/80 underline decoration-white/20">
-          The door
-        </Link>
+        <nav className="mt-6 flex flex-wrap gap-x-5" aria-label="Leave the board">
+          <Link href="/home" prefetch={false} className="chalk-focus inline-flex min-h-11 items-center text-sm text-chalk/80 underline decoration-white/20">
+            The door
+          </Link>
+          <Link href="/profile" prefetch={false} className="chalk-focus inline-flex min-h-11 items-center text-sm text-chalk/80 underline decoration-white/20">
+            Your profile
+          </Link>
+        </nav>
       </div>
     </main>
   );
