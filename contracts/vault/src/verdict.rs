@@ -156,6 +156,9 @@ impl VaultContract {
         require!(env::predecessor_account_id() == payout, "payout mismatch");
 
         let mut vault = self.take_vault(&vault_id);
+        // The sponsor wrote this ledger. A verdict carries no account, so the contract can only refuse here,
+        // at payout: the crack still holds the night's slot, and expire returns the amount to the pot.
+        require!(payout != vault.sponsor && payout != self.v1_ref().owner, "sponsor cannot claim");
         let key = CrackKey {
             vault_id: vault_id.clone(),
             round,

@@ -58,6 +58,42 @@ fn claim_signature_for_a_different_payout() {
 }
 
 #[test]
+#[should_panic(expected = "sponsor cannot claim")]
+fn the_sponsor_cannot_claim_its_own_door() {
+    let mut door = pay_door();
+    door.submit("r1", PLAYER, 40, 1, 1);
+    let unlock = door.crack(1, "r1").unlock_at;
+    let signature = sign_claim(&door.claim, "velvet", 1, "r1", SPONSOR);
+    claim_at(&mut door, "r1", SPONSOR, unlock, signature);
+}
+
+#[test]
+#[should_panic(expected = "sponsor cannot claim")]
+fn the_owner_cannot_claim() {
+    let mut door = pay_door();
+    door.submit("r1", PLAYER, 40, 1, 1);
+    let unlock = door.crack(1, "r1").unlock_at;
+    let signature = sign_claim(&door.claim, "velvet", 1, "r1", OWNER);
+    claim_at(&mut door, "r1", OWNER, unlock, signature);
+}
+
+#[test]
+fn a_sponsor_crack_left_unclaimed_returns_to_the_pot() {
+    let mut door = pay_door();
+    let start = door.vault();
+    let before = start.day_pot + start.pot;
+    door.submit("r1", PLAYER, 40, 1, 1);
+    let crack = door.crack(1, "r1");
+    door.world.at(SPONSOR, crack.expires_at + 1);
+    door.world.contract.expire(door.vault_id.clone(), 1, "r1".into());
+    let after = door.vault();
+    assert_eq!(door.crack(1, "r1").status, CrackStatus::Expired);
+    assert_eq!(after.reserved, 0);
+    assert_eq!(after.day_pot + after.pot, before);
+    assert_eq!(after.crack_count, 1);
+}
+
+#[test]
 #[should_panic(expected = "payout mismatch")]
 fn predecessor_is_not_the_payout() {
     let mut door = pay_door();
