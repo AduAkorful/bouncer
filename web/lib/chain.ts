@@ -1,17 +1,31 @@
 import { parseOwner, parseRpcJson, parseVault, viewRequest, type VaultView } from "./vault.ts";
 
 export type Rpc = (request: ReturnType<typeof viewRequest>) => Promise<{ ok: true; value: unknown } | { ok: false; error: string }>;
-type RpcOptions = { timeoutMs?: number; signal?: AbortSignal };
+type RpcOptions = {
+  timeoutMs?: number;
+  signal?: AbortSignal;
+  /** A second endpoint for the last try, when the first keeps refusing. */
+  fallbackUrl?: string | null;
+  /** Waits before the second and third tries. */
+  retryDelaysMs?: readonly number[];
+  /** Where a failed read is reported. The reason never reaches the page. */
+  log?: (line: string) => void;
+};
 
 /** One chain call, including its body. A page read is two of these rounds. */
 export const CALL_BUDGET_MS = 10_000;
 export const PAGE_READ_MS = CALL_BUDGET_MS * 2;
+const RETRY_DELAYS_MS = [300, 900] as const;
 
 type RpcResult = { ok: true; value: unknown } | { ok: false; error: string };
+type Attempt = RpcResult | { ok: false; error: "rpc"; reason: string; retry: boolean };
+
+/** These answers will be the same on a second try. Anything else may be a busy or rate-limited node. */
+const SETTLED_CAUSES = new Set(["UNKNOWN_ACCOUNT", "NO_CONTRACT_CODE", "CONTRACT_EXECUTION_ERROR", "PARSE_ERROR", "UNKNOWN_ACCESS_KEY"]);
 
 const flights = new Map<string, Promise<RpcResult>>();
 
-async function once(rpcUrl: string, fetchImpl: typeof fetch, options: RpcOptions, request: ReturnType<typeof viewRequest>): Promise<RpcResult> {
+async function once(rpcUrl: string, fetchImpl: typeof fetch, options: RpcOptions, request: ReturnType<typeof viewRequest>): Promise<Attempt> {
   const controller = new AbortController();
   const abort = () => controller.abort();
   options.signal?.addEventListener("abort", abort, { once: true });
@@ -24,7 +38,7 @@ async function once(rpcUrl: string, fetchImpl: typeof fetch, options: RpcOptions
   });
   try {
     controller.signal.throwIfAborted();
-    return await Promise.race([aborted, (async (): Promise<RpcResult> => {
+    return await Promise.race([aborted, (async (): Promise<Attempt> => {
       const response = await fetchImpl(rpcUrl, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -33,13 +47,17 @@ async function once(rpcUrl: string, fetchImpl: typeof fetch, options: RpcOptions
         signal: controller.signal,
       });
       controller.signal.throwIfAborted();
-      if (!response.ok) return { ok: false, error: "rpc" };
+      if (!response.ok) return { ok: false, error: "rpc", reason: `http ${response.status}`, retry: response.status === 429 || response.status >= 500 };
       const body = await response.json();
       controller.signal.throwIfAborted();
-      return parseRpcJson(body);
+      const cause = rpcCause(body);
+      if (cause) return { ok: false, error: "rpc", reason: `rpc ${cause}`, retry: !SETTLED_CAUSES.has(cause) };
+      const parsed = parseRpcJson(body);
+      return parsed.ok ? parsed : { ok: false, error: "rpc", reason: "body", retry: false };
     })()]);
-  } catch {
-    return { ok: false, error: "rpc" };
+  } catch (error) {
+    const reason = controller.signal.aborted ? "timeout" : error instanceof SyntaxError ? "body" : "network";
+    return { ok: false, error: "rpc", reason, retry: reason !== "body" };
   } finally {
     clearTimeout(timer);
     options.signal?.removeEventListener("abort", abort);
@@ -47,10 +65,64 @@ async function once(rpcUrl: string, fetchImpl: typeof fetch, options: RpcOptions
   }
 }
 
+function rpcCause(body: unknown): string | null {
+  if (!body || typeof body !== "object") return null;
+  const error = (body as { error?: unknown }).error;
+  if (!error) return null;
+  if (typeof error !== "object") return "error";
+  const record = error as { cause?: { name?: unknown }; name?: unknown };
+  const name = record.cause?.name ?? record.name;
+  return typeof name === "string" && /^[A-Z_]{1,64}$/.test(name) ? name : "error";
+}
+
+/**
+ * Up to three tries with short waits, the last one on the fallback endpoint when there is one.
+ * QA saw door reads fail fast under load, which reads as the node refusing, not as a slow answer.
+ */
 async function readWithRetry(rpcUrl: string, fetchImpl: typeof fetch, options: RpcOptions, request: ReturnType<typeof viewRequest>): Promise<RpcResult> {
-  const first = await once(rpcUrl, fetchImpl, options, request);
-  if (first.ok || first.error !== "rpc" || options.signal?.aborted) return first;
-  return once(rpcUrl, fetchImpl, options, request);
+  const delays = options.retryDelaysMs ?? RETRY_DELAYS_MS;
+  const reasons: string[] = [];
+  for (let attempt = 0; attempt <= delays.length; attempt++) {
+    if (attempt > 0) {
+      if (options.signal?.aborted) break;
+      await wait(delays[attempt - 1], options.signal);
+      if (options.signal?.aborted) break;
+    }
+    const last = attempt === delays.length;
+    const url = last && options.fallbackUrl ? options.fallbackUrl : rpcUrl;
+    const result = await once(url, fetchImpl, options, request);
+    if (result.ok) return result;
+    const failed = result as { reason?: string; retry?: boolean };
+    reasons.push(`${hostOf(url)} ${failed.reason ?? "rpc"}`);
+    if (!failed.retry) break;
+  }
+  const method = (request.params as { method_name?: unknown }).method_name;
+  (options.log ?? defaultLog)(`rpc read failed: ${typeof method === "string" ? method : "view"} · ${reasons.join(", ")}`);
+  return { ok: false, error: "rpc" };
+}
+
+function wait(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(done, ms);
+    function done() {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", done);
+      resolve();
+    }
+    signal?.addEventListener("abort", done, { once: true });
+  });
+}
+
+function hostOf(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return "rpc";
+  }
+}
+
+function defaultLog(line: string) {
+  console.warn(line);
 }
 
 export function httpRpc(rpcUrl: string, fetchImpl: typeof fetch = fetch, options: RpcOptions = {}): Rpc {

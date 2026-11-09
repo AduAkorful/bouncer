@@ -6,6 +6,7 @@ import { viewRequest } from "../lib/vault.ts";
 const request = viewRequest("vault.testnet", "get_owner", {});
 const rpcBody = (value: unknown) => ({ result: { result: [...new TextEncoder().encode(JSON.stringify(value))] } });
 const failure = { ok: false, error: "rpc" } as const;
+const quick = { retryDelaysMs: [0, 0], log: () => {} };
 
 test("RPC decodes a fresh read and uses a live transport signal", async () => {
   const rpc = httpRpc("https://rpc.invalid", async (_url, init) => {
@@ -25,7 +26,7 @@ test("network, HTTP, invalid JSON and RPC errors never yield a value", async () 
     async () => new Response("not json"),
     async () => Response.json({ error: { message: "unknown" } }),
   ]) {
-    assert.deepEqual(await httpRpc("https://rpc.invalid", fetchImpl)(request), failure);
+    assert.deepEqual(await httpRpc("https://rpc.invalid", fetchImpl, quick)(request), failure);
   }
 });
 
@@ -35,7 +36,7 @@ test("a stalled fetch is aborted and a late successful response is discarded", a
   const rpc = httpRpc("https://rpc.invalid", async (_url, init) => {
     signal = init?.signal;
     return new Promise<Response>((resolve) => { finish = resolve; });
-  }, { timeoutMs: 20 });
+  }, { ...quick, timeoutMs: 20 });
   const pending = rpc(request);
   assert.deepEqual(await pending, failure);
   assert.equal(signal?.aborted, true);
@@ -48,7 +49,7 @@ test("the deadline includes stalled response bodies", async () => {
   const rpc = httpRpc("https://rpc.invalid", async (_url, init) => {
     signal = init?.signal;
     return { ok: true, json: () => new Promise(() => {}) } as Response;
-  }, { timeoutMs: 20 });
+  }, { ...quick, timeoutMs: 20 });
   assert.deepEqual(await rpc(request), failure);
   assert.equal(signal?.aborted, true);
 });
@@ -59,19 +60,48 @@ test("one rpc failure is tried once more", async () => {
     calls += 1;
     if (calls === 1) return new Response("unavailable", { status: 503 });
     return Response.json(rpcBody("owner.testnet"));
-  });
+  }, quick);
   assert.deepEqual(await rpc(request), { ok: true, value: "owner.testnet" });
   assert.equal(calls, 2);
 });
 
-test("two rpc failures stay a failure", async () => {
+test("three refused reads stay a failure and are logged with their reasons", async () => {
   let calls = 0;
+  const lines: string[] = [];
   const rpc = httpRpc("https://rpc.invalid", async () => {
     calls += 1;
-    return new Response("unavailable", { status: 503 });
-  });
+    return new Response("slow down", { status: 429 });
+  }, { retryDelaysMs: [0, 0], log: (line) => lines.push(line) });
   assert.deepEqual(await rpc(request), failure);
-  assert.equal(calls, 2);
+  assert.equal(calls, 3);
+  assert.deepEqual(lines, ["rpc read failed: get_owner · rpc.invalid http 429, rpc.invalid http 429, rpc.invalid http 429"]);
+});
+
+test("the last try goes to the fallback endpoint", async () => {
+  const urls: string[] = [];
+  const rpc = httpRpc("https://rpc.invalid", async (url) => {
+    urls.push(String(url));
+    if (String(url) === "https://fallback.invalid") return Response.json(rpcBody("owner.testnet"));
+    return new Response("slow down", { status: 429 });
+  }, { ...quick, fallbackUrl: "https://fallback.invalid" });
+  assert.deepEqual(await rpc(request), { ok: true, value: "owner.testnet" });
+  assert.deepEqual(urls, ["https://rpc.invalid", "https://rpc.invalid", "https://fallback.invalid"]);
+});
+
+test("a busy node error is tried again; a missing account is not", async () => {
+  let calls = 0;
+  const busy = httpRpc("https://rpc.invalid", async () => {
+    calls += 1;
+    return calls === 1 ? Response.json({ error: { cause: { name: "TIMEOUT_ERROR" } } }) : Response.json(rpcBody("owner.testnet"));
+  }, quick);
+  assert.deepEqual(await busy(viewRequest("vault.testnet", "get_owner", { n: 1 })), { ok: true, value: "owner.testnet" });
+  calls = 0;
+  const missing = httpRpc("https://rpc.invalid", async () => {
+    calls += 1;
+    return Response.json({ error: { cause: { name: "UNKNOWN_ACCOUNT" } } });
+  }, quick);
+  assert.deepEqual(await missing(viewRequest("vault.testnet", "get_owner", { n: 2 })), failure);
+  assert.equal(calls, 1);
 });
 
 test("an aborted page does not start a second call", async () => {
@@ -81,7 +111,7 @@ test("an aborted page does not start a second call", async () => {
     calls += 1;
     page.abort();
     return new Response("unavailable", { status: 503 });
-  }, { signal: page.signal });
+  }, { ...quick, signal: page.signal });
   assert.deepEqual(await rpc(request), failure);
   assert.equal(calls, 1);
 });
@@ -107,7 +137,7 @@ test("the page signal cancels in-flight and future requests", async () => {
     calls++;
     signal = init?.signal;
     return new Promise<Response>(() => {});
-  }, { signal: page.signal });
+  }, { ...quick, signal: page.signal });
   const pending = rpc(request);
   page.abort();
   assert.deepEqual(await pending, failure);

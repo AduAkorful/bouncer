@@ -25,6 +25,8 @@ export type CrewEnv = {
 
 export type PublicEnv = {
   rpcUrl: string;
+  /** Optional. A second RPC endpoint for the last try of a read. */
+  rpcFallbackUrl: string | null;
   contractId: string;
   currency: string;
   decimals: number;
@@ -132,6 +134,7 @@ export function readPublicEnv(source: EnvSource | undefined): Ready<PublicEnv> |
     ok: true,
     env: {
       rpcUrl: read("NEXT_PUBLIC_RPC_URL"),
+      rpcFallbackUrl: httpsUrl(read("NEXT_PUBLIC_RPC_FALLBACK_URL")),
       contractId: read("NEXT_PUBLIC_VAULT_CONTRACT_ID"),
       currency: read("NEXT_PUBLIC_CURRENCY"),
       decimals: decimals as number,
@@ -160,4 +163,8 @@ function whole(value: string): number | null {
   const parsed = Number(value);
   if (!Number.isSafeInteger(parsed)) return null;
   return parsed;
+}
+
+function httpsUrl(value: string): string | null {
+  return /^https:\/\/[^\s/]+(\/[^\s]*)?$/.test(value) ? value : null;
 }
