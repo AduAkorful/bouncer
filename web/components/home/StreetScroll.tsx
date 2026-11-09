@@ -28,7 +28,14 @@ export function StreetScroll({ children, bar = false }: { children: ReactNode; b
   }, []);
   return (
     <>
-      <div ref={scroller} className="street-scroll absolute inset-0 overflow-x-auto overflow-y-hidden [scrollbar-width:none]">
+      {/* One named Tab stop, so arrow keys can scroll it and a screen reader hears a short name, not every painted word. */}
+      <div
+        ref={scroller}
+        tabIndex={0}
+        role="region"
+        aria-label="The street. Scroll sideways to see it."
+        className="street-scroll chalk-focus absolute inset-0 overflow-x-auto overflow-y-hidden [scrollbar-width:none]"
+      >
         <div className="relative h-full w-[240%] min-w-[880px] lg:w-full">{children}</div>
       </div>
       <script dangerouslySetInnerHTML={{ __html: PLACE }} />

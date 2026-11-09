@@ -11,9 +11,10 @@ import { httpRpc, PAGE_READ_MS } from "@/lib/chain";
 import { readPublicEnv } from "@/lib/config";
 import { CLOSED_QUEUE, doorShut, doorTitle } from "@/lib/door";
 import { doorPaths, unreadDoor, type UnreadDoor } from "@/lib/door-read";
-import { frontDoor, readDoorIndex } from "@/lib/door-index";
+import { doorCandidates, readDoorIndex } from "@/lib/door-index";
 import type { TokenRead } from "@/lib/page-vault";
-import { readPageVault, type PageVault } from "@/lib/page-vault";
+import { readPageVault, readTokenLabel, type PageVault } from "@/lib/page-vault";
+import { LiveDoor } from "@/components/landing/LiveDoor";
 
 /** Server gates. Each reads one vault from chain and shows what is true, or says why it cannot. */
 
@@ -30,29 +31,39 @@ async function load(vaultId?: string): Promise<Loaded> {
   await connection();
   const labels = publicLabels();
   if (!labels) return { ok: false, failure: unreadDoor("unset", vaultId) };
-  const rpc = httpRpc(labels.rpcUrl, fetch, { signal: AbortSignal.timeout(PAGE_READ_MS), fallbackUrl: labels.rpcFallbackUrl });
-  let id = vaultId;
-  if (!id) {
-    const picked = await plainDoor(rpc, labels.contractId);
-    if (!picked.ok) return { ok: false, failure: picked.failure };
-    id = picked.id;
+  const rpc = httpRpc(labels.rpcUrl, fetch, { signal: AbortSignal.timeout(PAGE_READ_MS), fallbackUrl: labels.rpcFallbackUrl, keep: true });
+  if (vaultId) {
+    const page = await readPageVault(rpc, { contractId: labels.contractId }, vaultId);
+    if (!page.ok) return { ok: false, failure: unreadDoor(page.error, vaultId) };
+    return { ok: true, page: page.page, labels };
   }
-  const page = await readPageVault(
-    rpc,
-    { contractId: labels.contractId },
-    id,
-  );
-  if (!page.ok) return { ok: false, failure: unreadDoor(page.error, id) };
-  return { ok: true, page: page.page, labels };
+  const picked = await plainDoor(rpc, labels.contractId);
+  if (!picked.ok) return { ok: false, failure: picked.failure };
+  const read = await firstReadable(rpc, labels.contractId, [picked.id, ...picked.others]);
+  return read.ok ? { ok: true, page: read.page, labels } : { ok: false, failure: read.failure };
 }
 
 /** A URL with no vault id follows the chain. An open door is chosen ahead of a closed one. */
-async function plainDoor(rpc: ReturnType<typeof httpRpc>, contractId: string): Promise<{ ok: true; id: string } | { ok: false; failure: UnreadDoor }> {
+async function plainDoor(rpc: ReturnType<typeof httpRpc>, contractId: string): Promise<{ ok: true; id: string; others: string[] } | { ok: false; failure: UnreadDoor }> {
   const index = await readDoorIndex(rpc, contractId, Date.now());
   if (!index.ok) return { ok: false, failure: unreadDoor("vault") };
-  const picked = frontDoor(index.doors);
-  if (!picked) return { ok: false, failure: unreadDoor(index.doors.length ? "vault" : "empty") };
-  return { ok: true, id: picked.id };
+  const candidates = doorCandidates(index.doors);
+  if (!candidates.length) return { ok: false, failure: unreadDoor(index.doors.length ? "vault" : "empty") };
+  return { ok: true, id: candidates[0].id, others: candidates.slice(1).map((door) => door.id) };
+}
+
+/**
+ * A plain URL tries the next door when one read fails, up to three. If none reads, the failure names no door,
+ * because the player did not ask for one.
+ */
+async function firstReadable(rpc: ReturnType<typeof httpRpc>, contractId: string, ids: string[]): Promise<{ ok: true; page: PageVault } | { ok: false; failure: UnreadDoor }> {
+  let error = "vault";
+  for (const candidate of ids.slice(0, 3)) {
+    const page = await readPageVault(rpc, { contractId }, candidate);
+    if (page.ok) return { ok: true, page: page.page };
+    error = page.error;
+  }
+  return { ok: false, failure: unreadDoor(error === "missing vault" ? "vault" : error) };
 }
 
 function unread(surface: Surface, vaultId: string | undefined, failure: UnreadDoor) {
@@ -66,19 +77,23 @@ export async function HomeGate({ vaultId }: { vaultId?: string }) {
   await connection();
   const labels = publicLabels();
   if (!labels) return unread("door", vaultId, unreadDoor("unset", vaultId));
-  const rpc = httpRpc(labels.rpcUrl, fetch, { signal: AbortSignal.timeout(PAGE_READ_MS), fallbackUrl: labels.rpcFallbackUrl });
+  const rpc = httpRpc(labels.rpcUrl, fetch, { signal: AbortSignal.timeout(PAGE_READ_MS), fallbackUrl: labels.rpcFallbackUrl, keep: true });
   const env = { contractId: labels.contractId };
   const indexPromise = readDoorIndex(rpc, labels.contractId, Date.now());
-  let id = vaultId;
-  if (!id) {
+  let page: { ok: true; page: PageVault } | { ok: false; failure: UnreadDoor };
+  if (vaultId) {
+    const read = await readPageVault(rpc, env, vaultId);
+    page = read.ok ? read : { ok: false, failure: unreadDoor(read.error, vaultId) };
+  } else {
     const index = await indexPromise;
     if (!index.ok) return unread("door", undefined, unreadDoor("vault"));
-    const picked = frontDoor(index.doors);
-    if (!picked) return unread("door", undefined, unreadDoor(index.doors.length ? "vault" : "empty"));
-    id = picked.id;
+    const candidates = doorCandidates(index.doors);
+    if (!candidates.length) return unread("door", undefined, unreadDoor(index.doors.length ? "vault" : "empty"));
+    // A plain /home falls back to the next door, and a failure here names none of them.
+    page = await firstReadable(rpc, labels.contractId, candidates.map((door) => door.id));
   }
-  const page = await readPageVault(rpc, env, id);
-  if (!page.ok) return unread("door", id, unreadDoor(page.error, id));
+  if (!page.ok) return unread("door", vaultId, page.failure);
+  const id = page.page.vaultId;
   // A plain /home retries /home, so the front door is chosen again.
   const retryHref = vaultId ? doorPaths(id).door : "/home";
   return (
@@ -133,7 +148,7 @@ export async function PlayGate({ vaultId }: { vaultId?: string }) {
   const paths = doorPaths(page.vaultId);
   if (doorShut(page.vault, Date.now())) {
     // A shut door points at the doors that are open instead of ending on one card.
-    const rpc = httpRpc(labels.rpcUrl, fetch, { signal: AbortSignal.timeout(PAGE_READ_MS), fallbackUrl: labels.rpcFallbackUrl });
+    const rpc = httpRpc(labels.rpcUrl, fetch, { signal: AbortSignal.timeout(PAGE_READ_MS), fallbackUrl: labels.rpcFallbackUrl, keep: true });
     return (
       <Blocked kicker={CLOSED_QUEUE.kicker} title={CLOSED_QUEUE.title} detail={CLOSED_QUEUE.detail} href={paths.door} door={doorTitle(page.card, page.vaultId).sign}>
         <Suspense fallback={<DoorListPending />}>
@@ -158,10 +173,12 @@ export async function PlayGate({ vaultId }: { vaultId?: string }) {
   );
 }
 
-export async function RevealGate({ vaultId }: { vaultId?: string }) {
+export async function RevealGate({ vaultId, round }: { vaultId?: string; round?: string }) {
   const loaded = await load(vaultId);
   if (!loaded.ok) return unread("reveal", vaultId, loaded.failure);
   const { page, labels } = loaded;
+  // A past round from the player's history; a later round than the vault's is not real.
+  const asked = round && /^[1-9][0-9]{0,15}$/.test(round) && BigInt(round) <= BigInt(page.vault.round) ? round : undefined;
   return (
     <RevealDoor
       vaultId={page.vaultId}
@@ -173,7 +190,8 @@ export async function RevealGate({ vaultId }: { vaultId?: string }) {
       networkTag={labels.networkTag}
       shut={doorShut(page.vault, Date.now())}
       doorHref={doorPaths(page.vaultId).door}
-      retryHref={doorPaths(page.vaultId).reveal}
+      retryHref={asked ? `${doorPaths(page.vaultId).reveal}?round=${asked}` : doorPaths(page.vaultId).reveal}
+      round={asked}
     />
   );
 }
@@ -198,4 +216,17 @@ export async function ClaimGate({ vaultId, round }: { vaultId?: string; round?: 
       retryHref={claimRound === page.vault.round ? doorPaths(page.vaultId).claim : `${doorPaths(page.vaultId).claim}?round=${claimRound}`}
     />
   );
+}
+
+/** The landing's live line: tonight's front door, its pot, and when it closes. Nothing is drawn if no door is open. */
+export async function LandingLive() {
+  await connection();
+  const labels = publicLabels();
+  if (!labels) return null;
+  const rpc = httpRpc(labels.rpcUrl, fetch, { signal: AbortSignal.timeout(PAGE_READ_MS), fallbackUrl: labels.rpcFallbackUrl, keep: true });
+  const index = await readDoorIndex(rpc, labels.contractId, Date.now());
+  if (!index.ok) return null;
+  const front = doorCandidates(index.doors).find((door) => !door.shut);
+  if (!front || !front.dayPot || !front.closesAt) return null;
+  return <LiveDoor sign={front.sign} href={front.href} dayPot={front.dayPot} closesAt={front.closesAt} token={readTokenLabel(rpc, labels.contractId)} />;
 }

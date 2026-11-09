@@ -4,7 +4,7 @@ import Link from "next/link";
 import { doorPaths } from "@/lib/door-read";
 import { useEffect, useRef, useState } from "react";
 import { deriveSecrets, unlockDevice, type DeviceSecrets } from "@/lib/device-pass";
-import { holdIkm } from "@/lib/player-hold";
+import { holdIkm, readHold } from "@/lib/player-hold";
 import { postPlayerSession } from "@/lib/player-session";
 import { PlayerName } from "@/components/profile/PlayerName";
 import { accessMessage, accessOnAccount, testnetAccountId, writePayoutAccount } from "@/lib/imported-account";
@@ -42,6 +42,16 @@ export function PasskeySheet({
   const [publicKey, setPublicKey] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const request = useRef<AbortController | null>(null);
+  // A browser that is already signed in is sent on, not offered a second passkey (a second identity).
+  const [signedIn, setSignedIn] = useState(false);
+  useEffect(() => {
+    const held = readHold();
+    if (held) {
+      held.fill(0);
+      setSignedIn(true);
+    }
+  }, []);
+  const nextHref = next === "profile" ? "/profile" : doorPaths(door)[next];
   useEffect(() => () => {
     request.current?.abort();
     request.current = null;
@@ -141,10 +151,19 @@ export function PasskeySheet({
       <div className="mx-auto w-full max-w-md rounded-3xl border border-white/10 bg-night-2 p-6 shadow-2xl">
         <p className="font-mono text-xs uppercase tracking-[0.22em] text-chalk/80">Account</p>
         <h1 className="mt-2 font-sign text-3xl leading-none">{step === "done" ? "Saved." : step === "add" ? "Add this key" : "Your passkey"}</h1>
-        {step === "create" && (
+        {step === "create" && signedIn && (
+          <>
+            <p className="mt-3 text-sm text-chalk/70">This browser is already signed in with your passkey.</p>
+            <PlayerName />
+            <Link href={nextHref} className="mt-6 block rounded-2xl bg-chalk py-4 text-center font-sign text-lg text-ink">
+              Continue
+            </Link>
+            <p className="mt-4 text-sm text-chalk/60">To use another passkey, log out from the profile first.</p>
+          </>
+        )}
+        {step === "create" && !signedIn && (
           <>
             <p className="mt-3 text-sm text-chalk/70">Use a passkey from your device or password manager. No seed phrase, no password. Clearing this site does not remove it.</p>
-            <PlayerName />
             <button onClick={() => void create()} className="mt-6 w-full rounded-2xl bg-chalk py-4 font-sign text-lg text-ink shadow-[0_5px_0_#9c9483]">
               Create passkey
             </button>
@@ -210,7 +229,7 @@ export function PasskeySheet({
         {step === "done" && (
           <>
             {accountId ? <p className="mt-3 text-sm text-chalk/70">This device can sign for {accountId}.</p> : null}
-            <Link href={next === "profile" ? "/profile" : doorPaths(door)[next]} className="mt-6 block rounded-2xl bg-chalk py-4 text-center font-sign text-lg text-ink">
+            <Link href={nextHref} className="mt-6 block rounded-2xl bg-chalk py-4 text-center font-sign text-lg text-ink">
               Continue
             </Link>
           </>

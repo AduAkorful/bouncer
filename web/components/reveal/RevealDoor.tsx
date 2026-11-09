@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Countdown } from "@/components/Countdown";
+import { CloseTime, Countdown } from "@/components/Countdown";
 import { TryAgain } from "@/components/TryAgain";
 import { apiPost } from "@/lib/api";
 import { NetworkTag } from "@/components/bits";
@@ -26,6 +26,7 @@ export function RevealDoor({
   shut,
   doorHref,
   retryHref,
+  round: askedRound,
 }: {
   vaultId: string;
   vault: VaultView;
@@ -38,20 +39,27 @@ export function RevealDoor({
   shut: boolean;
   doorHref: string;
   retryHref: string;
+  /** A past round from the player's history. A past round is always closed. */
+  round?: string;
 }) {
+  const round = askedRound ?? vault.round;
+  const past = round !== vault.round;
+  // Round 1, shut, and not waiting for a bump after a close: no round has ever opened, so there is no ledger.
+  const neverOpened = vault.round === "1" && !vault.open && !vault.closedPendingBump && vault.opensAt === "0";
+  const closed = past || shut;
   const [lines, setLines] = useState<Line[] | null>(null);
-  const [problem, setProblem] = useState<"none" | "failed" | "open" | null>(shut ? null : "open");
+  const [problem, setProblem] = useState<"none" | "failed" | "open" | "never" | null>(neverOpened ? "never" : closed ? null : "open");
   const [timedOut, setTimedOut] = useState(false);
 
   useEffect(() => {
     // The guard opens a ledger only after the round closes. Asking earlier reads as a failure.
-    if (!shut) return;
+    if (!closed || neverOpened) return;
     let cancel = false;
     const timer = window.setTimeout(() => {
       if (!cancel) setTimedOut(true);
     }, 20_000);
     (async () => {
-      const raid = playableRaid(await loadRaid(storageName, vaultId, vault.round));
+      const raid = playableRaid(await loadRaid(storageName, vaultId, round));
       if (!raid) {
         if (!cancel) setProblem("none");
         return;
@@ -63,7 +71,7 @@ export function RevealDoor({
       const sent = await apiPost("/guard", {
         op: "reveal",
         vault_id: vaultId,
-        round: Number(vault.round),
+        round: Number(round),
         player_id: raid.playerId,
         venue: venueId,
         ...(specCt ? { spec_ct: specCt } : {}),
@@ -76,7 +84,7 @@ export function RevealDoor({
       }
       const checked = await revealChecksOut({
         vaultId,
-        round: BigInt(vault.round),
+        round: BigInt(round),
         playerId: raid.playerId,
         ledgerHashHex: String(body.ledger_hash ?? ""),
         commitmentHex: String(body.commitment ?? ""),
@@ -111,7 +119,7 @@ export function RevealDoor({
       cancel = true;
       window.clearTimeout(timer);
     };
-  }, [storageName, vaultId, vault.round, vault.guardPk, vault.commitment, venueId, specCt, shut]);
+  }, [storageName, vaultId, round, vault.guardPk, vault.commitment, venueId, specCt, closed, neverOpened]);
 
   const waiting = lines === null && problem === null;
   const stalled = waiting && timedOut;
@@ -121,10 +129,11 @@ export function RevealDoor({
     <main className="min-h-dvh overflow-x-clip bg-night px-4 pb-24 pt-8 text-chalk">
       <div className="mx-auto max-w-lg">
         <div className="flex items-center justify-between gap-3">
-          <p className="font-mono text-xs uppercase tracking-[0.22em] text-chalk/80">Round {vault.round}</p>
+          <p className="font-mono text-xs uppercase tracking-[0.22em] text-chalk/80">Round {round}</p>
           <NetworkTag label={networkTag} className="text-chalk/70" />
         </div>
-        <h1 className="mt-2 font-sign text-3xl leading-none">{problem === "open" ? "Tonight\u2019s ledger" : "Last night\u2019s door"}</h1>
+        <h1 className="mt-2 font-sign text-3xl leading-none">{problem === "never" ? "Not opened yet" : problem === "open" ? "Tonight\u2019s ledger" : `Round ${round} ledger`}</h1>
+        {problem === "never" && <p className="mt-4 text-sm text-chalk/70">This door has not opened a round yet, so there is no ledger.</p>}
         {problem === "open" && <p className="mt-4 text-sm text-chalk/70">The ledger opens when this round closes.</p>}
         {problem === "none" && <p className="mt-4 text-sm text-chalk/70">No raid is stored on this device. The ledger stays shut.</p>}
         {failed && <p className="mt-4 text-sm text-chalk/70">The door did not answer. The ledger stays shut.</p>}
@@ -151,11 +160,11 @@ export function RevealDoor({
           </ul>
         )}
         {waiting && !stalled && <p className="mt-4 text-sm text-chalk/60">Reading this door.</p>}
-        {shut ? (
-          <p className="mt-6 text-sm text-chalk/60">Last call is over. The door is shut.</p>
+        {neverOpened ? null : closed ? (
+          <p className="mt-6 text-sm text-chalk/60">This round is over.</p>
         ) : (
           <p className="mt-6 text-sm text-chalk/60">
-            Closes <Countdown endsAtNs={vault.closesAt} className="text-chalk" />
+            Closes in <Countdown endsAtNs={vault.closesAt} className="text-chalk" /> <CloseTime endsAtNs={vault.closesAt} className="text-chalk/60" />
           </p>
         )}
         <Link href={doorHref} className="chalk-focus mt-6 inline-flex min-h-11 items-center text-sm text-chalk/80 underline decoration-white/20">

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { DoorScene } from "@/components/DoorScene";
 import { SceneLife } from "@/components/SceneLife";
 import { RULES } from "@/lib/rules";
@@ -8,7 +9,7 @@ import { RULES } from "@/lib/rules";
 const beats = RULES;
 
 /** The bouncer fills the first screen. On a phone the bill sits on the picture. No pot and no unpaid line. */
-export function Landing() {
+export function Landing({ live = null }: { live?: ReactNode }) {
   return (
     <main className="overflow-x-clip bg-night text-chalk">
       <section className="relative min-h-dvh short:grid short:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:grid lg:grid-cols-[minmax(0,1.05fr)_minmax(20rem,0.95fr)]">
@@ -60,7 +61,7 @@ export function Landing() {
                 ))}
               </ol>
               {/* A printed sample, not a form: dotted rules and sample values so nobody tries to type in it. */}
-              <div aria-hidden="true" className="mt-4 hidden space-y-1.5 border-t border-ink/15 pt-3 font-mono lg:block text-xs uppercase tracking-wider text-ink/60">
+              <div aria-hidden="true" className="mt-4 hidden space-y-1.5 border-t border-ink/15 pt-3 font-mono lg:block text-xs uppercase tracking-wider text-ink/80">
                 {[["Payee", "Who is owed"], ["Reference", "Their invoice no."], ["Total", "The exact amount"]].map(([label, sample]) => (
                   <div key={label} className="flex items-baseline gap-3">
                     <span className="w-20 shrink-0">{label}</span>
@@ -75,6 +76,7 @@ export function Landing() {
             >
               Play tonight&apos;s door
             </Link>
+            {live}
             <p className="mt-5 inline-block w-fit -rotate-2 border-4 border-rope bg-night/75 px-4 py-2 font-sign text-3xl leading-none text-rope sm:text-4xl">Not approved.</p>
             <p className="mt-3 text-sm text-chalk/80">A wrong bill says only this.</p>
             <p className="mt-5 text-sm text-chalk/55">Prizes are test tokens. They have no cash value.</p>

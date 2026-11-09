@@ -17,6 +17,10 @@ export function NightShell({ door = false, href = "/home" }: { door?: boolean; h
       ) : null}
       <div className="mx-auto max-w-lg px-4 py-8">
         <p role="status" className="font-mono text-sm text-chalk/80">Checking the door…</p>
+        {/* The door streams in after this shell, and swapping it in needs JavaScript. */}
+        <noscript>
+          <p className="mt-2 text-sm text-chalk/80">This page needs JavaScript to show the door. Turn it on and reload.</p>
+        </noscript>
         <div aria-hidden="true" className="mt-5 space-y-3">
           <div className="h-3 w-32 rounded-full bg-white/10" />
           <div className="h-3 w-3/4 rounded-full bg-white/10" />

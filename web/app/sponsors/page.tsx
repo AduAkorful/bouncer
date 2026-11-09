@@ -4,6 +4,7 @@ import Link from "next/link";
 export const metadata = screen(
   "Sponsor a door",
   "Fund a pot, write who the place owes, and let the guard run the door. Players try to get a bill past it.",
+  { path: "/sponsors" },
 );
 
 const steps = [

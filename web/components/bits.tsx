@@ -21,7 +21,7 @@ export function Money({
   return (
     <span className={`inline-flex items-baseline gap-2 ${className}`}>
       <span className="font-mono tnum">{shown}</span>
-      {tag && unit ? <span className="font-mono text-[0.55em] tracking-wider opacity-70">{unit}</span> : null}
+      {tag && unit ? <span className="font-mono text-[0.55em] tracking-wider opacity-90">{unit}</span> : null}
     </span>
   );
 }

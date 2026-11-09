@@ -3,9 +3,11 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiPost } from "@/lib/api";
+import { readHold } from "@/lib/player-hold";
 import { buildCard, cardLook, MAX_NAME, MAX_PITCH, MAX_SIGN, type Card } from "@/lib/card";
-import { ACCRA_SETTING, SETTING_FIELDS, STREET_VIEW } from "@/lib/street-setting";
+import { ACCRA_SETTING, defaultStreet, SETTING_FIELDS, STREET_VIEW } from "@/lib/street-setting";
 import { DoorScene } from "@/components/DoorScene";
+import { SpecForm } from "@/components/sponsor/SpecForm";
 import { httpRpc } from "@/lib/chain";
 import { PARTS, SKINS } from "@/lib/look";
 import { preflightCommit, preflightCreate, preflightFund, preflightKeeper, preflightReclaim, preflightSetSpec, validVaultId, type Check, type Funds } from "@/lib/preflight";
@@ -50,6 +52,7 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
   const [vaultActionStatus, setVaultActionStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ text: string } | null>(null);
+  const [noticeAt, setNoticeAt] = useState<string | null>(null);
   const [readNotice, setReadNotice] = useState<string | null>(null);
   const noticeRef = useRef<HTMLParagraphElement>(null);
 
@@ -93,7 +96,7 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
     const version = ++vaultReadVersion.current;
     try {
       const [f, v] = await Promise.all([
-        readFunds(rpc, rpcUrl, chain.tokenId, sponsor.accountId),
+        fundsWithRetry(() => readFunds(rpc, rpcUrl, chain.tokenId, sponsor.accountId)),
         vaultId && validVaultId(vaultId) ? readVault(rpc, contractId, vaultId) : Promise.resolve({ ok: true as const, vault: null }),
       ]);
       if (version !== vaultReadVersion.current) return;
@@ -111,14 +114,30 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
     void refresh();
   }, [refresh]);
 
-  const run = async (work: () => Promise<string | null>, refreshAfter = true) => {
+  /** `at` puts the result next to the button that caused it, instead of at the top of a long page. */
+  const run = async (work: () => Promise<string | null>, refreshAfter = true, at: string | null = null) => {
+    setNoticeAt(at);
     await runSponsorAction(work, { busy: setBusy, notice: (text) => setNotice(text === null ? null : { text }) });
     if (refreshAfter) await refresh();
   };
 
-  const connect = (create = false) =>
+  // A browser already signed in (profile, play, claim) connects here without asking for the passkey again.
+  const autoConnected = useRef(false);
+  useEffect(() => {
+    if (autoConnected.current || sponsor) return;
+    autoConnected.current = true;
+    if (!readHold()) return;
+    setSignedIn(true);
+    void connect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const [noAccount, setNoAccount] = useState(false);
+  const [signedIn, setSignedIn] = useState(false);
+  const connect = (create = false, makeAccount = false) =>
     run(async () => {
-      const result = await connectSponsor({ rpcUrl, networkId, storageName, create });
+      const result = await connectSponsor({ rpcUrl, networkId, storageName, create, makeAccount });
+      setNoAccount(!result.ok && result.noAccount === true);
       if (!result.ok) return result.error;
       const read = await readChain(rpc, rpcUrl, contractId);
       if (!read.ok) return read.error;
@@ -218,7 +237,7 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
       const result = await sendChecked(check, () => createSponsorVault(contractId, { vaultId, rule: "PayTheBill", cap, lockNs, maxCracks: cracks }, deposit), "Vault created.");
       if (result === "Vault created.") window.localStorage.setItem("bouncer.sponsor.vault", vaultId);
       return result;
-    });
+    }, true, "create");
   }
 
   async function seal() {
@@ -254,7 +273,7 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
         check = { ...check, error: `${check.error} The Circle faucet steps are under the balances.` };
       }
       return sendChecked(check, () => fund(chain.tokenId, contractId, vaultId, amount), "Funded.");
-    });
+    }, true, "fund");
   }
 
   async function toggleKeeper(on: boolean) {
@@ -305,6 +324,9 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
   const input = "mt-1 w-full rounded-lg border border-white/15 bg-night px-3 py-2 text-sm text-chalk";
   const button = "chalk-focus mt-4 inline-flex min-h-11 items-center rounded-2xl bg-chalk px-5 font-sign text-ink disabled:opacity-40";
 
+  // Another sponsor's vault is shown as status only. Its fund, seal, keeper, and open controls are not drawn.
+  const mine = Boolean(vault && sponsor && vault.sponsor === sponsor.accountId);
+
   return (
     <main className="min-h-dvh overflow-x-clip bg-night px-4 pb-24 pt-8 text-chalk">
       <div className="mx-auto max-w-lg space-y-4">
@@ -327,7 +349,7 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
           {availability === "closed" || availability === "unknown" ? <button className="chalk-focus ml-2 min-h-11 underline" onClick={() => { setAvailability("loading"); setAvailabilityCheck((n) => n + 1); }}>Check again</button> : null}
         </div>
         {busy && !vaultActionStatus ? <p role="status" className="text-sm text-chalk/80">Working on this step…</p> : null}
-        {notice ? <p ref={noticeRef} role="status" className="rounded-xl border border-white/15 px-4 py-3 text-sm">{notice.text}</p> : null}
+        {notice && noticeAt === null ? <p ref={noticeRef} role="status" className="rounded-xl border border-white/15 px-4 py-3 text-sm">{notice.text}</p> : null}
         {readNotice ? <p role="status" className="text-sm text-chalk/70">{readNotice}</p> : null}
 
         <section className={box}>
@@ -335,13 +357,27 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
           {!sponsor ? (
             <>
               <p className="mt-2 text-sm text-chalk/70">This device&apos;s passkey is your sponsor account. It pays for storage and holds the pot you fund.</p>
-              <button className={button} disabled={busy} onClick={() => void connect()}>
-                Use your device passkey
-              </button>
-              <p className="mt-4 text-sm text-chalk/70">New here? Make a passkey on this device. The site makes a testnet account for it. There is no seed phrase.</p>
-              <button className="chalk-focus mt-3 inline-flex min-h-11 items-center rounded-2xl border border-chalk/30 px-5 font-sign disabled:opacity-40" disabled={busy} onClick={() => void connect(true)}>
-                Create a passkey
-              </button>
+              {noAccount ? (
+                <>
+                  <p className="mt-3 text-sm">No testnet account uses this passkey yet. The site can make one for it, with a little NEAR for gas.</p>
+                  <button className={button} disabled={busy} onClick={() => void connect(false, true)}>
+                    Make a testnet account for this passkey
+                  </button>
+                </>
+              ) : (
+                <button className={button} disabled={busy} onClick={() => void connect()}>
+                  {busy && signedIn ? "Signing in with this browser…" : "Use your device passkey"}
+                </button>
+              )}
+              {/* A browser that is already signed in is not offered a second passkey, which would be a second identity. */}
+              {signedIn ? null : (
+                <>
+                  <p className="mt-4 text-sm text-chalk/70">New here? Make a passkey on this device. The site makes a testnet account for it. There is no seed phrase.</p>
+                  <button className="chalk-focus mt-3 inline-flex min-h-11 items-center rounded-2xl border border-chalk/30 px-5 font-sign disabled:opacity-40" disabled={busy} onClick={() => void connect(true)}>
+                    Create a passkey
+                  </button>
+                </>
+              )}
             </>
           ) : (
             <div className="mt-2 space-y-1 text-sm">
@@ -349,6 +385,9 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
               <p className="text-chalk/70">
                 {nothing ? (readNotice ? "Balances unavailable." : "Reading balances…") : `${shortUnits(funds.nearYocto, 24, 4)} NEAR · ${fromBaseUnits(funds.tokenUnits, decimals)} ${symbol}`}
               </p>
+              <button type="button" className="chalk-focus min-h-11 text-sm underline disabled:opacity-40" disabled={busy} onClick={() => void refresh()}>
+                Refresh balances
+              </button>
               <p className="text-chalk/60">You need {symbol} for the pot and a little NEAR for storage. This site does not send you either.</p>
               {networkId === "testnet" && symbol.toUpperCase() === "USDC" && (
                 <p className="text-chalk/70">For test USDC, open the <a className="underline chalk-focus" href="https://faucet.circle.com/" target="_blank" rel="noreferrer">Circle faucet</a>, set Network to NEAR Testnet, and paste the account name above. Complete the faucet verification, then refresh balances after the transfer.</p>
@@ -367,8 +406,13 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
               <button className={button} disabled={busy || story.trim().length === 0} onClick={() => void draft()}>
                 Draft it
               </button>
-              <label className={`${label} mt-4`} htmlFor="spec">The door spec. Edit it or write your own.</label>
-              <textarea id="spec" className={`${input} font-mono text-xs`} rows={14} value={specText} onChange={(e) => { setSpecText(e.target.value); setReport(null); setAckHint(false); }} spellCheck={false} />
+              <h3 className="mt-4 text-sm text-chalk/80">The door spec. Edit the bills below, or write your own.</h3>
+              <SpecForm text={specText} currency={symbol} onChange={(text) => { setSpecText(text); setReport(null); setAckHint(false); }} />
+              <details className="mt-3">
+                <summary className="chalk-focus min-h-11 cursor-pointer py-2 text-sm text-chalk/80">Edit as JSON</summary>
+                <label className="sr-only" htmlFor="spec">The door spec as JSON</label>
+                <textarea id="spec" className={`${input} font-mono text-xs`} rows={14} value={specText} onChange={(e) => { setSpecText(e.target.value); setReport(null); setAckHint(false); }} spellCheck={false} />
+              </details>
               <p className="mt-2 text-xs text-chalk/60">Amounts are in whole {symbol}. References can use {"{d2} {d3} {d4}"} and {"{n:1-99}"}.</p>
               <div className="mt-4 grid grid-cols-2 gap-3">
                 <div>
@@ -383,7 +427,8 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
               </div>
               <label className={`${label} mt-3`} htmlFor="pitch">Pitch (what players read at the door)</label>
               <input id="pitch" className={input} maxLength={MAX_PITCH} value={card.pitch} onChange={(e) => setCard({ ...card, pitch: e.target.value })} />
-              <div className="mt-4 grid items-start gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(16rem,0.85fr)]">
+              {/* The street is a wide strip, so the preview takes the full width at the art's own shape instead of a letterboxed corner. */}
+              <div className="mt-4 grid items-start gap-4">
                 <div className="overflow-hidden rounded-2xl bg-[#1a1424]">
                   <DoorScene
                     sign={card.sign || "YOUR DOOR"}
@@ -391,7 +436,7 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
                     setting={card.setting}
                     p="sponsor"
                     viewBox={STREET_VIEW}
-                    className="h-64 w-full sm:h-80"
+                    className="aspect-[45/16] h-auto w-full"
                     label="This door's street"
                   />
                 </div>
@@ -435,6 +480,12 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
                       </div>
                     ))}
                   </div>
+                  {defaultStreet(card.setting) ? (
+                    <p role="note" className="mt-3 text-sm text-chalk/80">
+                      Every piece is on its default, so this door will look like every other default door. Pick a Place and a few pieces so players can tell it apart.
+                    </p>
+                  ) : null}
+                  <p className="mt-2 text-xs text-chalk/60">The picture follows these picks, not the pitch text. A rooftop or a beach is set with Place.</p>
                 </div>
               </div>
             </section>
@@ -479,10 +530,26 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
               <h2 className="font-sign text-lg">4 · Your vault</h2>
               <label className={label} htmlFor="vid">Vault id</label>
               <input id="vid" className={input} value={vaultId} disabled={busy} onChange={(e) => selectVault(e.target.value.trim())} placeholder="rusty-anchor" />
+              {vaultId && !validVaultId(vaultId) ? (
+                <p className="mt-2 text-xs text-chalk/80">A vault id uses letters, digits, dots, dashes, and underscores, with no spaces, up to 64 characters.</p>
+              ) : null}
               {!vault ? (
-                <button className={button} disabled={busy || !report?.pass || !validVaultId(vaultId)} onClick={() => void create()}>
-                  Create the vault
-                </button>
+                <>
+                  {chain && validVaultId(vaultId) ? (
+                    <p className="mt-2 text-xs text-chalk/70">
+                      Creating it stores the vault on chain. About {shortUnits(depositFor(createBytes(vaultId), chain.byteCost), 24, 4)} NEAR is held for that storage, plus gas. The id cannot be changed later.
+                    </p>
+                  ) : null}
+                  <button className={button} disabled={busy || !report?.pass || !validVaultId(vaultId)} onClick={() => void create()}>
+                    Create the vault
+                  </button>
+                  {notice && noticeAt === "create" ? <p ref={noticeRef} role="status" className="mt-2 text-sm">{notice.text}</p> : null}
+                </>
+              ) : !mine ? (
+                <p className="mt-3 text-sm">
+                  Round {vault.round} · {vault.open ? "open" : "shut"}. This vault belongs to another sponsor, so it is shown read-only.{" "}
+                  <Link className="underline decoration-white/30" href={`/v/${vaultId}`}>See the door</Link>
+                </p>
               ) : (
                 <p className="mt-3 text-sm">
                   Round {vault.round} · pot {fromBaseUnits(BigInt(vault.pot) + BigInt(vault.dayPot), decimals)} {symbol} · {vault.open ? "open" : "shut"}
@@ -490,7 +557,7 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
                 </p>
               )}
               {!vault && !report?.pass ? <p className="mt-2 text-xs text-chalk/60">Pass the test first.</p> : null}
-              {vault && step === "seal" ? (
+              {vault && mine && step === "seal" ? (
                 <>
                   {hasHint ? (
                     <label className="mt-4 flex items-start gap-3 text-sm">
@@ -507,7 +574,7 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
               {vault && !vault.specLocked && vault.specHash ? <p className="mt-2 text-xs text-chalk/60">The story is fixed once the first round opens.</p> : null}
             </section>
 
-            {vault && vault.specHash ? (
+            {vault && mine && vault.specHash ? (
               <section className={box}>
                 <h2 className="font-sign text-lg">5 · Fund and open</h2>
                 <button type="button" className="chalk-focus mt-2 min-h-11 text-sm underline disabled:opacity-40" disabled={busy} onClick={() => void refresh()}>
@@ -519,6 +586,7 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
                 <button className={button} disabled={busy} onClick={() => void addFunds()}>
                   Fund the vault
                 </button>
+                {notice && noticeAt === "fund" ? <p ref={noticeRef} role="status" className="mt-2 text-sm">{notice.text}</p> : null}
                 <div className="mt-6 flex items-center justify-between gap-3">
                   <div>
                     <p className="text-sm">Open each night for me</p>
@@ -558,4 +626,14 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
       </div>
     </main>
   );
+}
+
+/** A fresh account can take a few seconds to appear on the node, so a missing balance is read again twice. */
+async function fundsWithRetry(read: () => Promise<Funds | null>): Promise<Funds | null> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const funds = await read();
+    if (funds) return funds;
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+  }
+  return null;
 }

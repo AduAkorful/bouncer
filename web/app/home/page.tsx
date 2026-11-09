@@ -3,7 +3,7 @@ import { Suspense } from "react";
 import { HomeGate } from "@/components/gates";
 import { NightShell } from "@/components/NightShell";
 
-export const metadata = screen("The door", "This round's door.");
+export const metadata = screen("The door", "This round's door.", { path: "/home" });
 
 export default function HomePage() {
   return (

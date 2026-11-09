@@ -5,6 +5,7 @@ import { loadPlayerSession, rollPlayerName, savePlayerName, type PlayerSession }
 import { deriveSecrets, unlockDevice } from "@/lib/device-pass";
 import { clearHold, holdIkm, readHold, unlockHeld } from "@/lib/player-hold";
 import { writePayoutAccount } from "@/lib/imported-account";
+import { publishNights } from "@/lib/session-nights";
 
 /** The name, streak, and nights come back with the passkey. This browser is not the record. */
 export function PlayerName({ initial = null, storageName = "" }: { initial?: PlayerSession | null; storageName?: string }) {
@@ -15,6 +16,11 @@ export function PlayerName({ initial = null, storageName = "" }: { initial?: Pla
   const [checked, setChecked] = useState(initial !== null);
   const [signedIn, setSignedIn] = useState(initial !== null);
   const [confirming, setConfirming] = useState(false);
+
+  // The nights go to the one History list below, merged with what this browser holds.
+  useEffect(() => {
+    if (session) publishNights(session.nights);
+  }, [session]);
 
   useEffect(() => {
     if (initial) return;
@@ -192,17 +198,7 @@ export function PlayerName({ initial = null, storageName = "" }: { initial?: Pla
         </div>
       )}
       <p className="mt-2 text-sm text-chalk/60">The name can be changed once. It is not your testnet account.</p>
-      {session.nights.length > 0 ? (
-        <ul className="mt-3 divide-y divide-white/10 text-sm">
-          {session.nights.map((night) => (
-            <li key={`${night.vaultId}:${night.round}`} className="flex justify-between gap-3 py-2">
-              <span>{night.vaultId} · round {night.round}</span>
-              <span className="text-chalk/70">{night.state === "in" ? "Got in" : "Opened"}</span>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      {session.line ? <a href={`/p/${encodeURIComponent(session.player.name)}`} className="chalk-focus mt-3 inline-flex min-h-11 items-center text-sm text-chalk/80 underline decoration-white/20">Share your place</a> : null}
+      {session.line ? <a href={`/p/${encodeURIComponent(session.player.name)}`} className="chalk-focus mt-3 inline-flex min-h-11 items-center text-sm text-chalk/80 underline decoration-white/20">See your place</a> : null}
       <button type="button" onClick={() => setConfirming(true)} className="chalk-focus mt-3 block min-h-11 text-sm text-chalk/70 underline decoration-white/20">Log out</button>
       {confirming ? <LogoutDialog onStay={() => setConfirming(false)} onLogout={logout} /> : null}
     </div>
@@ -211,14 +207,36 @@ export function PlayerName({ initial = null, storageName = "" }: { initial?: Pla
 
 function LogoutDialog({ onStay, onLogout }: { onStay: () => void; onLogout: () => void }) {
   const stayRef = useRef<HTMLButtonElement>(null);
+  const leaveRef = useRef<HTMLButtonElement>(null);
+  const stay = useRef(onStay);
+  stay.current = onStay;
   useEffect(() => {
+    // Focus stays inside the dialog while it is open, and goes back to the Log out control when it closes.
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     stayRef.current?.focus();
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onStay();
+      if (event.key === "Escape") stay.current();
+      if (event.key !== "Tab") return;
+      const first = stayRef.current;
+      const last = leaveRef.current;
+      if (!first || !last) return;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      } else if (document.activeElement !== first && document.activeElement !== last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onStay]);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      opener?.focus();
+    };
+  }, []);
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-4 sm:items-center" onClick={onStay}>
       <div
@@ -233,7 +251,7 @@ function LogoutDialog({ onStay, onLogout }: { onStay: () => void; onLogout: () =
         <p id="logout-note" className="mt-2 text-sm">This browser forgets the sign-in and the saved payout account. Your passkey, your name, and your account stay. Signing in again brings them back.</p>
         <div className="mt-4 flex flex-wrap gap-2">
           <button ref={stayRef} type="button" onClick={onStay} className="chalk-focus min-h-11 rounded-2xl bg-on-paper px-4 py-2 text-sm text-paper">Stay signed in</button>
-          <button type="button" onClick={onLogout} className="chalk-focus min-h-11 rounded-2xl border border-rule px-4 py-2 text-sm">Log out</button>
+          <button ref={leaveRef} type="button" onClick={onLogout} className="chalk-focus min-h-11 rounded-2xl border border-rule px-4 py-2 text-sm">Log out</button>
         </div>
       </div>
     </div>

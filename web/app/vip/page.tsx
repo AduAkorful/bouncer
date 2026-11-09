@@ -39,7 +39,7 @@ export default function VipPage() {
 async function VipDoors({ contractId, rpcUrl, fallbackUrl }: { contractId: string; rpcUrl: string; fallbackUrl: string | null }) {
   await connection();
   const index = await readDoorIndex(
-    httpRpc(rpcUrl, fetch, { signal: AbortSignal.timeout(PAGE_READ_MS), fallbackUrl }),
+    httpRpc(rpcUrl, fetch, { signal: AbortSignal.timeout(PAGE_READ_MS), fallbackUrl, keep: true }),
     contractId,
     Date.now(),
   );

@@ -47,7 +47,7 @@ test("a closed door names no opening time", () => {
   assert.deepEqual(CLOSED_QUEUE, {
     kicker: "Closed",
     title: "The queue is closed.",
-    detail: "This door is shut. No next opening is stored. The door page lists any other door.",
+    detail: "This door is shut. No next opening is stored. The other doors are listed below.",
   });
 });
 

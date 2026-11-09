@@ -17,7 +17,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const id = decodeURIComponent((await params).vault);
   const labels = readPublicEnv(process.env);
   if (!labels.ok) return screen(id, "A door run by a sponsor.");
-  const rpc = httpRpc(labels.env.rpcUrl, fetch, { signal: AbortSignal.timeout(PAGE_READ_MS), fallbackUrl: labels.env.rpcFallbackUrl });
+  const rpc = httpRpc(labels.env.rpcUrl, fetch, { signal: AbortSignal.timeout(PAGE_READ_MS), fallbackUrl: labels.env.rpcFallbackUrl, keep: true });
   const page = await readPageVault(rpc, { contractId: labels.env.contractId }, id);
   if (!page.ok) {
     if (page.error === "missing vault" || page.error === "id") return screen("No door", "No vault uses that id.", { index: false });
@@ -25,7 +25,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
   const card = page.page.card;
   if (!card) return screen(id, "A door run by a sponsor.");
-  return screen(card.sign, card.pitch || `${card.name} is on the door.`);
+  return screen(card.sign, card.pitch || `${card.name} is on the door.`, { path: `/v/${encodeURIComponent(id)}`, line: card.pitch || undefined });
 }
 
 export default function Page({ params }: Props) {

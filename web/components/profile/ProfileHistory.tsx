@@ -1,25 +1,35 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { raidHistoryHref, raidHistoryLabel, type RaidHistoryRow } from "@/lib/raid-history";
+import { mergeHistory, raidHistoryHref, raidHistoryLabel, type RaidHistoryRow } from "@/lib/raid-history";
 import { listRaidHistory } from "@/lib/session-store";
+import { subscribeNights, type ServerNight } from "@/lib/session-nights";
 
+/** One list: the raids on this browser, plus the nights the server keeps for this passkey. */
 export function ProfileHistory({ storageName }: { storageName: string }) {
-  const [rows, setRows] = useState<RaidHistoryRow[] | { error: string } | null>(null);
+  const [device, setDevice] = useState<RaidHistoryRow[] | { error: string } | null>(null);
+  const [server, setServer] = useState<ServerNight[]>([]);
 
   useEffect(() => {
     let live = true;
     listRaidHistory(storageName).then((found) => {
-      if (live) setRows(found);
+      if (live) setDevice(found);
+    });
+    const stop = subscribeNights((nights) => {
+      if (live) setServer(nights);
     });
     return () => {
       live = false;
+      stop();
     };
   }, [storageName]);
 
-  if (rows === null) return <p className="mt-2 text-sm text-chalk/70">Reading this browser.</p>;
-  if ("error" in rows) return <p role="status" className="mt-2 text-sm text-chalk/70">Raid history could not be read on this browser.</p>;
-  if (rows.length === 0) return <p className="mt-2 text-sm text-chalk/70">No raid is stored on this device.</p>;
+  if (device === null) return <p className="mt-2 text-sm text-chalk/70">Reading this browser.</p>;
+  const failed = "error" in device;
+  const rows = mergeHistory(failed ? [] : device, server);
+  if (rows.length === 0) {
+    return <p role={failed ? "status" : undefined} className="mt-2 text-sm text-chalk/70">{failed ? "Raid history could not be read on this browser." : "No raid is recorded for you yet."}</p>;
+  }
   return (
     <ul className="mt-3 divide-y divide-white/10">
       {rows.map((row) => (

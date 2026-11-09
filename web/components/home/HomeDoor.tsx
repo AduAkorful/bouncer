@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { CloseTime, Countdown } from "@/components/Countdown";
 import { NetworkTag } from "@/components/bits";
 import { RULES } from "@/lib/rules";
-import { TonightRaid } from "@/components/home/TonightRaid";
+import { SignedInLine, TonightRaid } from "@/components/home/TonightRaid";
 import { DoorScene } from "@/components/DoorScene";
 import { QueueBar } from "@/components/home/QueueBar";
 import { StreetScroll } from "@/components/home/StreetScroll";
@@ -176,6 +176,7 @@ export function HomeDoor({
           )}
           {vault && !shut ? <QueueBar href={`${base}/play`} targetId="join-queue" /> : null}
           {vault && wallet ? <TonightRaid storageName={wallet.storageName} vaultId={vaultId} round={vault.round} playHref={`${base}/play`} /> : null}
+          <SignedInLine />
           {wallet ? <WalletChip {...wallet} /> : null}
           <p className="mt-3 text-center text-sm text-chalk/60">{vault ? phaseCopy[phase].note : "Nothing on this door was filled in."}</p>
           </div>

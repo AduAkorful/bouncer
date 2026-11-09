@@ -8,12 +8,12 @@ import { TryAgain } from "@/components/TryAgain";
 import { NetworkTag } from "@/components/bits";
 import { TokenAmount, TokenWord } from "@/components/TokenAmount";
 import { deriveSecrets } from "@/lib/device-pass";
-import { unlockHeld } from "@/lib/player-hold";
+import { readHold, unlockHeld } from "@/lib/player-hold";
 import { readPayoutAccount, testnetAccountId, writePayoutAccount } from "@/lib/imported-account";
 import { addWalletKey, sendClaim } from "@/lib/send-claim";
 import { PayoutWallet } from "@/components/claim/PayoutWallet";
 import { playableRaid } from "@/lib/door";
-import { heldVerdict, submitHeld } from "@/lib/held-verdict";
+import { heldRefusal, heldVerdict, submitHeld, UNSENDABLE, unsendableVerdict } from "@/lib/held-verdict";
 import { payoutExplorerUrl } from "@/lib/explorer";
 import { loadRaid, saveRaid, type StoredRaid } from "@/lib/session-store";
 import type { TokenRead } from "@/lib/page-vault";
@@ -82,6 +82,8 @@ export function ClaimDoor({
           setMissing(true);
           setRetry(false);
           setError("No raid is stored on this device.");
+          // Signed in on this browser already: rebuild the raid from that sign-in instead of asking again.
+          if (readHold()) void recover();
         }
         return;
       }
@@ -116,8 +118,9 @@ export function ClaimDoor({
       if (!body.crack) {
         if (!cancel) {
           const holding = Boolean(heldVerdict(raid));
-          setHeld(holding);
-          setError(holding ? HELD : "No crack is recorded for this raid.");
+          const refusal = heldRefusal(raid);
+          setHeld(holding && !refusal);
+          setError(refusal ? `${HELD} ${refusal}` : holding ? HELD : unsendableVerdict(raid) ? UNSENDABLE : "No crack is recorded for this raid.");
         }
         return;
       }
@@ -171,8 +174,9 @@ export function ClaimDoor({
     if (!body.crack) {
       setRetry(false);
       const holding = Boolean(heldVerdict(raidRecord.current));
-      setHeld(holding);
-      setError(holding ? HELD : "No crack is recorded for this raid.");
+      const refusal = heldRefusal(raidRecord.current);
+      setHeld(holding && !refusal);
+      setError(refusal ? `${HELD} ${refusal}` : holding ? HELD : unsendableVerdict(raidRecord.current) ? UNSENDABLE : "No crack is recorded for this raid.");
       return;
     }
     setHeld(false);
@@ -213,12 +217,17 @@ export function ClaimDoor({
     setError(null);
     const outcome = await submitHeld(verdict, record.raidId, vaultId, apiPost);
     if (!outcome.ok) {
+      if (outcome.refused) {
+        const refusedRecord = { ...record, refused: outcome.message };
+        raidRecord.current = refusedRecord;
+        await saveRaid(storageName, vaultId, round, refusedRecord).catch(() => undefined);
+      }
       setBusy(false);
       setHeld(outcome.retry);
       setError(`${outcome.message} The signed verdict stays on this device.`);
       return;
     }
-    const next = { ...record, transactionHash: outcome.transactionHash, recorded: true };
+    const next = { ...record, transactionHash: outcome.transactionHash, recorded: true, refused: null };
     raidRecord.current = next;
     await saveRaid(storageName, vaultId, round, next).catch(() => undefined);
     await readCrack(record.raidId);

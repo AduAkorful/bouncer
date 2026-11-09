@@ -51,7 +51,7 @@ export const CLOSED_DOOR_NOTE = "No next opening is stored. Other doors are list
 export const CLOSED_QUEUE = {
   kicker: "Closed",
   title: "The queue is closed.",
-  detail: "This door is shut. No next opening is stored. The door page lists any other door.",
+  detail: "This door is shut. No next opening is stored. The other doors are listed below.",
 };
 
 export const COMMITMENT_LINE = "Tonight's ledger committed before the door opened";

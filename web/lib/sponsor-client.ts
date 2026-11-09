@@ -23,7 +23,11 @@ export type Sponsor = {
   send: (call: Call) => Promise<{ ok: true; hash: string } | { ok: false; error: string }> };
 
 /** The sponsor's account: the named testnet account this device holds a key for, or the passkey account the relay creates. */
-export async function connectSponsor(input: { rpcUrl: string; networkId: string; storageName: string; create?: boolean }): Promise<{ ok: true; sponsor: Sponsor } | { ok: false; error: string }> {
+/**
+ * `create` makes a new passkey and its account. `makeAccount` makes the account for a passkey this browser is
+ * already signed in with. A plain sign-in never makes an account: it says none exists and offers that step.
+ */
+export async function connectSponsor(input: { rpcUrl: string; networkId: string; storageName: string; create?: boolean; makeAccount?: boolean }): Promise<{ ok: true; sponsor: Sponsor } | { ok: false; error: string; noAccount?: boolean }> {
   if (input.networkId !== "testnet") return { ok: false, error: "The passkey network is not testnet." };
   const unlocked = input.create ? await createHeld() : await unlockHeld();
   if ("error" in unlocked) return { ok: false, error: unlocked.error };
@@ -37,6 +41,9 @@ export async function connectSponsor(input: { rpcUrl: string; networkId: string;
     if (check !== "full") return { ok: false, error: accessMessage(check) };
   } else {
     accountId = await existingPasskeyAccount(input.rpcUrl, secrets.accountPublicKey);
+  }
+  if (!accountId && !input.create && !input.makeAccount) {
+    return { ok: false, error: "No testnet account uses this passkey yet.", noAccount: true };
   }
   if (!accountId) {
     const created = await apiPost("/passkey/create-account", { publicKey: secrets.accountPublicKey });

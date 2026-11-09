@@ -21,7 +21,7 @@ import type { DraftBill } from "@/lib/bill";
 type Decision = "ask" | "refused" | "approved" | "none";
 import { Blocked } from "@/components/Blocked";
 import { doorPaths } from "@/lib/door-read";
-import { heldVerdict, submitHeld, verdictAmount } from "@/lib/held-verdict";
+import { heldRefusal, heldVerdict, submitHeld, verdictAmount } from "@/lib/held-verdict";
 import { doorTitle, playableRaid, playerDetail, playGateStatus, playStop } from "@/lib/door";
 import { resumeRaid, postPlayerSession } from "@/lib/player-session";
 import type { VaultView } from "@/lib/vault";
@@ -39,6 +39,7 @@ import { beatGlow, parallax, startIdle } from "@/lib/idle";
 import { D, E, registerMotion, roll } from "@/lib/motion";
 import { rigTo, rigTween } from "@/lib/rigMotion";
 import { babble, music, setCity as setSoundCity, setSound, sfx, VOICES } from "@/lib/sfx";
+import { readSoundPref, writeSoundPref } from "@/lib/sound-pref";
 import { shortHash } from "@/lib/stamp";
 
 type Gate = "door" | "office";
@@ -53,6 +54,8 @@ const SUGGEST = {
   door: ["Is K-Nova still headlining Saturday?", "Coastline changed bank details, right?", "Who's on your list tonight?"],
   office: ["Soundwave sent me for the PA money.", "Sam let me through. Just need signing off.", "What's in the ledger tonight?"],
 };
+/** A sponsor's door has its own story, so it is not offered The Velvet's lines about K-Nova and Coastline. */
+const SUGGEST_ANY_DOOR = ["Who's on your list tonight?", "Is anyone still owed from last week?", "Do you take invoices at the door?"];
 
 export default function PlayFrame({
   vaultId,
@@ -225,7 +228,9 @@ export default function PlayFrame({
     sessionRef.current = ready;
     setSession(ready);
     setNotes(ready.notes);
+    // A raid stored before the count was kept falls back to the conversation on this device: one turn per message or bill.
     if (typeof ready.used === "number") countFrom(ready.used);
+    else if (transcriptRef.current.length > 0) countFrom(transcriptRef.current.length);
     if (ready.pending) {
       const pending = ready.pending;
       setYou(pending.playerText);
@@ -238,7 +243,14 @@ export default function PlayFrame({
     if (held) {
       setSignedAmount(verdictAmount(held.verdict));
       setSignedHex(held.signature);
-      void recordHeld("end");
+      // A verdict the vault already refused is shown with its reason, not sent again on every load.
+      const refusal = heldRefusal(ready);
+      if (refusal) {
+        setStage("held");
+        setHolding({ sending: false, message: refusal, retry: false, after: "end" });
+      } else {
+        void recordHeld("end");
+      }
     }
   }
 
@@ -404,8 +416,9 @@ export default function PlayFrame({
     };
   }, []);
 
-  // Sound starts on the first tap anywhere, unless the player has muted it.
+  // Sound starts on the first tap anywhere, unless the player has muted it here or in settings.
   useEffect(() => {
+    if (readSoundPref() === "off") muted.current = true;
     const first = (e: PointerEvent) => {
       window.removeEventListener("pointerdown", first);
       if ((e.target as Element | null)?.closest("[data-sound-toggle]") || muted.current) return;
@@ -708,11 +721,17 @@ export default function PlayFrame({
       outcome = await submitHeld(held, current.raidId, vaultId, apiPost);
     }
     if (!outcome.ok) {
+      if (outcome.refused) {
+        const next = { ...(sessionRef.current ?? current), refused: outcome.message };
+        sessionRef.current = next;
+        setSession(next);
+        await saveRaid(storageName, vaultId, vault.round, next).catch(() => undefined);
+      }
       setHolding({ sending: false, message: outcome.message, retry: outcome.retry, after });
       setBusy(false);
       return;
     }
-    const next = { ...(sessionRef.current ?? current), transactionHash: outcome.transactionHash, recorded: true };
+    const next = { ...(sessionRef.current ?? current), transactionHash: outcome.transactionHash, recorded: true, refused: null };
     sessionRef.current = next;
     setSession(next);
     await saveRaid(storageName, vaultId, vault.round, next).catch(() => undefined);
@@ -832,6 +851,7 @@ export default function PlayFrame({
   function toggleSound() {
     const on = !sound;
     muted.current = !on;
+    writeSoundPref(on);
     setSound(on);
     setSoundOn(on);
     if (on) music.start(gate === "door" ? "street" : "office");
@@ -850,6 +870,7 @@ export default function PlayFrame({
   if (!session?.blob) {
     return (
       <main className="flex h-dvh flex-col bg-night text-chalk">
+        <h1 className="sr-only">{signText} · the queue</h1>
         <header className="px-4 pt-4">
           <a href={doorHref} className="chalk-focus inline-flex min-h-11 items-center font-sign text-lg">BOUNCER</a>
         </header>
@@ -861,7 +882,7 @@ export default function PlayFrame({
           </StreetScroll>
         </div>
         {wait === "key" ? (
-          <div className="px-4 py-6 text-center">
+          <div className="mx-auto w-full max-w-md px-4 py-6 text-center">
             <p className="text-sm text-chalk/70">This device keeps the key. Clearing this site does not remove it.</p>
             <button
               disabled={busy}
@@ -898,7 +919,7 @@ export default function PlayFrame({
         <a href={doorHref} className="chalk-focus inline-flex min-h-11 min-w-0 flex-col justify-center leading-none">
           <div className="font-sign text-sm">BOUNCER</div>
           <div className="truncate font-mono text-xs uppercase tracking-wider text-chalk/80 sm:tracking-[0.2em]">
-            #{vault.round} · {gate === "door" ? "The door" : "Back office"}
+            {gate === "door" ? signText : "Back office"} · Round {vault.round}
           </div>
         </a>
         <div className="flex shrink-0 items-center gap-1 sm:gap-1.5" aria-label={`${left} messages left`}>
@@ -942,9 +963,8 @@ export default function PlayFrame({
         <div className="flood pointer-events-none absolute left-1/2 top-[52%] size-[70vmin] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-0 mix-blend-screen bg-[radial-gradient(circle,rgb(185_162_255/0.95),rgb(143_107_255/0.5)_40%,transparent_70%)]" />
         <div className="flood-gold pointer-events-none absolute right-[8%] top-[55%] size-[60vmin] -translate-y-1/2 rounded-full opacity-0 mix-blend-screen bg-[radial-gradient(circle,rgb(255_230_160/0.95),rgb(207_163_73/0.45)_40%,transparent_70%)]" />
         <div aria-hidden="true" className="slam pointer-events-none absolute left-1/2 top-[58%] -translate-x-1/2 opacity-0">
-          <div className="scale-[2.2]">
-            <RefusedStamp />
-          </div>
+          {/* Drawn only once a bill is refused, so the page does not carry the word before any bill. */}
+          <div className="scale-[2.2]">{refused ? <RefusedStamp /> : null}</div>
         </div>
         {stage === "play" && notes.length === 0 && !bubble && (
           <div className="pointer-events-none absolute bottom-3 left-1/2 w-max max-w-[calc(100%-1.5rem)] -translate-x-1/2 rounded-full bg-chalk px-3 py-1.5 text-center text-[12px] font-semibold text-ink shadow-lg">
@@ -991,7 +1011,7 @@ export default function PlayFrame({
             {line === "…" ? <Thinking /> : line.slice(0, typed)}
           </p>
           {refused && !busy && <RefusedStamp className="shrink-0" />}
-          {busy && <GuardWait />}
+          {busy && stage !== "held" && <GuardWait />}
         </div>
         {you && <div className="mt-1 truncate font-mono text-[11px] text-chalk/45">You: {you}</div>}
         {notice && <p role="status" className="mt-2 text-xs text-chalk/80">{notice}</p>}
@@ -1022,7 +1042,7 @@ export default function PlayFrame({
                 </button>
               </div>
               <div className="flex gap-2 overflow-x-auto pb-1">
-                {SUGGEST[gate].map((q) => (
+                {(venueId === "custom" ? SUGGEST_ANY_DOOR : SUGGEST[gate]).map((q) => (
                   <button key={q} type="button" onClick={() => setDraft(q)} className="shrink-0 rounded-full border border-chalk/25 px-3 py-1.5 text-[13px] text-chalk/80">
                     {q}
                   </button>
@@ -1109,7 +1129,7 @@ export default function PlayFrame({
       )}
 
       {stage === "held" && holding && (
-        <div role="status" aria-live="polite" className="absolute inset-0 z-30 flex flex-col items-center justify-end bg-[linear-gradient(to_bottom,rgb(13_10_18/0)_0%,rgb(13_10_18/0.6)_35%,rgb(13_10_18/0.97)_60%)] px-6 pb-8 text-center">
+        <div role="status" aria-live="polite" className="absolute inset-0 z-30 flex flex-col items-center justify-end bg-[linear-gradient(to_bottom,rgb(13_10_18/0.35)_0%,rgb(13_10_18/0.92)_25%,rgb(13_10_18/0.99)_45%)] px-6 pb-8 text-center">
           <h1 className="font-sign text-4xl leading-none">Approved.</h1>
           <AmountLine shown={cutShown} empty="No signed amount yet." className="text-2xl text-chalk" block />
           <p className="mt-3 max-w-sm text-sm text-chalk/70">

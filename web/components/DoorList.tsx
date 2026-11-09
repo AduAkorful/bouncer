@@ -48,7 +48,7 @@ export function DoorList({
       ) : doors.length === 0 ? (
         <p className="mt-3 text-sm text-chalk/70">{empty}</p>
       ) : (
-        <div className="mt-3 grid grid-cols-1 gap-3 min-[360px]:grid-cols-2 sm:grid-cols-3">
+        <div className={`mt-3 grid grid-cols-1 gap-3 min-[360px]:grid-cols-2 sm:grid-cols-3 ${WIDE_COLUMNS[ordered.length] ?? ""}`}>
           {ordered.map((door, index) => (
             <Link key={door.id} href={door.href} className="chalk-focus min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-night-2">
               {door.read ? (
@@ -64,7 +64,7 @@ export function DoorList({
                   decorative
                 />
               ) : (
-                <div className="flex h-16 items-center bg-[#1a1424] px-3 font-sign text-sm text-chalk">{door.sign}</div>
+                <div aria-hidden="true" className="flex h-16 items-center bg-[#1a1424] px-3 font-sign text-sm text-chalk">{door.sign}</div>
               )}
               <div className="p-3">
                 <div className="break-words font-sign text-sm leading-tight">{door.sign}</div>
@@ -84,3 +84,6 @@ export function DoorList({
     </section>
   );
 }
+
+/** On a wide screen a short list sits in one row instead of ending on a ragged one. */
+const WIDE_COLUMNS: Record<number, string> = { 4: "lg:grid-cols-4", 5: "lg:grid-cols-5" };
