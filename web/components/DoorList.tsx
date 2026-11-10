@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { DoorScene } from "@/components/DoorScene";
+import { LazyScene } from "@/components/LazyScene";
 import { TryAgain } from "@/components/TryAgain";
 import { CloseTime } from "@/components/Countdown";
 import { TokenAmount } from "@/components/TokenAmount";
@@ -58,17 +59,19 @@ export function DoorList({
               href={door.href}
               className="chalk-focus min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-night-2">
               {door.read ? (
-                <DoorScene
-                  sign={door.sign}
-                  look={door.card ? cardLook(door.card) : undefined}
-                  setting={door.card?.setting}
-                  neighbors={false}
-                  queue={false}
-                  p={`listed-${index}`}
-                  viewBox="104 8 192 62"
-                  className="block h-16 w-full bg-[#1a1424]"
-                  decorative
-                />
+                <LazyScene className="h-16 bg-[#1a1424]">
+                  <DoorScene
+                    sign={door.sign}
+                    look={door.card ? cardLook(door.card) : undefined}
+                    setting={door.card?.setting}
+                    neighbors={false}
+                    queue={false}
+                    p={`listed-${index}`}
+                    viewBox="104 8 192 62"
+                    className="block h-16 w-full bg-[#1a1424]"
+                    decorative
+                  />
+                </LazyScene>
               ) : (
                 <div aria-hidden="true" className="flex h-16 items-center bg-[#1a1424] px-3 font-sign text-sm text-chalk">{door.sign}</div>
               )}

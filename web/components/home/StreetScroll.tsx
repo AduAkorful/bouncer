@@ -3,7 +3,10 @@
 import { useLayoutEffect, useRef, type ReactNode } from "react";
 import { StreetBar } from "@/components/home/StreetBar";
 
-const PLACE = `(function(){var el=document.currentScript&&document.currentScript.previousElementSibling;if(!el||!el.classList.contains("street-scroll"))return;var i=0;function place(){var n=(el.scrollWidth-el.clientWidth)/2;if(n>0){el.scrollLeft=n;return;}i+=1;if(i<12)requestAnimationFrame(place);}place();})();`;
+// Centres the street before paint. On a slow connection the stylesheet can arrive after this runs, so the width that
+// makes the street scroll does not exist yet: a ResizeObserver places it the moment that width appears, and stops
+// after the first placement, a touch, or ten seconds.
+const PLACE = `(function(){var el=document.currentScript&&document.currentScript.previousElementSibling;if(!el||!el.classList.contains("street-scroll"))return;var ro,done=false;function stop(){done=true;if(ro)ro.disconnect();}function place(){if(done)return;var n=(el.scrollWidth-el.clientWidth)/2;if(n>0){el.scrollLeft=n;stop();}}place();if(!done&&window.ResizeObserver){ro=new ResizeObserver(place);ro.observe(el);if(el.firstElementChild)ro.observe(el.firstElementChild);el.addEventListener("touchstart",stop,{passive:true});el.addEventListener("wheel",stop,{passive:true});setTimeout(stop,10000);}else if(!done){var i=0;(function t(){place();if(!done&&++i<12)requestAnimationFrame(t);})();}})();`;
 
 /** A wide street in a short frame. The first view sits on the door. Phones swipe out to the stall and the shop. */
 export function StreetScroll({ children, bar = false }: { children: ReactNode; bar?: boolean }) {

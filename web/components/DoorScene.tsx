@@ -1,5 +1,3 @@
-"use client";
-
 import type { ReactNode } from "react";
 import { CROWDS, crowdLook, type Crowd } from "@/lib/crowds";
 import { CartStall, Passer, Ride, Seller, Sky } from "@/components/StreetMore";
