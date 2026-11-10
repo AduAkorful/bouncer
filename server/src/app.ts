@@ -15,9 +15,10 @@ import type { Budget, Counter, Limiter } from "./limits.ts";
 import { draftFitsCap } from "./sponsor-draft.ts";
 import { createAuthenticator } from "./auth.ts";
 import { createPlayerAuth } from "./player-auth.ts";
-import { BOARD_RULE, WEEK_RULE, boardEntry, weekStart, weeklyBoard, openSession, publicBoard, recordGotIn, recordOpen, recordTurn, renamePlayer, rollName, utcDay, viewOf, type NightRow, type PlayerRow, type PlayerStore } from "./player-record.ts";
+import { BOARD_RULE, WEEK_RULE, boardEntry, weekStart, weeklyBoard, openSession, publicBoard, parseProgress, recordGotIn, recordOpen, recordProgress, recordTurn, renamePlayer, rollName, utcDay, viewOf, type NightRow, type PlayerRow, type PlayerStore } from "./player-record.ts";
 import { playerNameToStore } from "../../web/lib/player-name.ts";
 import type { ClaimRelay } from "./claim-relay.ts";
+import { usesSamplePayee } from "../../web/lib/sample-spec.ts";
 import { accountIdForPublicKey } from "../../web/lib/passkey-account.ts";
 
 export type Deps = {
@@ -90,6 +91,8 @@ export function createApp(deps: Deps) {
   app.get("/health", (c) => c.json({ ok: true }));
   app.get("/status", (c) => c.json({ ok: true, ...statusParts(deps.status()), budget: { used: deps.budget.used() }, bills: deps.bills.snapshot() }));
 
+  const playerAuth = createPlayerAuth(deps.now);
+
   app.post("/guard", async (c) => {
     if (!take(c, "guard", 240, MINUTE)) return slow(c);
     const body = await bodyOf(c);
@@ -109,14 +112,32 @@ export function createApp(deps: Deps) {
         return c.json({ ok: false, error: "full" }, 409);
       }
     }
+    // A door's sponsor wrote the ledger, so the sponsor never gets a raid. The passkey signs this call with its
+    // account key and the claim key, so the account behind the claim key is the one checked, not a page's claim.
+    if (body.op === "open") {
+      const who = playerAuth(c.req.header("x-player-auth"), "/guard/open");
+      if (!who.ok || who.claimKey !== body.player_id) return c.json({ ok: false, error: "unauthorized" }, 401);
+      if (typeof body.vault_id !== "string" || !validVaultId(body.vault_id)) return c.json({ ok: false, error: "bad request" }, 400);
+      const door = await readDoor(deps.rpc, env.relay.contractId, body.vault_id);
+      if (!door.ok) return c.json({ ok: false, error: "door" }, 502);
+      const account = await accountIdForPublicKey(who.publicKey, env.relay.accountId);
+      if (account && (account === door.vault.sponsor || account === door.owner)) return c.json({ ok: false, error: "sponsor" }, 403);
+    }
     const result = await runGuardTurn(env.guard, deps.marks, body, deps.post);
     if (deps.players && result.status === 200) {
       const payload = result.body as { ok?: unknown; blob?: unknown };
       if (payload?.ok === true && body.op === "open" && typeof payload.blob === "string" && typeof body.player_id === "string" && typeof body.vault_id === "string") {
+        await recordProgress(deps.players, { claimKey: body.player_id, vaultId: body.vault_id, round: String(body.round), ...(typeof (payload as { used?: unknown }).used === "number" ? { used: (payload as { used: number }).used } : {}), street: (payload as { street?: unknown }).street ?? null }).catch(() => undefined);
         await recordOpen(deps.players, { claimKey: body.player_id, vaultId: body.vault_id, round: String(body.round), blob: payload.blob, now: deps.now() }).catch(() => undefined);
       }
       if (payload?.ok === true && (body.op === "say" || body.op === "bill") && typeof payload.blob === "string" && typeof body.player_id === "string" && typeof body.vault_id === "string") {
         await recordTurn(deps.players, { claimKey: body.player_id, vaultId: body.vault_id, round: String(body.round), blob: payload.blob }).catch(() => undefined);
+        const answer = payload as { reply?: unknown; used?: unknown; signature?: unknown; verdict?: unknown };
+        // One outcome per counted message: chat is "ask", a bill is refused or approved. The text is not kept.
+        if (typeof answer.reply === "string" && answer.reply) {
+          const outcome = body.op === "say" ? "ask" : answer.signature && answer.verdict ? "approved" : "refused";
+          await recordProgress(deps.players, { claimKey: body.player_id, vaultId: body.vault_id, round: String(body.round), outcome, ...(typeof answer.used === "number" ? { used: answer.used } : {}) }).catch(() => undefined);
+        }
       }
     }
     return c.json(result.body as Record<string, unknown>, result.status as 200);
@@ -146,6 +167,7 @@ export function createApp(deps: Deps) {
     if (!sent.ok) return c.json(sent, sent.error === "refused" || sent.error === "number" ? 422 : 502);
     if (deps.players) {
       await recordGotIn(deps.players, { claimKey: parsed.verdict.player_id, vaultId: parsed.verdict.vault_id, round: parsed.verdict.round, now: deps.now() }).catch(() => undefined);
+      await recordProgress(deps.players, { claimKey: parsed.verdict.player_id, vaultId: parsed.verdict.vault_id, round: parsed.verdict.round, won: true, amount: String(parsed.verdict.amount) }).catch(() => undefined);
     }
     return c.json({ ok: true, transactionHash: sent.transactionHash });
   });
@@ -214,6 +236,8 @@ export function createApp(deps: Deps) {
     if (!who.ok) return c.json({ ok: false, error: "unauthorized" }, 401);
     if (!deps.limiter.take(`quota:${op}:${who.account}`, QUOTAS[op], DAY)) return c.json({ ok: false, error: "You have used today's allowance for this." }, 429);
     if (!deps.budget.take()) return c.json({ ok: false, error: "busy" }, 429);
+    // The sample story's payees are printed on the form, so a door that uses them has a ledger anyone can read.
+    if ((op === "seal_spec" || op === "check_spec") && usesSamplePayee(input.spec)) return c.json({ ok: false, error: "sample" }, 422);
     if (op === "draft_spec" && input.cap !== undefined && !deps.generateDraft) {
       return c.json({ ok: false, error: "model" }, 422);
     }
@@ -300,7 +324,6 @@ export function createApp(deps: Deps) {
     return c.json({ ok: true, commitment: commit.commitment, guard_version: commit.guardVersion, signature: commit.signature, round: commit.round });
   });
 
-  const playerAuth = createPlayerAuth(deps.now);
   const player = async (c: Context, route: string) => {
     if (!deps.players) return null;
     const who = playerAuth(c.req.header("x-player-auth"), route);
@@ -361,7 +384,8 @@ export function createApp(deps: Deps) {
     const round = typeof body?.round === "string" ? body.round : "";
     if (!validVaultId(vaultId) || !/^[0-9]+$/.test(round)) return c.json({ ok: false, error: "bad request" }, 400);
     const blob = await deps.players.readBlob(who.claimKey, vaultId, round);
-    return c.json({ ok: true, blob });
+    const progress = parseProgress(await deps.players.readProgress(who.claimKey, vaultId, round));
+    return c.json({ ok: true, blob, progress });
   }));
 
   app.get("/player/board", (c) => stored(c, async () => {

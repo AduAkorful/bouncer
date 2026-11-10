@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { KeyPair } from "near-api-js";
 import { createPlayerAuth, playerChallenge } from "../src/player-auth.ts";
-import { boardEntry, memoryPlayers, nextStreak, openSession, publicBoard, recordGotIn, recordOpen, recordTurn, renamePlayer, shownStreak, utcDay } from "../src/player-record.ts";
+import { boardEntry, memoryPlayers, nextStreak, openSession, parseProgress, publicBoard, recordGotIn, recordProgress, recordOpen, recordTurn, renamePlayer, shownStreak, utcDay } from "../src/player-record.ts";
 
 const DAY = 24 * 60 * 60 * 1000;
 const START = Date.parse("2026-11-01T12:00:00.000Z");
@@ -127,4 +127,28 @@ test("the weekly board ranks the last seven days only, and a new player can plac
   const board = weeklyBoard([old, fresh, idle], [night(old, "2026-11-10", "opened"), night(old, "2026-10-30", "in"), night(fresh, "2026-11-09", "in"), night(idle, "2026-10-20", "in")], today);
   // The all-time leader won nothing this week, so the new player leads; the idle player is not listed.
   assert.deepEqual(board.map((row) => [row.name, row.place, row.nights]), [["b", 1, 1], ["a", 2, 0]]);
+});
+
+test("a raid's progress keeps counts, outcomes, street and the win, and nothing else", async () => {
+  const store = memoryPlayers();
+  const account = KeyPair.fromRandom("ed25519");
+  const claim = KeyPair.fromRandom("ed25519");
+  const keys = { publicKey: account.getPublicKey().toString(), claimKey: Buffer.from(claim.getPublicKey().data).toString("hex") };
+  await openSession(store, { ...keys, now: START, random: () => 0 });
+  const at = { claimKey: keys.claimKey, vaultId: "door", round: "1" };
+  await recordProgress(store, { ...at, used: 0, street: { payees: ["A"], poster: [], queue: [] } });
+  await recordProgress(store, { ...at, outcome: "ask", used: 1 });
+  await recordProgress(store, { ...at, outcome: "refused", used: 2 });
+  let seen = parseProgress(await store.readProgress(keys.claimKey, "door", "1"));
+  assert.deepEqual({ used: seen.used, outcomes: seen.outcomes, won: seen.won }, { used: 2, outcomes: ["ask", "refused"], won: false });
+  assert.deepEqual(seen.street, { payees: ["A"], poster: [], queue: [] });
+  await recordProgress(store, { ...at, won: true, amount: "3080000" });
+  seen = parseProgress(await store.readProgress(keys.claimKey, "door", "1"));
+  assert.equal(seen.won, true);
+  assert.equal(seen.amount, "3080000");
+  assert.equal(seen.used, 2);
+  // An unknown player or a bad claim key writes nothing, and a corrupt row reads as an empty raid.
+  await recordProgress(store, { claimKey: "f".repeat(64), vaultId: "door", round: "1", used: 5 });
+  assert.equal(await store.readProgress("f".repeat(64), "door", "1"), null);
+  assert.deepEqual(parseProgress("not json").outcomes, []);
 });

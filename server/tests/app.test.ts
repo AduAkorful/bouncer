@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { KeyPair } from "near-api-js";
 import { accountIdForPublicKey } from "../../web/lib/passkey-account.ts";
 import { createApp } from "../src/app.ts";
-import { authHeader, SECRETS, testDeps, vaultRow } from "./testkit.ts";
+import { authHeader, playerOpen, SECRETS, testDeps, vaultRow } from "./testkit.ts";
 
 const ORIGIN = "https://site.test";
 const post = (path: string, body: unknown, headers: Record<string, string> = {}) => ({
@@ -78,7 +79,8 @@ test("a body over the limit is refused", async () => {
 test("/guard runs the four player ops and refuses the sponsor ops", async () => {
   const { deps, posts } = testDeps();
   const app = createApp(deps);
-  const open = await app.request("/guard", post("/guard", { op: "open", vault_id: "velvet-1", round: 1, player_id: "p1", raid_id: "r1" }));
+  const who = playerOpen("/guard/open");
+  const open = await app.request("/guard", post("/guard", { op: "open", vault_id: "velvet-1", round: 1, player_id: who.claimKey, raid_id: "r1" }, { "x-player-auth": who.header }));
   assert.equal(open.status, 200);
   assert.equal(posts.length, 1);
   for (const op of ["seal_spec", "check_spec", "draft_spec", "commit", "pubkey"]) {
@@ -307,4 +309,34 @@ test("recent nights give the door and the result, never a bill, and the weekly b
   assert.equal(JSON.stringify(body).includes("bill"), false);
   const week = await app.request("/player/board?period=week", { headers: { origin: ORIGIN } });
   assert.equal(((await week.json()) as { ok: boolean }).ok, true);
+});
+
+test("a raid opens only for a passkey that is not the door's sponsor or the owner", async () => {
+  const relay = "relay.test";
+  const sponsorKeys = KeyPair.fromRandom("ed25519");
+  const ownerKeys = KeyPair.fromRandom("ed25519");
+  const sponsorAccount = (await accountIdForPublicKey(sponsorKeys.getPublicKey().toString(), relay))!;
+  const ownerAccount = (await accountIdForPublicKey(ownerKeys.getPublicKey().toString(), relay))!;
+  const views = { vaults: { door: vaultRow({ open: true, crack_count: 0, max_cracks: 1, round: "1", sponsor: sponsorAccount }) }, specs: {}, owner: ownerAccount, calls: [] };
+  const { deps, posts } = testDeps({}, views);
+  const app = createApp(deps);
+  const open = (who: ReturnType<typeof playerOpen> | null, playerId?: string) =>
+    app.request("/guard", post("/guard", { op: "open", vault_id: "door", round: 1, player_id: playerId ?? who?.claimKey ?? "p", raid_id: "r" }, who ? { "x-player-auth": who.header } : {}));
+
+  // The sponsor's own passkey, and the owner's, are refused before the guard is called.
+  const asSponsor = await open(playerOpen("/guard/open", { account: sponsorKeys }));
+  assert.equal(asSponsor.status, 403);
+  assert.deepEqual(await asSponsor.json(), { ok: false, error: "sponsor" });
+  assert.equal((await open(playerOpen("/guard/open", { account: ownerKeys }))).status, 403);
+  assert.equal(posts.length, 0);
+
+  // No header, a header for another route, and a header for another claim key are all refused.
+  assert.equal((await open(null)).status, 401);
+  assert.equal((await open(playerOpen("/player/session"))).status, 401);
+  assert.equal((await open(playerOpen("/guard/open"), "f".repeat(64))).status, 401);
+  assert.equal(posts.length, 0);
+
+  // Any other passkey opens.
+  assert.equal((await open(playerOpen("/guard/open"))).status, 200);
+  assert.equal(posts.length, 1);
 });

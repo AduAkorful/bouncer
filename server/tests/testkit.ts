@@ -104,3 +104,16 @@ export function authHeader(route: string, over: { account?: string; seconds?: nu
   const signature = Buffer.from(key.sign(challengeMessage(over.signRoute ?? route, seconds, nonce)).signature).toString("base64");
   return `${over.account ?? "sponsor.test"}|${key.getPublicKey().toString()}|${seconds}|${nonce}|${signature}`;
 }
+
+/** A passkey's player header for a route: the account key and the claim key both sign. Returns the claim key too. */
+export function playerOpen(route: string, over: { account?: KeyPair; claim?: KeyPair } = {}): { header: string; claimKey: string; accountKey: string } {
+  const account = over.account ?? KeyPair.fromRandom("ed25519");
+  const claim = over.claim ?? KeyPair.fromRandom("ed25519");
+  const claimHex = Buffer.from(claim.getPublicKey().data).toString("hex");
+  const seconds = Math.floor(Date.UTC(2026, 10, 5, 12, 0, 0) / 1000);
+  const nonce = Buffer.from(crypto.getRandomValues(new Uint8Array(8))).toString("hex");
+  const message = new TextEncoder().encode(`bouncer.player.v1|${route}|${seconds}|${nonce}`);
+  const sign = (key: KeyPair) => Buffer.from(key.sign(message).signature).toString("base64");
+  const accountKey = account.getPublicKey().toString();
+  return { header: [accountKey, claimHex, String(seconds), nonce, sign(account), sign(claim)].join("|"), claimKey: claimHex, accountKey };
+}

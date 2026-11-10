@@ -71,6 +71,15 @@ export function surrealPlayers(env: SurrealEnv): PlayerStore {
       await rows("DELETE resume WHERE claim_key = $claimKey AND vault_id = $vaultId AND round = $round", { claimKey, vaultId, round });
       await rows("CREATE resume CONTENT $row", { row: { claim_key: claimKey, vault_id: vaultId, round, blob } });
     },
+    async readProgress(claimKey, vaultId, round) {
+      const found = await rows("SELECT progress FROM raid_progress WHERE claim_key = $claimKey AND vault_id = $vaultId AND round = $round LIMIT 1", { claimKey, vaultId, round });
+      const value = (found[0] as { progress?: unknown } | undefined)?.progress;
+      return typeof value === "string" ? value : null;
+    },
+    async saveProgress(claimKey, vaultId, round, progress) {
+      await rows("DELETE raid_progress WHERE claim_key = $claimKey AND vault_id = $vaultId AND round = $round", { claimKey, vaultId, round });
+      await rows("CREATE raid_progress CONTENT $row", { row: { claim_key: claimKey, vault_id: vaultId, round, progress } });
+    },
     async allPlayers() { return (await rows("SELECT * FROM player")).map(playerFrom); },
   };
 }

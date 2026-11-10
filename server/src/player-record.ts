@@ -33,6 +33,9 @@ export type PlayerStore = {
   saveNight(night: NightRow): Promise<void>;
   readBlob(claimKey: string, vaultId: string, round: string): Promise<string | null>;
   saveBlob(claimKey: string, vaultId: string, round: string, blob: string): Promise<void>;
+  /** What another device needs to show the same raid: count, one outcome per message, street hints, and the win. */
+  readProgress(claimKey: string, vaultId: string, round: string): Promise<string | null>;
+  saveProgress(claimKey: string, vaultId: string, round: string, progress: string): Promise<void>;
   allPlayers(): Promise<PlayerRow[]>;
 };
 
@@ -195,6 +198,51 @@ export async function recordOpen(store: PlayerStore, input: { claimKey: string; 
   await store.saveBlob(input.claimKey, input.vaultId, input.round, input.blob);
 }
 
+export type RaidProgress = {
+  used: number;
+  outcomes: ("ask" | "refused" | "approved")[];
+  street: unknown | null;
+  won: boolean;
+  amount: string | null;
+};
+
+const EMPTY_PROGRESS: RaidProgress = { used: 0, outcomes: [], street: null, won: false, amount: null };
+
+export function parseProgress(text: string | null): RaidProgress {
+  if (!text) return { ...EMPTY_PROGRESS, outcomes: [] };
+  try {
+    const value = JSON.parse(text) as Partial<RaidProgress>;
+    const outcomes = Array.isArray(value.outcomes) ? value.outcomes.filter((item): item is "ask" | "refused" | "approved" => item === "ask" || item === "refused" || item === "approved").slice(0, 12) : [];
+    return {
+      used: Number.isSafeInteger(value.used) && (value.used as number) >= 0 ? (value.used as number) : outcomes.length,
+      outcomes,
+      street: value.street ?? null,
+      won: value.won === true,
+      amount: typeof value.amount === "string" && /^[0-9]+$/.test(value.amount) ? value.amount : null,
+    };
+  } catch {
+    return { ...EMPTY_PROGRESS, outcomes: [] };
+  }
+}
+
+/** Merges one guard turn into the raid's progress. No bill, payee or reference is kept: only counts and outcomes. */
+export async function recordProgress(
+  store: PlayerStore,
+  input: { claimKey: string; vaultId: string; round: string; used?: number; outcome?: "ask" | "refused" | "approved"; street?: unknown; won?: boolean; amount?: string | null },
+): Promise<void> {
+  if (!CLAIM.test(input.claimKey) || !input.vaultId || !/^[0-9]+$/.test(input.round)) return;
+  if (!(await store.findByClaim(input.claimKey))) return;
+  const current = parseProgress(await store.readProgress(input.claimKey, input.vaultId, input.round));
+  const next: RaidProgress = {
+    used: typeof input.used === "number" && Number.isSafeInteger(input.used) ? input.used : current.used,
+    outcomes: input.outcome ? [...current.outcomes, input.outcome].slice(0, 12) : current.outcomes,
+    street: input.street !== undefined ? input.street : current.street,
+    won: input.won === true ? true : current.won,
+    amount: input.amount !== undefined ? input.amount : current.amount,
+  };
+  await store.saveProgress(input.claimKey, input.vaultId, input.round, JSON.stringify(next));
+}
+
 /** Keeps the raid's latest blob, so another device resumes where this one stopped instead of at the opening. */
 export async function recordTurn(store: PlayerStore, input: { claimKey: string; vaultId: string; round: string; blob: string }): Promise<void> {
   if (!CLAIM.test(input.claimKey) || !input.vaultId || !/^[0-9]+$/.test(input.round) || input.blob.length === 0) return;
@@ -241,6 +289,7 @@ export function memoryPlayers(): PlayerStore {
   const players: PlayerRow[] = [];
   const nights: NightRow[] = [];
   const blobs = new Map<string, string>();
+  const progress = new Map<string, string>();
   return {
     async findByAccount(publicKey) { return players.find((player) => player.publicKey === publicKey) ?? null; },
     async findByClaim(claimKey) { return players.find((player) => player.claimKey === claimKey) ?? null; },
@@ -259,6 +308,8 @@ export function memoryPlayers(): PlayerStore {
     },
     async readBlob(claimKey, vaultId, round) { return blobs.get(`${claimKey}|${vaultId}|${round}`) ?? null; },
     async saveBlob(claimKey, vaultId, round, blob) { blobs.set(`${claimKey}|${vaultId}|${round}`, blob); },
+    async readProgress(claimKey, vaultId, round) { return progress.get(`${claimKey}|${vaultId}|${round}`) ?? null; },
+    async saveProgress(claimKey, vaultId, round, text) { progress.set(`${claimKey}|${vaultId}|${round}`, text); },
     async allPlayers() { return players.map((player) => ({ ...player })); },
   };
 }
