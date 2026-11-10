@@ -1,0 +1,19 @@
+{
+ "id": 33487,
+ "task_id": 37978,
+ "task_type": "execute",
+ "tdx_quote": "BAACAIEAAAAAAAAAk5pyM/ecTKmUCg2zlX8GBw9WU/s6F8IRwai5I9rd5y0AAAAA",
+ "worker_measurement": "5e27ef20c8cc9f16d792003b5c911114568cdf173400d100d36c9a9fa74b83b9ff2c12f5ce01243cd24c24e928618517",
+ "caller_account_id": "aduakorful.testnet",
+ "call_id": "16df134e-f31e-4f0a-a035-9dc7373c0017",
+ "payment_key_owner": "aduakorful.testnet",
+ "payment_key_nonce": 1,
+ "build_target": "wasm32-wasip2",
+ "wasm_hash": "7260b0cdb4ef453b564024c1c4ac034cf5ed745a5f9d5aab0f1350d67f6adf1f",
+ "executed_wasm_sha256": "7260b0cdb4ef453b564024c1c4ac034cf5ed745a5f9d5aab0f1350d67f6adf1f",
+ "input_hash": "e628a6520acc6d1fa3b62cc910b2ded119cfd684843131aeaf28d17fda61e5f4",
+ "output_hash": "0fdb51157c248aeca2a300b0d27284e465936709e7590f2dd3561b2afe973184",
+ "project_id": "aduakorful-door.testnet/guard",
+ "attached_usd": "0",
+ "timestamp": 1794320858
+}

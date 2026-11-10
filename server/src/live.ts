@@ -7,6 +7,7 @@ import { createPasskeyAccount, signPasskeyTransaction } from "../../web/lib/pass
 import { submitVerdict } from "../../web/lib/submit-verdict.ts";
 import type { Call } from "../../web/lib/vault-calls.ts";
 import type { Deps } from "./app.ts";
+import { createAttestationLookup } from "./attestation.ts";
 import { requestCommit } from "./commit-flow.ts";
 import type { ServerEnv } from "./env.ts";
 import { createGuardPost, type Post } from "./guard-client.ts";
@@ -39,6 +40,7 @@ export function liveDeps(env: ServerEnv, status: () => unknown): Deps {
     env,
     rpc: httpRpc(env.relay.rpcUrl),
     post: createGuardPost(),
+    attest: createAttestationLookup(env.guard.callUrl, now),
     generateDraft: modelKey ? (story, decimals, cap) => generateSponsorDraft(modelKey, story, decimals, cap) : undefined,
     now,
     limiter: createLimiter(now),

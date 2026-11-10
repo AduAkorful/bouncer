@@ -6,6 +6,7 @@ import type { Mark } from "../../web/lib/marks.ts";
 import { parseVerdictSubmission, submissionAllowed, type VerdictBody } from "../../web/lib/verdict-turn.ts";
 import { parseCrack, viewRequest } from "../../web/lib/vault.ts";
 import { validVaultId } from "../../web/lib/preflight.ts";
+import type { AttestationAnswer } from "./attestation.ts";
 import { requestCommit } from "./commit-flow.ts";
 import type { ServerEnv } from "./env.ts";
 import { sponsorCall, type Post, type SponsorOp } from "./guard-client.ts";
@@ -35,6 +36,8 @@ export type Deps = {
   signTransaction: (body: unknown) => Promise<unknown & { ok: boolean }>;
   chainNowMs: () => Promise<{ ok: true; nowMs: number } | { ok: false; error: string }>;
   status: () => unknown;
+  /** Looks a guard call's attestation up at OutLayer. Absent in tests that do not need it. */
+  attest?: (callId: string) => Promise<AttestationAnswer>;
 };
 
 const MINUTE = 60_000;
@@ -102,6 +105,16 @@ export function createApp(deps: Deps) {
       }
     }
     return c.json(result.body as Record<string, unknown>, result.status as 200);
+  });
+
+  /** What OutLayer attests for one guard call, with the version this server pins to compare it with. */
+  app.get("/proof/:callId", async (c) => {
+    if (!deps.attest) return c.json({ ok: false, error: "proof" }, 404);
+    if (!take(c, "proof", 120, MINUTE)) return slow(c);
+    const answer = await deps.attest(c.req.param("callId"));
+    if (answer.ok) return c.json({ ok: true, attestation: answer.attestation, pinned: env.guard.versionKey });
+    // Not published yet is an answer to ask again, not an error.
+    return c.json({ ok: false, pending: answer.pending }, answer.pending ? 202 : 404);
   });
 
   app.post("/verdict", async (c) => {
