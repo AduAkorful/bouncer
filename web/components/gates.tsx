@@ -7,7 +7,8 @@ import { DoorUnread } from "@/components/DoorUnread";
 import { HomeDoor } from "@/components/home/HomeDoor";
 import Raid from "@/components/play/Raid";
 import { RevealDoor } from "@/components/reveal/RevealDoor";
-import { httpRpc, PAGE_READ_MS } from "@/lib/chain";
+import type { Rpc } from "@/lib/chain";
+import { pageRpc } from "@/lib/page-rpc";
 import { readPublicEnv } from "@/lib/config";
 import { CLOSED_QUEUE, doorShut, doorTitle } from "@/lib/door";
 import { doorPaths, unreadDoor, type UnreadDoor } from "@/lib/door-read";
@@ -31,7 +32,7 @@ async function load(vaultId?: string): Promise<Loaded> {
   await connection();
   const labels = publicLabels();
   if (!labels) return { ok: false, failure: unreadDoor("unset", vaultId) };
-  const rpc = httpRpc(labels.rpcUrl, fetch, { signal: AbortSignal.timeout(PAGE_READ_MS), fallbackUrl: labels.rpcFallbackUrl, keep: true });
+  const rpc = pageRpc(labels);
   if (vaultId) {
     const page = await readPageVault(rpc, { contractId: labels.contractId }, vaultId);
     if (!page.ok) return { ok: false, failure: unreadDoor(page.error, vaultId) };
@@ -44,7 +45,7 @@ async function load(vaultId?: string): Promise<Loaded> {
 }
 
 /** A URL with no vault id follows the chain. An open door is chosen ahead of a closed one. */
-async function plainDoor(rpc: ReturnType<typeof httpRpc>, contractId: string): Promise<{ ok: true; id: string; others: string[] } | { ok: false; failure: UnreadDoor }> {
+async function plainDoor(rpc: Rpc, contractId: string): Promise<{ ok: true; id: string; others: string[] } | { ok: false; failure: UnreadDoor }> {
   const index = await readDoorIndex(rpc, contractId, Date.now());
   if (!index.ok) return { ok: false, failure: unreadDoor("vault") };
   const candidates = doorCandidates(index.doors);
@@ -56,7 +57,7 @@ async function plainDoor(rpc: ReturnType<typeof httpRpc>, contractId: string): P
  * A plain URL tries the next door when one read fails, up to three. If none reads, the failure names no door,
  * because the player did not ask for one.
  */
-async function firstReadable(rpc: ReturnType<typeof httpRpc>, contractId: string, ids: string[]): Promise<{ ok: true; page: PageVault } | { ok: false; failure: UnreadDoor }> {
+async function firstReadable(rpc: Rpc, contractId: string, ids: string[]): Promise<{ ok: true; page: PageVault } | { ok: false; failure: UnreadDoor }> {
   let error = "vault";
   for (const candidate of ids.slice(0, 3)) {
     const page = await readPageVault(rpc, { contractId }, candidate);
@@ -77,7 +78,7 @@ export async function HomeGate({ vaultId }: { vaultId?: string }) {
   await connection();
   const labels = publicLabels();
   if (!labels) return unread("door", vaultId, unreadDoor("unset", vaultId));
-  const rpc = httpRpc(labels.rpcUrl, fetch, { signal: AbortSignal.timeout(PAGE_READ_MS), fallbackUrl: labels.rpcFallbackUrl, keep: true });
+  const rpc = pageRpc(labels);
   const env = { contractId: labels.contractId };
   const indexPromise = readDoorIndex(rpc, labels.contractId, Date.now());
   let page: { ok: true; page: PageVault } | { ok: false; failure: UnreadDoor };
@@ -119,11 +120,13 @@ async function HomeIndex({
   exclude,
   retryHref,
   token,
+  narrow = false,
 }: {
   index: ReturnType<typeof readDoorIndex>;
   exclude: string;
   retryHref: string;
   token: Promise<TokenRead>;
+  narrow?: boolean;
 }) {
   const read = await index;
   const doors = read.ok ? read.doors.filter((door) => door.id !== exclude) : [];
@@ -137,6 +140,7 @@ async function HomeIndex({
       empty="No other door is listed."
       retryHref={retryHref}
       token={token}
+      narrow={narrow}
     />
   );
 }
@@ -148,17 +152,22 @@ export async function PlayGate({ vaultId }: { vaultId?: string }) {
   const paths = doorPaths(page.vaultId);
   if (doorShut(page.vault, Date.now())) {
     // A shut door points at the doors that are open instead of ending on one card.
-    const rpc = httpRpc(labels.rpcUrl, fetch, { signal: AbortSignal.timeout(PAGE_READ_MS), fallbackUrl: labels.rpcFallbackUrl, keep: true });
+    const rpc = pageRpc(labels);
     return (
       <Blocked kicker={CLOSED_QUEUE.kicker} title={CLOSED_QUEUE.title} detail={CLOSED_QUEUE.detail} href={paths.door} door={doorTitle(page.card, page.vaultId).sign}>
         <Suspense fallback={<DoorListPending />}>
-          <HomeIndex index={readDoorIndex(rpc, labels.contractId, Date.now())} exclude={page.vaultId} retryHref={paths.play} token={page.token} />
+          <HomeIndex index={readDoorIndex(rpc, labels.contractId, Date.now())} exclude={page.vaultId} retryHref={paths.play} token={page.token} narrow />
         </Suspense>
       </Blocked>
     );
   }
+  // Tonight's other open doors, biggest pot first, for the ending when the messages run out.
+  const others = readDoorIndex(pageRpc(labels), labels.contractId, Date.now()).then((read) =>
+    read.ok ? doorCandidates(read.doors).filter((door) => !door.shut && door.read && door.id !== page.vaultId).slice(0, 3) : [],
+  );
   return (
     <Raid
+      others={others}
       vaultId={page.vaultId}
       vault={page.vault}
       token={page.token}
@@ -204,6 +213,8 @@ export async function ClaimGate({ vaultId, round }: { vaultId?: string; round?: 
   const claimRound = round && /^[1-9][0-9]{0,15}$/.test(round) && BigInt(round) <= BigInt(page.vault.round) ? round : page.vault.round;
   return (
     <ClaimDoor
+      sign={doorTitle(page.card, page.vaultId).sign}
+      guard={page.card?.name || null}
       vaultId={page.vaultId}
       token={page.token}
       storageName={labels.storageName}
@@ -223,7 +234,7 @@ export async function LandingLive() {
   await connection();
   const labels = publicLabels();
   if (!labels) return null;
-  const rpc = httpRpc(labels.rpcUrl, fetch, { signal: AbortSignal.timeout(PAGE_READ_MS), fallbackUrl: labels.rpcFallbackUrl, keep: true });
+  const rpc = pageRpc(labels);
   const index = await readDoorIndex(rpc, labels.contractId, Date.now());
   if (!index.ok) return null;
   const front = doorCandidates(index.doors).find((door) => !door.shut);

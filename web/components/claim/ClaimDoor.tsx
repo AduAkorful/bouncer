@@ -1,5 +1,6 @@
 "use client";
 
+import { SiteNav } from "@/components/SiteNav";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { apiPost } from "@/lib/api";
@@ -12,6 +13,7 @@ import { readHold, unlockHeld } from "@/lib/player-hold";
 import { readPayoutAccount, testnetAccountId, writePayoutAccount } from "@/lib/imported-account";
 import { addWalletKey, sendClaim } from "@/lib/send-claim";
 import { PayoutWallet } from "@/components/claim/PayoutWallet";
+import { PaidMoment } from "@/components/claim/PaidMoment";
 import { playableRaid } from "@/lib/door";
 import { heldRefusal, heldVerdict, submitHeld, UNSENDABLE, unsendableVerdict } from "@/lib/held-verdict";
 import { payoutExplorerUrl } from "@/lib/explorer";
@@ -34,7 +36,12 @@ export function ClaimDoor({
   networkId,
   doorHref,
   retryHref,
+  sign,
+  guard = null,
 }: {
+  /** The door's sign and guard, for the paid moment and its share. */
+  sign: string;
+  guard?: string | null;
   vaultId: string;
   token: Promise<TokenRead>;
   storageName: string;
@@ -62,6 +69,8 @@ export function ClaimDoor({
   const [payoutHash, setPayoutHash] = useState<string | null>(null);
   const [held, setHeld] = useState(false);
   const raidRecord = useRef<StoredRaid | null>(null);
+  // The vault's clock minus this browser's, so the lock opens on screen when it opens on chain.
+  const skew = useRef(0);
   const payoutUrl = payoutHash ? payoutExplorerUrl(payoutHash) : null;
 
   useEffect(() => {
@@ -100,7 +109,7 @@ export function ClaimDoor({
         raidRecord.current = raid;
         if (raid.payoutHash) setPayoutHash(raid.payoutHash);
       }
-      const sent = await apiPost("/crack", { raid_id: raid.raidId, vault_id: vaultId });
+      const sent = await apiPost("/crack", { raid_id: raid.raidId, vault_id: vaultId, round });
       const body = (sent.ok ? sent.body : null) as {
         ok?: boolean;
         error?: string;
@@ -127,6 +136,7 @@ export function ClaimDoor({
       if (!cancel) {
         setCrack(body.crack);
         setVault(body.vault);
+        skew.current = body.nowMs - Date.now();
         setPhase(phaseOf(body.crack, body.nowMs));
       }
     })();
@@ -135,12 +145,22 @@ export function ClaimDoor({
     };
   }, [storageName, vaultId, round]);
 
+  // A lock that opens while the page is up turns into the Claim button without a reload.
+  useEffect(() => {
+    if (phase !== "locked" || !crack) return;
+    const unlockMs = Number(BigInt(crack.unlockAt) / 1_000_000n);
+    if (!Number.isSafeInteger(unlockMs)) return;
+    const wait = Math.max(0, unlockMs - (Date.now() + skew.current)) + 1_000;
+    const timer = setTimeout(() => setPhase(phaseOf(crack, Date.now() + skew.current)), Math.min(wait, 2_147_000_000));
+    return () => clearTimeout(timer);
+  }, [phase, crack]);
+
   useEffect(() => {
     if (phase !== "paying") return;
     let cancel = false;
     const look = async () => {
       if (cancel || !raidId) return;
-      const sent = await apiPost("/crack", { raid_id: raidId, vault_id: vaultId });
+      const sent = await apiPost("/crack", { raid_id: raidId, vault_id: vaultId, round });
       const body = (sent.ok ? sent.body : null) as { ok?: boolean; crack?: CrackView | null } | null;
       if (cancel || !body?.ok || !body.crack) return;
       setCrack(body.crack);
@@ -159,7 +179,7 @@ export function ClaimDoor({
   }, [phase, raidId]);
 
   async function readCrack(id: string) {
-    const sent = await apiPost("/crack", { raid_id: id, vault_id: vaultId });
+    const sent = await apiPost("/crack", { raid_id: id, vault_id: vaultId, round });
     const body = (sent.ok ? sent.body : null) as {
       ok?: boolean;
       crack?: CrackView | null;
@@ -184,7 +204,8 @@ export function ClaimDoor({
     setMissing(false);
     setCrack(body.crack);
     setVault(body.vault);
-    setPhase(phaseOf(body.crack, body.nowMs));
+    skew.current = body.nowMs - Date.now();
+        setPhase(phaseOf(body.crack, body.nowMs));
     setError(null);
   }
 
@@ -265,6 +286,7 @@ export function ClaimDoor({
       rpcUrl,
       networkId,
       accountId: chosen,
+      refuse: vault ? [vault.sponsor] : [],
     });
     setBusy(false);
     if (!sent.ok) {
@@ -306,6 +328,7 @@ export function ClaimDoor({
 
   return (
     <main className="min-h-dvh overflow-x-clip bg-night px-4 pb-24 pt-8 text-chalk">
+      <SiteNav />
       <div className="mx-auto max-w-lg">
         <div className="flex items-center justify-between">
           <p className="font-mono text-xs uppercase tracking-[0.22em] text-chalk/80">Payout</p>
@@ -365,7 +388,7 @@ export function ClaimDoor({
             </button>
             {preference === "existing" ? (
               <button type="button" onClick={() => setPreference("new")} className="mt-3 w-full text-sm text-chalk/70 underline decoration-white/20">
-                Use a new account
+                Use this passkey&apos;s own account
               </button>
             ) : (
               <button type="button" onClick={() => setPreference("existing")} className="mt-3 w-full text-sm text-chalk/70 underline decoration-white/20">
@@ -380,12 +403,12 @@ export function ClaimDoor({
             {payoutUrl ? <PaymentLink href={payoutUrl} /> : null}
           </section>
         )}
-        {phase === "paid" && (
-          <section className="mt-5">
-            <p className="font-sign text-2xl">Paid.</p>
+        {phase === "paid" && crack ? (
+          <>
+            <PaidMoment token={token} atomic={crack.amount} sign={sign} guard={guard} vaultId={vaultId} storageName={storageName} doorHref={doorHref} revealHref={doorHref.replace(/\/?$/, "") === "/home" ? "/reveal" : `${doorHref}/reveal`} />
             {payoutUrl ? <PaymentLink href={payoutUrl} /> : null}
-          </section>
-        )}
+          </>
+        ) : null}
         {phase === "closed" && <p className="mt-5 text-sm text-chalk/70">This crack can no longer be claimed.</p>}
         {payoutAccount && (
           <section className="mt-5 rounded-3xl border border-white/10 bg-night-2 p-5">

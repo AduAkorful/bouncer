@@ -2,9 +2,17 @@
 
 import { cardLook, type Card } from "@/lib/card";
 import { apiPost, asObject } from "@/lib/api";
+import { sponsorsThisDoor } from "@/lib/own-account";
+import type { ListedDoor } from "@/lib/door-index";
+import { lastWord, winWord } from "@/lib/last-word";
+import { shareText, winningMessage } from "@/lib/share-text";
+import { writeLastShare } from "@/lib/last-share";
+import { ShareButton } from "@/components/ShareButton";
+import { loadPlayerSession } from "@/lib/player-session";
+import { TokenAmount } from "@/components/TokenAmount";
 
 import gsap from "gsap";
-import { Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "react";
+import { Suspense, use, useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "react";
 import { Countdown } from "@/components/Countdown";
 import { DemoBadge, Money } from "@/components/bits";
 import { DoorScene } from "@/components/DoorScene";
@@ -14,7 +22,7 @@ import { StreetScroll } from "@/components/home/StreetScroll";
 import { OfficeScene } from "@/components/OfficeScene";
 import { BillBuilder, forgetBillDraft } from "@/components/play/BillBuilder";
 import { Desk, type Note } from "@/components/play/Desk";
-import { ApprovedStamp, RefusedStamp } from "@/components/Stamp";
+import { ApprovedStamp, RefusedStamp, TurnedAwayStamp } from "@/components/Stamp";
 import { TokenBridge } from "@/components/TokenAmount";
 import type { DraftBill } from "@/lib/bill";
 
@@ -68,7 +76,10 @@ export default function PlayFrame({
   specCt = null,
   doorHref,
   retryHref,
+  others,
 }: {
+  /** Tonight's other open doors, for the ending. */
+  others?: Promise<ListedDoor[]>;
   vaultId: string;
   vault: VaultView;
   token: Promise<TokenRead>;
@@ -240,6 +251,12 @@ export default function PlayFrame({
       return;
     }
     const held = heldVerdict(ready);
+    // A raid that already used every message reopens on its ending, not on a dead desk.
+    if (!held && leftRef.current === 0) {
+      setEnd("out");
+      setStage("end");
+      return;
+    }
     if (held) {
       setSignedAmount(verdictAmount(held.verdict));
       setSignedHex(held.signature);
@@ -282,6 +299,13 @@ export default function PlayFrame({
       }
       parked.current = null;
       await adoptStored(stored);
+      return;
+    }
+    // A sponsor's own win can never be paid, and it would take the night's slot from everyone else.
+    if (await sponsorsThisDoor(secrets.accountPublicKey, storageName, vault.sponsor)) {
+      setBusy(false);
+      setWait("key");
+      setDoorError("You sponsor this door, so you cannot raid it: the vault never pays a door's sponsor. Try another door.");
       return;
     }
     await postPlayerSession(secrets);
@@ -343,7 +367,7 @@ export default function PlayFrame({
     ctx.current = gsap.context(() => {
       if (!reduced.current && scene.current) startIdle(scene.current);
     }, root);
-    const off = reduced.current || !root.current ? () => {} : beatGlow(root.current, "#door-glow, #club-light");
+    const off = reduced.current || !root.current ? () => {} : beatGlow(root.current, "[data-part=door-glow], #club-light");
     const offP = reduced.current || !stageRef.current ? () => {} : parallax(stageRef.current);
     return () => {
       off();
@@ -699,6 +723,14 @@ export default function PlayFrame({
     else {
       say(reply);
       setBusy(false);
+      // The last message was talk, not a bill: the raid ends the same way, once the reply has been read.
+      if (leftRef.current === 0) {
+        const doorGate = gate === "door";
+        setTimeout(() => {
+          setEnd(doorGate ? "out" : "door");
+          setStage("end");
+        }, Math.min(6000, 1800 + reply.length * 35));
+      }
     }
   }
 
@@ -785,38 +817,25 @@ export default function PlayFrame({
       rigTo(s, "aside", 0.7, E("settle"));
       gsap.timeline()
         .fromTo(".glint", { opacity: 1 }, { opacity: 0, duration: 0.3 }, 0)
-        .to("#bouncer", { x: "+=90", duration: D.deliberate, ease: E("settle") }, 0.15)
-        .to("#rope-closed", { opacity: 0, duration: 0.12 }, 0.3)
-        .to("#rope-open", { opacity: 1, duration: 0.12 }, 0.3)
+        .to("[data-part=bouncer]", { x: "+=90", duration: D.deliberate, ease: E("settle") }, 0.15)
+        .to("[data-part=rope-closed]", { opacity: 0, duration: 0.12 }, 0.3)
+        .to("[data-part=rope-open]", { opacity: 1, duration: 0.12 }, 0.3)
         // The doors swing and UV floods out towards the player as the music opens up.
-        .to("#door-leaf-l", { scaleX: 0.14, transformOrigin: "0% 50%", duration: D.deliberate, ease: E("settle") }, 0.5)
-        .to("#door-leaf-r", { scaleX: 0.14, transformOrigin: "100% 50%", duration: D.deliberate, ease: E("settle") }, 0.5)
-        .to("#door-light", { opacity: 0.9, duration: D.deliberate }, 0.5)
-        .to("#door-reflect, #door-pool", { opacity: 1, duration: D.deliberate }, 0.6)
+        .to("[data-part=door-leaf-l]", { scaleX: 0.14, transformOrigin: "0% 50%", duration: D.deliberate, ease: E("settle") }, 0.5)
+        .to("[data-part=door-leaf-r]", { scaleX: 0.14, transformOrigin: "100% 50%", duration: D.deliberate, ease: E("settle") }, 0.5)
+        .to("[data-part=door-light]", { opacity: 0.9, duration: D.deliberate }, 0.5)
+        .to("[data-part=door-reflect], [data-part=door-pool]", { opacity: 1, duration: D.deliberate }, 0.6)
         .fromTo(".flood", { opacity: 0, scale: 0.3 }, { opacity: 0.85, scale: 2.4, duration: 1.1, ease: E("arrive") }, 0.7)
         .to(".flood", { opacity: 0.3, duration: 0.8 }, 1.8);
     });
+    // One win per raid is all the vault records, so getting in is the ending.
     setTimeout(() => {
-      setStage("choice");
+      setEnd("door");
+      setStage("end");
       setBusy(false);
     }, reduced.current ? 400 : 2400);
   }
 
-  function enterOffice() {
-    setStage("play");
-    setFade(true);
-    sfx.creak();
-    setTimeout(() => {
-      setGate("office");
-      setBubble(null);
-      setRefused(false);
-      setYou(null);
-      setLine(OPENERS.office);
-      setTyped(0);
-      music.room("office", 0.8);
-    }, 550);
-    setTimeout(() => setFade(false), 700);
-  }
 
   function approveOffice() {
     setStage("play");
@@ -843,10 +862,6 @@ export default function PlayFrame({
     }, reduced.current ? 400 : 2600);
   }
 
-  function takeCut() {
-    setEnd("door");
-    setStage("end");
-  }
 
   function toggleSound() {
     const on = !sound;
@@ -883,7 +898,10 @@ export default function PlayFrame({
         </div>
         {wait === "key" ? (
           <div className="mx-auto w-full max-w-md px-4 py-6 text-center">
-            <p className="text-sm text-chalk/70">This device keeps the key. Clearing this site does not remove it.</p>
+            {/* The stakes before the passkey: what is in the pot and what playing costs (QA R20 VS-19). */}
+            {potShown.kind === "ready" ? <p className="font-sign text-xl">Tonight&apos;s pot · {potShown.text}</p> : null}
+            <p className="mt-1 text-sm text-chalk/80">Free to play with test tokens. Six messages; a bill counts as one.</p>
+            <p className="mt-3 text-sm text-chalk/70">Your passkey stays on this device. Clearing this site does not remove it.</p>
             <button
               disabled={busy}
               onClick={() => void startWithPasskey()}
@@ -1156,40 +1174,6 @@ export default function PlayFrame({
         </div>
       )}
 
-      {/* Past the door: keep the cut, or push on to the office */}
-      {stage === "choice" && (
-        <div className="absolute inset-0 z-30 flex flex-col items-center justify-end bg-[linear-gradient(to_bottom,rgb(13_10_18/0)_0%,rgb(13_10_18/0.6)_35%,rgb(13_10_18/0.97)_60%)] px-6 pb-8 text-center">
-          <h1 className="font-sign text-5xl leading-none">You got in.</h1>
-          <div className="mt-3 font-mono text-xs uppercase tracking-[0.25em] text-chalk/80">Door cut, yours whatever happens next</div>
-          <AmountLine shown={cutShown} empty="No signed amount yet." className="neon-brass text-3xl" block />
-          <div className="mt-5 w-full max-w-sm rounded-2xl border border-white/10 bg-night-2 p-4 text-left">
-            <div className="flex items-center justify-between">
-              <span className="font-sign text-sm">Back office</span>
-              <AmountLine shown={potShown} className="text-sm text-chalk/80" />
-            </div>
-            <p className="mt-2 text-sm text-chalk/65">
-              Madam Efua pays the big bills from her own ledger. Nothing you learned at the door helps in there. You have{" "}
-              <b className="text-chalk">
-                {left} message{left === 1 ? "" : "s"}
-              </b>{" "}
-              left. A refusal costs you nothing but messages.
-            </p>
-          </div>
-          <div className="mt-4 flex w-full max-w-sm flex-col gap-3">
-            <button
-              disabled={left === 0}
-              onClick={enterOffice}
-              className="rounded-2xl bg-chalk py-4 font-sign text-lg text-ink shadow-[0_6px_0_#9c9483] transition active:translate-y-1 disabled:opacity-40"
-            >
-              {left === 0 ? "No messages left" : "Walk to the back office"}
-            </button>
-            <button onClick={takeCut} className="rounded-2xl border border-chalk/30 py-3 text-sm">
-              {cutShown?.kind === "ready" ? `Take ${cutShown.text} ${cutShown.symbol} and go` : cutShown?.kind === "reading" ? TOKEN_READING : cutShown?.kind === "failed" ? TOKEN_FAILED : "Leave with the verdict"}
-            </button>
-          </div>
-        </div>
-      )}
-
       {stage === "end" && (
         <EndScreen
           end={end}
@@ -1205,6 +1189,14 @@ export default function PlayFrame({
           crackCount={vault.crackCount}
           closesAt={vault.closesAt}
           doorHref={doorHref}
+          revealHref={doorPaths(vaultId).reveal}
+          others={others}
+          token={token}
+          seed={session?.raidId ?? vaultId}
+          budget={messageBudget}
+          lockNs={vault.lockNs}
+          vaultId={vaultId}
+          storageName={storageName}
         />
       )}
     </div>
@@ -1242,7 +1234,23 @@ function EndScreen({
   crackCount,
   closesAt,
   doorHref,
+  revealHref,
+  others,
+  token,
+  seed,
+  budget,
+  lockNs,
+  vaultId,
+  storageName,
 }: {
+  lockNs: string;
+  vaultId: string;
+  storageName: string;
+  budget: number;
+  revealHref: string;
+  others?: Promise<ListedDoor[]>;
+  token: Promise<TokenRead>;
+  seed: string;
   end: End;
   cutText: string | null;
   currency: string;
@@ -1272,57 +1280,170 @@ function EndScreen({
   }, []);
   const sq: Record<Decision, string> = { ask: "bg-graphite", refused: "bg-rope", approved: "bg-uv", none: "bg-night-3" };
   const stamp = signature ?? "";
+  const standing = useStanding();
+  // The win was just recorded, so the lock opens about one lock length from now. The claim page reads the exact time.
+  const [unlockAtNs] = useState(() => (BigInt(Date.now()) * 1_000_000n + BigInt(/^[0-9]+$/.test(lockNs) ? lockNs : "0")).toString());
+  const filled = grid.length ? grid : Array<Decision>(budget).fill("ask");
+  useEffect(() => {
+    // This browser keeps the night it just finished, so /share can show it again.
+    writeLastShare(storageName, { kind: end === "out" ? "out" : "in", sign: venueId, guard: guardName !== venueId ? guardName : null, grid: end === "out" ? filled : grid, streak: standing.streak, vaultId, budget, at: Date.now() });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [standing.streak]);
+  if (end === "out") {
+    return (
+      <div ref={ref} className="absolute inset-0 z-30 flex flex-col items-center justify-end overflow-y-auto bg-[linear-gradient(to_bottom,rgb(13_10_18/0.1)_0%,rgb(13_10_18/0.7)_25%,rgb(13_10_18/0.97)_45%)] px-6 pb-8 text-center">
+        <Suspense fallback={<TurnedAway sign={venueId} guardName={guardName} grid={grid.length ? grid : Array<Decision>(budget).fill("ask")} sq={sq} line={lastWord(null, seed)} rivals={[]} token={token} closesAt={closesAt} revealHref={revealHref} doorHref={doorHref} />}>
+          <TurnedAwayWithRivals sign={venueId} guardName={guardName} grid={grid.length ? grid : Array<Decision>(budget).fill("ask")} sq={sq} seed={seed} others={others} token={token} closesAt={closesAt} revealHref={revealHref} doorHref={doorHref} />
+        </Suspense>
+      </div>
+    );
+  }
+  const message = winningMessage(grid);
+  const shareGrid = grid.length ? grid : (["approved"] as Decision[]);
+  const text = shareText({ kind: "in", sign: venueId, guard: guardName !== venueId ? guardName : null, grid: shareGrid, streak: standing.streak }, budget);
   return (
     <div
       ref={ref}
       className="absolute inset-0 z-30 flex flex-col items-center justify-end overflow-y-auto bg-[linear-gradient(to_bottom,rgb(13_10_18/0.1)_0%,rgb(13_10_18/0.6)_30%,rgb(13_10_18/0.97)_55%)] px-6 pb-8 text-center"
     >
-      {end === "out" ? (
-        <div className="end-stamp scale-[1.8]">
-          <RefusedStamp />
-        </div>
-      ) : (
-        <ApprovedStamp
-          signature={stamp}
-          ring={`${venueId.toUpperCase()} · #${round} · ${end === "office" ? "OFFICE" : "DOOR"} · ${stamp ? shortHash(stamp).toUpperCase() : ""} · `}
-          size={150}
-          className="end-stamp"
-        />
-      )}
-      <h1 className="end-title mt-6 font-sign text-5xl leading-none">
-        {end === "office" ? "You cracked the office." : end === "door" ? "You got in." : "Out of messages."}
-      </h1>
-      <div className="end-rest mt-4 flex gap-1.5" aria-label="Your messages">
-        {grid.map((d, i) => (
-          <span key={i} className={`size-5 rounded ${sq[d]}`} />
+      <ApprovedStamp
+        signature={stamp}
+        ring={`${venueId.toUpperCase()} · #${round} · DOOR · ${stamp ? shortHash(stamp).toUpperCase() : ""} · `}
+        size={150}
+        className="end-stamp"
+      />
+      <h1 className="end-title mt-5 font-sign text-5xl leading-none">You got in.</h1>
+      <figure className="end-rest mt-4 max-w-sm">
+        <blockquote className="relative rounded-2xl border border-white/20 bg-night-2 px-4 py-3 text-left font-sign text-lg leading-snug text-chalk">
+          &ldquo;{winWord(seed)}&rdquo;
+          <span aria-hidden className="absolute -top-2 left-8 size-4 rotate-45 border-l border-t border-white/20 bg-night-2" />
+        </blockquote>
+        <figcaption className="mt-2 font-mono text-xs uppercase tracking-[0.2em] text-chalk/70">{guardName}, on the door</figcaption>
+      </figure>
+      <div className="end-rest mt-4 flex items-center gap-1.5" aria-label={message ? `Got in on message ${message} of ${budget}` : "Your messages"}>
+        {shareGrid.map((d, i) => (
+          <span key={i} className={`size-4 rounded ${sq[d]}`} />
         ))}
+        {message ? <span className="ml-2 font-mono text-xs text-chalk/70">in on {message} / {budget}</span> : null}
       </div>
-      {end === "out" ? (
-        <p className="end-rest mt-3 max-w-xs text-sm text-chalk/65">
-          {guardName}&apos;s door closes in <Countdown endsAtNs={closesAt} className="text-chalk" />. Your desk notes stay.
+      {standing.line ? <p className="end-rest mt-2 text-sm text-brass">{standing.line}</p> : null}
+      <div className="end-rest end-cut mt-4">
+        <div className="font-mono text-xs uppercase tracking-[0.25em] text-chalk/80">Your cut</div>
+        {amountNote ? <p className="text-sm text-chalk/60">{amountNote}</p> : cutText ? <Money text={cutText} currency={currency} className="neon-brass text-4xl" /> : <p className="text-sm text-chalk/60">No signed amount.</p>}
+        <p className="mt-1 text-sm text-chalk/70">
+          The vault has recorded it. Collect in about <Countdown endsAtNs={unlockAtNs} className="text-chalk" />.
         </p>
-      ) : (
-        <div className="end-rest end-cut mt-4">
-          <div className="font-mono text-xs uppercase tracking-[0.25em] text-chalk/80">Signed amount</div>
-          {amountNote ? <p className="text-sm text-chalk/60">{amountNote}</p> : cutText ? <Money text={cutText} currency={currency} className="neon-brass text-4xl" /> : <p className="text-sm text-chalk/60">No signed amount.</p>}
-          <p className="mt-2 max-w-xs text-sm text-chalk/60">
-            {`${crackCount} got in before this bill. The vault has recorded it. It is not paid until the lock opens.`}
-          </p>
+      </div>
+      <div className="end-rest mt-5 flex w-full max-w-sm flex-col gap-3">
+        <a href={claimHref} className="rounded-2xl bg-chalk py-4 font-sign text-lg text-ink shadow-[0_6px_0_#9c9483]">
+          Collect when the lock opens
+        </a>
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          <ShareButton text={text} url={doorHref} label="Share your night" className="rounded-2xl border border-chalk/30 px-5 py-3 font-sign" />
         </div>
-      )}
-      <div className="end-rest mt-6 flex w-full max-w-xs flex-col gap-3">
-        {end === "out" ? (
-          <a href={doorHref} className="rounded-2xl bg-chalk py-4 font-sign text-lg text-ink shadow-[0_6px_0_#9c9483]">
-            The door
-          </a>
-        ) : (
-          <a href={claimHref} className="rounded-2xl bg-chalk py-4 font-sign text-lg text-ink shadow-[0_6px_0_#9c9483]">
-            Go to the claim
-          </a>
-        )}
+        <a href="/home" className="text-sm text-chalk/70 underline decoration-white/20">
+          Try another door tonight
+        </a>
       </div>
       <DemoBadge className="end-rest mt-4" />
     </div>
+  );
+}
+
+/** The signed-in player's streak and board place, read once from the player record. */
+function useStanding(): { streak: number; line: string | null } {
+  const [standing, setStanding] = useState<{ streak: number; line: string | null }>({ streak: 0, line: null });
+  useEffect(() => {
+    const held = readHold();
+    if (!held) return;
+    held.fill(0);
+    let live = true;
+    loadPlayerSession().then((result) => {
+      if (!live || !result.ok) return;
+      const { streak } = result.session.player;
+      const place = result.session.place;
+      setStanding({ streak, line: `Tonight still counts${streak > 0 ? ` · ${streak}-day streak` : ""}${place ? ` · #${place} on the board` : ""}` });
+    }).catch(() => undefined);
+    return () => { live = false; };
+  }, []);
+  return standing;
+}
+
+type TurnedAwayProps = {
+  sign: string;
+  guardName: string;
+  grid: Decision[];
+  sq: Record<Decision, string>;
+  token: Promise<TokenRead>;
+  closesAt: string;
+  revealHref: string;
+  doorHref: string;
+};
+
+function TurnedAwayWithRivals({ others, seed, ...rest }: TurnedAwayProps & { others?: Promise<ListedDoor[]>; seed: string }) {
+  const rivals = others ? use(others) : [];
+  const first = rivals[0];
+  return <TurnedAway {...rest} rivals={rivals} line={lastWord(first ? { sign: first.sign, guard: first.card?.name ?? null, pot: null } : null, seed)} />;
+}
+
+/**
+ * The ending when the messages run out. The bouncer has a last word that names a real open door, the
+ * other doors are one tap away, the ledger is something to come back for, and the streak still counts.
+ * Nothing here says what was wrong with a bill.
+ */
+function TurnedAway({ sign, guardName, grid, sq, line, rivals, token, closesAt, revealHref, doorHref }: TurnedAwayProps & { line: string; rivals: ListedDoor[] }) {
+  const { streak, line: standing } = useStanding();
+  const dare = shareText({ kind: "out", sign, guard: guardName !== sign ? guardName : null, grid, streak }, grid.length);
+  const tried = grid.length;
+  const [first, ...more] = rivals;
+  return (
+    <>
+      <div className="end-stamp">
+        <TurnedAwayStamp />
+      </div>
+      <figure className="end-title mt-5 max-w-sm">
+        <blockquote className="relative rounded-2xl border border-white/20 bg-night-2 px-4 py-3 text-left font-sign text-lg leading-snug text-chalk">
+          &ldquo;{line}&rdquo;
+          <span aria-hidden className="absolute -top-2 left-8 size-4 rotate-45 border-l border-t border-white/20 bg-night-2" />
+        </blockquote>
+        <figcaption className="mt-2 font-mono text-xs uppercase tracking-[0.2em] text-chalk/70">{guardName}, on the door</figcaption>
+      </figure>
+      <div className="end-rest mt-4 flex items-center gap-1.5" aria-label={`${tried} of ${tried} messages used`}>
+        {grid.map((d, i) => (
+          <span key={i} className={`size-4 rounded ${sq[d]}`} />
+        ))}
+        <span className="ml-2 font-mono text-xs text-chalk/70">{tried} / {tried} tried</span>
+      </div>
+      {standing ? <p className="end-rest mt-2 text-sm text-brass">{standing}</p> : null}
+      <div className="end-rest mt-5 flex w-full max-w-sm flex-col gap-3">
+        {first ? (
+          <a href={first.href} className="rounded-2xl bg-chalk py-4 font-sign text-lg text-ink shadow-[0_6px_0_#9c9483]">
+            Try {first.sign}
+            {first.dayPot ? <span className="block font-mono text-xs uppercase tracking-wider">Tonight&apos;s pot · <TokenAmount token={token} atomic={first.dayPot} className="text-ink" /></span> : null}
+          </a>
+        ) : null}
+        {more.length ? (
+          <div className="grid grid-cols-2 gap-2">
+            {more.map((door) => (
+              <a key={door.id} href={door.href} className="rounded-2xl border border-white/15 px-3 py-2 text-left">
+                <span className="block truncate font-sign text-sm">{door.sign}</span>
+                {door.dayPot ? <TokenAmount token={token} atomic={door.dayPot} className="text-xs text-brass" /> : null}
+              </a>
+            ))}
+          </div>
+        ) : null}
+        <div className="flex justify-center">
+          <ShareButton text={dare} url={doorHref} label="Dare a friend" className="rounded-2xl border border-chalk/30 px-5 py-3 font-sign" />
+        </div>
+        <a href={revealHref} className="rounded-2xl border border-chalk/30 px-4 py-3 text-sm">
+          The ledger opens in <Countdown endsAtNs={closesAt} className="text-chalk" />. See which bill would have got in.
+        </a>
+        <a href={first ? "/home" : doorHref} className="text-sm text-chalk/70 underline decoration-white/20">
+          {first ? "All of tonight's doors" : "Back to the door"}
+        </a>
+      </div>
+      <DemoBadge className="end-rest mt-4" />
+    </>
   );
 }
 

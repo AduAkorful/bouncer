@@ -84,3 +84,25 @@ export function RefusedStamp({ className = "" }: { className?: string }) {
     </svg>
   );
 }
+
+/** The end of a raid that ran out of messages: a wider, rougher stamp than a single refused bill. */
+export function TurnedAwayStamp({ className = "" }: { className?: string }) {
+  const id = useId().replace(/:/g, "");
+  return (
+    <svg viewBox="0 0 220 84" width="220" height="84" role="img" aria-label="Turned away" className={className}>
+      <defs>
+        <filter id={`rub-${id}`}>
+          <feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2" seed="7" result="n" />
+          <feColorMatrix in="n" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -1.6 1.25" result="holes" />
+          <feComposite in="SourceGraphic" in2="holes" operator="in" />
+        </filter>
+      </defs>
+      <g filter={`url(#rub-${id})`} transform="rotate(-7 110 42)">
+        <rect x="4" y="4" width="212" height="76" rx="6" fill="none" stroke="var(--rope)" strokeWidth="4" />
+        <rect x="11" y="11" width="198" height="62" rx="3" fill="none" stroke="var(--rope)" strokeWidth="1.5" />
+        <text x="110" y="40" textAnchor="middle" fill="var(--rope)" fontFamily="var(--font-bungee)" fontSize="24" letterSpacing="2">TURNED AWAY</text>
+        <text x="110" y="62" textAnchor="middle" fill="var(--rope)" fontFamily="var(--font-jetbrains)" fontSize="10" letterSpacing="3">NOT TONIGHT</text>
+      </g>
+    </svg>
+  );
+}
