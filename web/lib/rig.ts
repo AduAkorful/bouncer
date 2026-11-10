@@ -44,9 +44,9 @@ const base: RigState = {
   la: 1,
   ra: 1,
   lu: -BOARD.hw,
-  lv: 3,
+  lv: -2,
   ru: BOARD.hw,
-  rv: -1,
+  rv: -5,
   lx: -40,
   ly: -60,
   rx: 40,
@@ -97,11 +97,11 @@ export interface Dims {
 export function dims(build: Build): Dims {
   switch (build) {
     case "broad":
-      return { w: 52, top: -126, upper: 34, fore: 33, uw: 18, fw: 15, k: 1.05 };
+      return { w: 52, top: -126, upper: 38, fore: 33, uw: 20, fw: 18, k: 1.05 };
     case "stocky":
-      return { w: 47, top: -118, upper: 31, fore: 31, uw: 17, fw: 14, k: 1 };
+      return { w: 47, top: -118, upper: 34, fore: 31, uw: 18, fw: 16.5, k: 1 };
     case "wiry":
-      return { w: 40, top: -126, upper: 34, fore: 32, uw: 13, fw: 11, k: 0.9 };
+      return { w: 40, top: -126, upper: 37, fore: 32, uw: 14, fw: 13, k: 0.9 };
   }
 }
 

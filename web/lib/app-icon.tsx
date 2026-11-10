@@ -20,13 +20,16 @@ export function appIcon(px: number, maskable = false): ImageResponse {
             border: `${frame}px solid #8f6bff`,
             borderRadius: Math.round(px * 0.16),
             boxShadow: `0 0 ${Math.round(px * 0.08)}px #8f6bff`,
-            color: "#f1eaff",
-            fontSize: Math.round(px * (maskable ? 0.46 : 0.58)),
-            fontWeight: 700,
-            textShadow: `0 0 ${Math.round(px * 0.06)}px #b9a2ff`,
           }}
         >
-          B
+          {/* A drawn letter, not text: the default font has no bold weight, so a text B came out as a glow. */}
+          <svg width={Math.round(px * (maskable ? 0.4 : 0.5))} height={Math.round(px * (maskable ? 0.4 : 0.5))} viewBox="0 0 100 100">
+            <path
+              fillRule="evenodd"
+              fill="#f1eaff"
+              d="M20 8 H58 C78 8 88 20 88 34 C88 44 82 51 73 54 C85 57 92 66 92 76 C92 90 80 92 60 92 H20 Z M40 26 V45 H55 C62 45 66 41 66 35 C66 29 62 26 55 26 Z M40 62 V76 H57 C65 76 70 73 70 69 C70 65 65 62 57 62 Z"
+            />
+          </svg>
         </div>
       </div>
     ),

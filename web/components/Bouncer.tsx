@@ -8,10 +8,10 @@ export function shade(hex: string, k: number) {
 }
 
 const CLOTH = {
-  suit: { lit: "#3a3050", base: "#1c1626", dark: "#0c0912", sleeve: "#2c2339", cuff: "#efe8da" },
-  kente: { lit: "#3a3050", base: "#1c1626", dark: "#0c0912", sleeve: "#2c2339", cuff: "#efe8da" },
-  bomber: { lit: "#3a4d43", base: "#1f2a25", dark: "#0f1612", sleeve: "#2c3b33", cuff: "#121915" },
-  hivis: { lit: "#34303e", base: "#1a1722", dark: "#0c0a10", sleeve: "#2a2533", cuff: "#2a2533" },
+  suit: { lit: "#3a3050", base: "#1c1626", dark: "#0c0912", sleeve: "#382d4d", cuff: "#efe8da" },
+  kente: { lit: "#3a3050", base: "#1c1626", dark: "#0c0912", sleeve: "#382d4d", cuff: "#efe8da" },
+  bomber: { lit: "#3a4d43", base: "#1f2a25", dark: "#0f1612", sleeve: "#385043", cuff: "#121915" },
+  hivis: { lit: "#34303e", base: "#1a1722", dark: "#0c0a10", sleeve: "#383144", cuff: "#4a4358" },
   irongate: { lit: "#666b78", base: "#3a3d46", dark: "#1f2126", sleeve: "#50545f", cuff: "#efe8da" },
 } as const;
 
@@ -213,6 +213,17 @@ export function Bouncer({ look, x, y, scale = 1, p, pose = "idle", rim = "#b9a2f
       <g data-part="board" transform={g.board}>{holds === "ledger" ? <Ledger /> : <Clipboard />}</g>
       {foreFront("L", g.armL, poseOf(pose).lShape)}
       {foreFront("R", g.armR, poseOf(pose).rShape)}
+      {/* The wrist stays in front of the board even when the hand grips its edge, so the hand meets a visible sleeve. */}
+      <g strokeLinecap="butt">
+        {([["L", g.armL], ["R", g.armR]] as const).map(([side, a]) => {
+          const [cx1, cy1, cx2, cy2] = cuffPoints(a);
+          return <line key={side} data-part={`cuff${side}`} x1={cx1} y1={cy1} x2={cx2} y2={cy2} stroke="#06040a" strokeWidth={d.fw - 1} />;
+        })}
+        {([["L", g.armL], ["R", g.armR]] as const).map(([side, a]) => {
+          const [cx1, cy1, cx2, cy2] = cuffPoints(a);
+          return <line key={`c${side}`} data-part={`cuff${side}`} x1={cx1} y1={cy1} x2={cx2} y2={cy2} stroke={cloth.cuff} strokeWidth={d.fw - 3} />;
+        })}
+      </g>
 
       <g data-part="handL" transform={g.handL}>
         <Hands skin={skin} base={base} initial={poseOf(pose).lShape} />
