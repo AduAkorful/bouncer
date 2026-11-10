@@ -17,12 +17,6 @@ export type RelayEnv = {
   privateKey: string;
 };
 
-export type CrewEnv = {
-  factoryId: string;
-  depositYocto: string;
-  gas: string;
-};
-
 export type PublicEnv = {
   rpcUrl: string;
   /** Optional. A second RPC endpoint for the last try of a read. */
@@ -69,7 +63,6 @@ const PUBLIC_KEYS = [
   "NEXT_PUBLIC_VENUE",
 ] as const;
 
-const CREW_KEYS = ["NEXT_PUBLIC_DAO_FACTORY_ID", "NEXT_PUBLIC_DAO_CREATE_DEPOSIT", "NEXT_PUBLIC_DAO_CREATE_GAS"] as const;
 
 export function readGuardEnv(source: EnvSource | undefined): Ready<GuardEnv> | Missing {
   const read = reader(source);
@@ -109,17 +102,6 @@ export function readRelayEnv(source: EnvSource | undefined): Ready<RelayEnv> | M
       privateKey: read("RELAY_PRIVATE_KEY"),
     },
   };
-}
-
-export function readCrewEnv(source: EnvSource | undefined): Ready<CrewEnv> | Missing {
-  const read = reader(source);
-  const missing = absent(read, CREW_KEYS);
-  const depositYocto = read("NEXT_PUBLIC_DAO_CREATE_DEPOSIT");
-  const gas = read("NEXT_PUBLIC_DAO_CREATE_GAS");
-  if (!missing.includes("NEXT_PUBLIC_DAO_CREATE_DEPOSIT") && whole(depositYocto) === null) missing.push("NEXT_PUBLIC_DAO_CREATE_DEPOSIT");
-  if (!missing.includes("NEXT_PUBLIC_DAO_CREATE_GAS") && whole(gas) === null) missing.push("NEXT_PUBLIC_DAO_CREATE_GAS");
-  if (missing.length) return { ok: false, missing };
-  return { ok: true, env: { factoryId: read("NEXT_PUBLIC_DAO_FACTORY_ID"), depositYocto, gas } };
 }
 
 export function readPublicEnv(source: EnvSource | undefined): Ready<PublicEnv> | Missing {
