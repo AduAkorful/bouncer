@@ -1,6 +1,7 @@
 import { baseDecode } from "near-api-js";
 import { importClaimKey, type DeviceSecrets } from "./device-pass.ts";
 import { raidHistoryRow, type RaidHistoryRow } from "./raid-history.ts";
+import type { ProofBundle } from "./proof-bundle.ts";
 
 export type StoredNote = {
   id: string;
@@ -27,6 +28,8 @@ export type StoredRaid = {
   transactionHash: string | null;
   /** Messages the guard has counted on this raid. */
   used?: number;
+  /** The evidence the guard gave for this raid: the model's attestation and the verdict's attestation. */
+  proof?: ProofBundle | null;
   /** A guard call sent and not yet answered. A reload sends it again, and the guard replies from its store. */
   pending?: { body: Record<string, unknown>; bill: boolean; playerText: string } | null;
   /** The vault has a crack for this raid, even when the transaction that recorded it was not seen here. */

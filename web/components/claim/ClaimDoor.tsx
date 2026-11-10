@@ -14,6 +14,7 @@ import { readPayoutAccount, testnetAccountId, writePayoutAccount } from "@/lib/i
 import { addWalletKey, sendClaim } from "@/lib/send-claim";
 import { PayoutWallet } from "@/components/claim/PayoutWallet";
 import { PaidMoment } from "@/components/claim/PaidMoment";
+import { VerifiedPanel } from "@/components/claim/VerifiedPanel";
 import { playableRaid } from "@/lib/door";
 import { heldRefusal, heldVerdict, submitHeld, UNSENDABLE, unsendableVerdict } from "@/lib/held-verdict";
 import { payoutExplorerUrl } from "@/lib/explorer";
@@ -69,6 +70,7 @@ export function ClaimDoor({
   const [payoutHash, setPayoutHash] = useState<string | null>(null);
   const [held, setHeld] = useState(false);
   const raidRecord = useRef<StoredRaid | null>(null);
+  const [evidence, setEvidence] = useState<{ bundle: StoredRaid["proof"]; verdict: Record<string, unknown>; signature: string } | null>(null);
   // The vault's clock minus this browser's, so the lock opens on screen when it opens on chain.
   const skew = useRef(0);
   const payoutUrl = payoutHash ? payoutExplorerUrl(payoutHash) : null;
@@ -108,6 +110,8 @@ export function ClaimDoor({
         setRaidId(raid.raidId);
         raidRecord.current = raid;
         if (raid.payoutHash) setPayoutHash(raid.payoutHash);
+        const signedVerdict = raid.verdict && typeof raid.verdict === "object" && !Array.isArray(raid.verdict) ? (raid.verdict as Record<string, unknown>) : null;
+        setEvidence(signedVerdict && typeof raid.signature === "string" ? { bundle: raid.proof ?? null, verdict: signedVerdict, signature: raid.signature } : null);
       }
       const sent = await apiPost("/crack", { raid_id: raid.raidId, vault_id: vaultId, round });
       const body = (sent.ok ? sent.body : null) as {
@@ -447,6 +451,7 @@ export function ClaimDoor({
             networkId={networkId}
           />
         ) : null}
+        {evidence && vault ? <VerifiedPanel bundle={evidence.bundle ?? null} verdict={evidence.verdict} signature={evidence.signature} guardKey={vault.guardPk} /> : null}
         {vault && <p className="mt-4 font-mono text-xs text-chalk/80">Round {vault.round}</p>}
         <Link href={doorHref} className="chalk-focus mt-6 inline-flex min-h-11 items-center text-sm text-chalk/80 underline decoration-white/20">
           The door

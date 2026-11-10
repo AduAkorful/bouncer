@@ -30,6 +30,7 @@ type Decision = "ask" | "refused" | "approved" | "none";
 import { Blocked } from "@/components/Blocked";
 import { doorPaths } from "@/lib/door-read";
 import { heldRefusal, heldVerdict, submitHeld, verdictAmount } from "@/lib/held-verdict";
+import { mergeProof } from "@/lib/proof-bundle";
 import { doorTitle, playableRaid, playerDetail, playGateStatus, playStop } from "@/lib/door";
 import { resumeRaid, postPlayerSession } from "@/lib/player-session";
 import type { VaultView } from "@/lib/vault";
@@ -350,7 +351,7 @@ export default function PlayFrame({
       if (!current.blob) setDoorError(playerDetail(typeof payload.error === "string" ? payload.error : "guard"));
       return;
     }
-    const next = { ...current, blob: payload.blob, street: readStreet(payload.street) ?? current.street, ...(typeof payload.used === "number" ? { used: payload.used } : {}) };
+    const next = { ...current, blob: payload.blob, street: readStreet(payload.street) ?? current.street, ...(typeof payload.used === "number" ? { used: payload.used } : {}), proof: mergeProof(current.proof, payload) };
     sessionRef.current = next;
     setSession(next);
     await saveRaid(storageName, vaultId, vault.round, next);
@@ -689,9 +690,10 @@ export default function PlayFrame({
     }
     if (typeof payload.blob === "string") {
       const signed = payload.ok === true && typeof payload.signature === "string" && payload.verdict;
+      const proof = mergeProof(current.proof, payload);
       const next = signed
-        ? { ...current, blob: payload.blob, verdict: payload.verdict, signature: payload.signature as string, transactionHash: null, recorded: false }
-        : { ...current, blob: payload.blob, verdict: payload.verdict ?? current.verdict };
+        ? { ...current, blob: payload.blob, verdict: payload.verdict, signature: payload.signature as string, transactionHash: null, recorded: false, proof }
+        : { ...current, blob: payload.blob, verdict: payload.verdict ?? current.verdict, proof };
       sessionRef.current = next;
       setSession(next);
       void saveRaid(storageName, vaultId, vault.round, next);

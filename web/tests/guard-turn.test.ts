@@ -40,3 +40,12 @@ test("a second open and a stale blob make no outbound request", async () => {
   assert.equal(stale.called, false);
   assert.equal(calls, 2);
 });
+
+test("the attestation link and the answer's hash ride along with the guard's answer, and a plain answer is untouched", async () => {
+  const attestation = { callId: "16df134e-f31e-4f0a-a035-9dc7373c0017", url: "https://o.test/attestations/by-call/16df134e-f31e-4f0a-a035-9dc7373c0017", outputSha256: "0f".repeat(32) };
+  const base = { op: "open", vault_id: "velvet-1", round: 1, player_id: "player-1" };
+  const withLink = await runGuardTurn(env, new Map<string, Mark>(), base, async () => ({ ok: true as const, body: { ok: true, blob: "b", street: {} }, attestation }));
+  assert.deepEqual(withLink.body, { ok: true, blob: "b", street: {}, attestation: { call_id: attestation.callId, url: attestation.url, output_sha256: attestation.outputSha256 } });
+  const plain = await runGuardTurn(env, new Map<string, Mark>(), base, async () => ({ ok: true as const, body: { ok: true, blob: "b" } }));
+  assert.deepEqual(plain.body, { ok: true, blob: "b" });
+});
