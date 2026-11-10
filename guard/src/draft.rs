@@ -6,7 +6,7 @@ pub const MAX_STORY: usize = 2000;
 pub const DRAFT_SYSTEM: &str = "\
 You turn a short description of a place that owes bills into a JSON door spec. Reply with one JSON object and nothing else. \
 Fields: guard.voice (how the door guard speaks, at most 600 characters); lines (3 to 8 claimant types); \
-chips (up to 4 of {ask, reply}); hint (optional, one sentence using {payee}, {reference}, {amount}). \
+chips (up to 4 of {ask, reply}); hint (optional, one sentence or a list of up to 6, using {payee}, {item}, {ref_head} for the start of the reference, {amount_near} for the amount to the nearest whole unit; avoid giving {reference} and {amount} together). \
 Each line has payee (4 or more letters), reference (a pattern: letters, digits, dashes, and tokens {d2} {d3} {d4} or {n:LO-HI}; the reference must be able to take at least 100 values), \
 item, qty {lo, hi}, unit {lo, hi} as strings in whole units with at most two decimals, and paid (true or false). \
 Include at least one paid true line as a trap, and make every unpaid amount small enough to be paid. \

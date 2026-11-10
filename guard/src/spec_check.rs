@@ -49,8 +49,14 @@ pub fn check(spec: &Spec, spec_hash: &[u8; 32], cap: u128) -> Report {
     if !spec.lines.iter().any(|line| line.paid) {
         warnings.push("No line is already paid, so a guesser could win by luck. Add a paid line as a trap.".to_string());
     }
-    if spec.hint.is_none() {
+    if spec.hints.is_empty() {
         warnings.push("There is no hint, so players hear no payable bill on the street.".to_string());
+    }
+    for hint in &spec.hints {
+        let whole = hint.contains("{payee}") && hint.contains("{reference}") && hint.contains("{amount}");
+        if whole {
+            warnings.push(format!("The hint \"{hint}\" hands players the whole bill. Use {{ref_head}}, {{amount_near}} or {{item}} to give a clue instead."));
+        }
     }
 
     for player in 0..PLAYERS {

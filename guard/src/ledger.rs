@@ -5,7 +5,6 @@ use sha2::Sha256;
 type HmacSha256 = Hmac<Sha256>;
 
 /// Scripted Builders door. Proposal 15 is the paid line.
-pub const DEMO_BUILDERS: &str = "builders-demo";
 
 const TOLERANCE: u128 = 5_000;
 
@@ -108,7 +107,7 @@ pub fn generate(seed: &[u8; 32], vault_id: &str, round: u64, player_id: &str, ve
     let mut lines = match venue {
         Venue::Velvet => velvet(seed, vault_id, round, player_id, &mut stream),
         Venue::Lions => lions(&mut stream),
-        Venue::Builders => builders(vault_id, &mut stream),
+        Venue::Builders => builders(&mut stream),
         Venue::Cuts => cuts(&mut stream),
     };
     for line in &mut lines {
@@ -226,15 +225,11 @@ fn lions(stream: &mut Stream<'_>) -> Vec<Line> {
     ]
 }
 
-fn builders(vault_id: &str, stream: &mut Stream<'_>) -> Vec<Line> {
+fn builders(stream: &mut Stream<'_>) -> Vec<Line> {
     let payees = ["Osu Youth Pitch", "Coastal Cement", "Block Shop"];
-    let (numbers, paid_at) = if vault_id == DEMO_BUILDERS {
-        ([14u32, 15, 16], 1usize)
-    } else {
-        let start = 10 + u32::from(stream.byte() % 40);
-        let paid_at = usize::from(stream.byte() % 3);
-        ([start, start + 1, start + 2], paid_at)
-    };
+    let start = 10 + u32::from(stream.byte() % 40);
+    let paid_at = usize::from(stream.byte() % 3);
+    let numbers = [start, start + 1, start + 2];
     numbers
         .into_iter()
         .enumerate()

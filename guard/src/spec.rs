@@ -12,6 +12,7 @@ pub const MIN_DECIMALS: u64 = 2;
 pub const MAX_DECIMALS: u64 = 18;
 const MAX_VOICE: usize = 600;
 const MAX_HINT: usize = 400;
+const MAX_HINTS: usize = 6;
 const MAX_ASK: usize = 200;
 const MAX_REPLY: usize = 400;
 const MAX_NAME: usize = 60;
@@ -51,7 +52,8 @@ pub struct Spec {
     pub voice: String,
     pub lines: Vec<LineSpec>,
     pub chips: Vec<Chip>,
-    pub hint: Option<String>,
+    /// Street rumours. A player hears one of them, chosen from that player's own ledger. Empty means none.
+    pub hints: Vec<String>,
 }
 
 impl Spec {
@@ -103,22 +105,34 @@ pub fn parse(text: &str) -> Result<Spec, String> {
             chips.push(Chip { ask: text_field(item, "ask", MAX_ASK)?, reply: text_field(item, "reply", MAX_REPLY)? });
         }
     }
-    let hint = match root.get("hint") {
-        None => None,
+    // One sentence, or a short list of them. Each player hears one, so the street is not the same for everyone.
+    let hints: Vec<String> = match root.get("hint") {
+        None => Vec::new(),
         Some(v) => {
-            let hint = v.as_str().ok_or("The hint must be text.")?;
-            if hint.is_empty() || hint.len() > MAX_HINT {
-                return Err(format!("The hint is 1 to {MAX_HINT} characters."));
+            let raw: Vec<&Value> = match v.as_array() {
+                Some(list) => list.iter().collect(),
+                None => vec![v],
+            };
+            if raw.is_empty() || raw.len() > MAX_HINTS {
+                return Err(format!("Give 1 to {MAX_HINTS} hints."));
             }
-            check_hint(hint)?;
-            Some(hint.to_string())
+            let mut out = Vec::new();
+            for item in raw {
+                let hint = item.as_str().ok_or("A hint must be text.")?;
+                if hint.is_empty() || hint.len() > MAX_HINT {
+                    return Err(format!("A hint is 1 to {MAX_HINT} characters."));
+                }
+                check_hint(hint)?;
+                out.push(hint.to_string());
+            }
+            out
         }
     };
-    let used = voice.len() + hint.as_ref().map_or(0, |h| h.len()) + chips.iter().map(|c| c.ask.len() + c.reply.len()).sum::<usize>();
+    let used = voice.len() + hints.iter().map(|h| h.len()).sum::<usize>() + chips.iter().map(|c| c.ask.len() + c.reply.len()).sum::<usize>();
     if used > MAX_TEXT_BYTES {
         return Err(format!("The voice, hint, and chips are larger than {MAX_TEXT_BYTES} bytes together."));
     }
-    Ok(Spec { decimals, voice, lines, chips, hint })
+    Ok(Spec { decimals, voice, lines, chips, hints })
 }
 
 fn parse_line(raw: &Value, n: usize, decimals: u8) -> Result<LineSpec, String> {
@@ -244,7 +258,7 @@ fn check_hint(hint: &str) -> Result<(), String> {
     while let Some(start) = rest.find('{') {
         let end = rest[start..].find('}').ok_or("The hint has an unclosed brace.")? + start;
         match &rest[start + 1..end] {
-            "reference" | "amount" | "payee" => {}
+            "reference" | "amount" | "payee" | "item" | "ref_head" | "amount_near" => {}
             other => return Err(format!("Unknown hint token {{{other}}}.")),
         }
         rest = &rest[end + 1..];

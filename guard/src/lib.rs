@@ -23,7 +23,7 @@ mod verdict;
 pub use api::handle;
 pub use door_view::door_from_reports;
 pub use host::{Budget, Chain, DoorView, Host, Model, Random, Sealer, Signer};
-pub use ledger::{generate, match_bill, Draft, Hit, Line, Rule, Venue, DEMO_BUILDERS};
+pub use ledger::{generate, match_bill, Draft, Hit, Line, Rule, Venue};
 pub use manifest::{check_manifest, MODEL_ID, MAX_TOKENS, NETWORK_HOST, TEMPERATURE_MILLI};
 pub use verdict::GENERATOR;
 

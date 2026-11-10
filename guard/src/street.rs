@@ -90,11 +90,24 @@ fn queue(venue: Venue, payable: Option<&Line>) -> Vec<Value> {
 /// first unpaid line that has a reference. A spec with no hint gives the payees only.
 pub fn street_custom(spec: &crate::spec::Spec, lines: &[Line]) -> Value {
     let payees: Vec<&str> = lines.iter().map(|line| line.payee.as_str()).collect();
-    let heard = spec.hint.as_ref().and_then(|hint| {
+    let heard = (!spec.hints.is_empty()).then_some(()).and_then(|()| {
         let line = lines.iter().find(|line| !line.paid && !line.reference.is_empty())?;
+        // The rumour comes from this player's own line, so it differs between players and is the same on every reload.
+        let pick = line.reference.bytes().chain(line.payee.bytes()).fold(0usize, |h, b| h.wrapping_mul(31).wrapping_add(b as usize));
+        let hint = &spec.hints[pick % spec.hints.len()];
         let amount = crate::ledger::money_d(line.total, spec.decimals);
-        let text = hint.replace("{payee}", &line.payee).replace("{reference}", &line.reference).replace("{amount}", &amount);
-        let note = format!("{} · {} · {}", line.payee, line.reference, amount);
+        let whole_unit = 10u128.pow(spec.decimals as u32);
+        let near = (line.total + whole_unit / 2) / whole_unit.max(1);
+        let head: String = line.reference.chars().take(line.reference.chars().count().div_ceil(2)).collect();
+        let text = hint
+            .replace("{payee}", &line.payee)
+            .replace("{reference}", &line.reference)
+            .replace("{amount}", &amount)
+            .replace("{item}", &line.item)
+            .replace("{ref_head}", &head)
+            .replace("{amount_near}", &near.to_string());
+        // The desk note holds only what the rumour said. Writing the whole line there would undo a partial clue.
+        let note = text.clone();
         Some(json!({"text": text, "note": note}))
     });
     let queue = match heard {

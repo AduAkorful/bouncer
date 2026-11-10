@@ -54,7 +54,7 @@ pub fn seal_spec<M, S, C, R, B>(input: &Value, host: &Host<M, S, C, R, B>) -> St
         Ok(parts) => parts,
         Err(detail) => return spec_error(&detail),
     };
-    if spec.hint.is_some() && input.get("ack_hint").and_then(|v| v.as_bool()) != Some(true) {
+    if !spec.hints.is_empty() && input.get("ack_hint").and_then(|v| v.as_bool()) != Some(true) {
         return spec_error("A hint tells every player one bill that will be paid. Confirm that you want it to seal this story.");
     }
     let report = check(&spec, &hash, cap);

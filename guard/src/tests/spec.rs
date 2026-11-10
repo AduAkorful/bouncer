@@ -24,7 +24,7 @@ pub(crate) fn example() -> Value {
             {"payee": "Coastline Drinks", "reference": "CD-{d4}", "item": "bar delivery", "qty": {"lo": 1, "hi": 1}, "unit": {"lo": "90.50", "hi": "120"}, "paid": false}
         ],
         "chips": [{"ask": "Who is on the list?", "reply": "The list stays with me."}],
-        "hint": "Booking {reference}, refund {amount}, payee {payee}."
+        "hint": "I heard {payee} is still waiting on money from tonight."
     })
 }
 
@@ -186,7 +186,7 @@ fn open_returns_payees_and_a_filled_hint_and_never_a_ledger() {
     let street = &out["street"];
     assert_eq!(street["payees"].as_array().unwrap().len(), 4);
     let text = street["queue"][0]["lines"][0]["text"].as_str().unwrap();
-    assert!(text.starts_with("Booking VLV-B-"), "{text}");
+    assert!(text.starts_with("I heard "), "{text}");
     assert!(street["poster"].as_array().unwrap().is_empty());
     assert!(!out.to_string().contains("Saturday set"));
 }
@@ -479,4 +479,59 @@ fn draft_exposes_only_the_fixed_model_stage() {
     let mut h = crate::host::Host { seed: h.seed, model: Failed, signer: h.signer, chain: h.chain, random: h.random, budget: h.budget, sealer: h.sealer };
     let response: Value = serde_json::from_str(&crate::handle(&json!({"op":"draft_spec","story":"private story","decimals":6}).to_string(), &mut h)).unwrap();
     assert_eq!(response, json!({"ok": false, "error": "model", "stage": "model:empty_content"}));
+}
+
+fn open_as(host: &mut H, ct: &str, player: &str) -> Value {
+    send(
+        host,
+        json!({"op": "open", "vault_id": "velvet-1", "round": 1, "player_id": player, "raid_id": "raid-1",
+            "claim_pk": hex::encode([7u8; 32]), "venue": "custom", "rule": "pay-the-bill", "spec_ct": ct}),
+    )
+}
+
+#[test]
+fn a_list_of_rumours_gives_players_different_clues_and_the_same_one_on_every_open() {
+    let mut spec = example();
+    spec["hint"] = json!([
+        "I heard {payee} is waiting on money.",
+        "Somebody said a reference starting {ref_head}.",
+        "It is around {amount_near}, for {item}.",
+        "Word is {payee} sent {item} over.",
+    ]);
+    let mut h = host(vec![], closed());
+    let ct = seal(&mut h, &spec);
+    let mut seen = std::collections::BTreeSet::new();
+    for n in 0..24 {
+        let player = format!("player-{n}");
+        let first = open_as(&mut h, &ct, &player);
+        let text = first["street"]["queue"][0]["lines"][0]["text"].as_str().unwrap().to_string();
+        let note = first["street"]["queue"][0]["lines"][0]["note"].as_str().unwrap().to_string();
+        assert_eq!(text, note, "the desk note says only what the rumour said");
+        assert!(!text.contains('{'), "{text}");
+        seen.insert(text.chars().take(8).collect::<String>());
+    }
+    assert!(seen.len() >= 3, "players should hear different rumours: {seen:?}");
+    // The same player opening again hears the same rumour.
+    let a = open_as(&mut h, &ct, "player-3");
+    let b = open_as(&mut h, &ct, "player-3");
+    assert_eq!(a["street"], b["street"]);
+}
+
+#[test]
+fn a_hint_that_hands_over_the_whole_bill_is_a_warning() {
+    let mut spec = example();
+    spec["hint"] = json!("Booking {reference}, refund {amount}, payee {payee}.");
+    let out = check(&spec, "500000000");
+    assert_eq!(out["pass"], true, "{out}");
+    assert!(out["warnings"].as_array().unwrap().iter().any(|w| w.as_str().unwrap().contains("whole bill")), "{out}");
+    let mut list = example();
+    list["hint"] = json!(["Only {payee}.", "Around {amount_near}."]);
+    assert!(check(&list, "500000000")["warnings"].as_array().unwrap().is_empty());
+}
+
+#[test]
+fn seven_hints_are_refused() {
+    let mut spec = example();
+    spec["hint"] = json!(["a", "b", "c", "d", "e", "f", "g"]);
+    assert!(spec_err(spec).contains("1 to 6"));
 }

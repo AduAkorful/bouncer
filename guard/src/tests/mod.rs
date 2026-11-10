@@ -11,7 +11,7 @@ use serde_json::Value;
 use crate::chat::{leaks, APPROVED, FALLBACK, REFUSAL};
 use crate::door_view::door_from_reports;
 use crate::host::{Budget, Chain, DoorView, Host, Model, Random, Sealer, Signer};
-use crate::ledger::{generate, match_bill, Draft, Hit, Line, Venue, DEMO_BUILDERS};
+use crate::ledger::{generate, match_bill, Draft, Hit, Line, Venue};
 use crate::manifest::{check_manifest, MODEL_ID, MAX_TOKENS, NETWORK_HOST, TEMPERATURE_MILLI};
 use crate::verdict::{verdict_bytes, VerdictBody, GENERATOR};
 use crate::handle;
@@ -423,14 +423,13 @@ fn reveal_waits_for_a_closed_round() {
 }
 
 #[test]
-fn builders_demo_proposal_15_fails_and_cuts_never_emits_the_old_invoice() {
-    let demo = generate(&[3u8; 32], DEMO_BUILDERS, 2, "ada", Venue::Builders);
-    let paid = demo.iter().find(|line| line.reference == "GB-15").unwrap();
-    assert!(paid.paid);
+fn a_paid_builders_proposal_is_refused_and_cuts_never_emits_the_old_invoice() {
+    let demo = generate(&[3u8; 32], "builders-1", 2, "ada", Venue::Builders);
+    let paid = demo.iter().find(|line| line.paid).unwrap();
     let mut host = host(vec![], closed());
     let blob = json(&handle(
         &format!(
-            r#"{{"op":"open","vault_id":"{DEMO_BUILDERS}","round":2,"player_id":"ada","raid_id":"raid-9","claim_pk":"{}","venue":"builders","rule":"pay-the-bill"}}"#,
+            r#"{{"op":"open","vault_id":"builders-1","round":2,"player_id":"ada","raid_id":"raid-9","claim_pk":"{}","venue":"builders","rule":"pay-the-bill"}}"#,
             hex::encode([7u8; 32])
         ),
         &mut host,
@@ -441,7 +440,7 @@ fn builders_demo_proposal_15_fails_and_cuts_never_emits_the_old_invoice() {
     let out = json(&handle(
         &serde_json::json!({
             "op": "bill",
-            "vault_id": DEMO_BUILDERS,
+            "vault_id": "builders-1",
             "round": 2,
             "player_id": "ada",
             "blob": blob,
@@ -456,16 +455,14 @@ fn builders_demo_proposal_15_fails_and_cuts_never_emits_the_old_invoice() {
     ));
     assert_eq!(out["reply"], REFUSAL);
     assert!(out.get("signature").is_none());
-    let mut saw_other = false;
+    let mut paid_places = std::collections::BTreeSet::new();
     for i in 0..40u8 {
         let lines = generate(&[i; 32], "builders-live", 1, "ada", Venue::Builders);
-        let paid = lines.iter().find(|line| line.paid).unwrap();
-        if paid.reference != "GB-15" {
-            saw_other = true;
-        }
+        paid_places.insert(lines.iter().position(|line| line.paid).unwrap());
         assert_eq!(lines.iter().filter(|line| line.paid).count(), 1);
     }
-    assert!(saw_other);
+    // Which proposal is already paid is drawn from the seed, not fixed.
+    assert!(paid_places.len() > 1);
     for seed in 0..8u8 {
         for round in 1..6 {
             let lines = generate(&[seed; 32], "cuts-1", round, "ada", Venue::Cuts);
