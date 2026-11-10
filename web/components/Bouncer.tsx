@@ -90,7 +90,7 @@ export function Bouncer({ look, x, y, scale = 1, p, pose = "idle", rim = "#b9a2f
   };
 
   return (
-    <g id="bouncer" data-rig data-build={look.build} data-pose={pose} transform={`translate(${x} ${y}) scale(${scale})`}>
+    <g data-part="bouncer" data-rig data-build={look.build} data-pose={pose} transform={`translate(${x} ${y}) scale(${scale})`}>
       <defs>
         <linearGradient id={`${p}-skin`} x1="0" y1="0" x2="1" y2="1">
           <stop offset="0" stopColor={shade(base, 1.22)} />
@@ -378,7 +378,9 @@ function HeadTop({ look, base, rim }: { look: Look; base: string; rim: string })
       return (
         <g>
           <path d="M-19,-9 Q-23,-37 0,-41 Q25,-39 20,-9 Q10,-18 0,-17 Q-10,-18 -19,-9 Z" fill={c} />
-          <path d="M8,-39 Q24,-48 26,-30 Q19,-35 12,-31 Z" fill={shade(c, 0.72)} />
+          {/* The knot sits on the crown, the same cloth a shade darker, with a fold so it reads as tied */}
+          <path d="M6,-38 Q19,-46 21,-33 Q16,-36 10,-33 Z" fill={shade(c, 0.88)} />
+          <path d="M9,-37 Q15,-40 18,-35" stroke={shade(c, 0.7)} strokeWidth="0.8" fill="none" />
           <path d="M-19,-9 Q-23,-37 0,-41" stroke={rim} strokeOpacity="0.45" strokeWidth="1.2" fill="none" />
           <g fill="#efe8da" opacity="0.6">
             {[

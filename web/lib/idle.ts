@@ -9,13 +9,13 @@ export function startIdle(root: Element) {
   if (has(".queue-person")) gsap.to(root.querySelectorAll(".queue-person"), { y: "-=2", duration: 1.1, ease: "sine.inOut", yoyo: true, repeat: -1, stagger: 0.35 });
   if (has(".gossip-hint")) gsap.to(root.querySelectorAll(".gossip-hint"), { y: "-=4", duration: 0.9, ease: "sine.inOut", yoyo: true, repeat: -1, stagger: 0.2 });
   // The sign stutters now and then, and the light it throws on the street stutters with it.
-  if (has("#sign")) gsap.timeline({ repeat: -1, repeatDelay: 6 }).to(root.querySelectorAll("#sign, #neon-spill"), { opacity: 0.3, duration: 0.05, yoyo: true, repeat: 3 });
+  if (has("[data-part=sign]")) gsap.timeline({ repeat: -1, repeatDelay: 6 }).to(root.querySelectorAll("[data-part=sign], [data-part=neon-spill]"), { opacity: 0.3, duration: 0.05, yoyo: true, repeat: 3 });
   if (has(".mote")) gsap.to(root.querySelectorAll(".mote"), { y: "+=12", x: "+=3", opacity: 0.12, duration: 3, ease: "sine.inOut", yoyo: true, repeat: -1, stagger: { each: 0.5, from: "random" } });
-  if (has("#headlights"))
+  if (has("[data-part=headlights]"))
     gsap
       .timeline({ repeat: -1, repeatDelay: 9, delay: 3, onRepeat: () => sfx.car(), onStart: () => sfx.car() })
-      .fromTo(root.querySelectorAll("#headlights"), { x: -80, opacity: 0 }, { x: 440, opacity: 1, duration: 2.4, ease: "power1.inOut" })
-      .to(root.querySelectorAll("#headlights"), { opacity: 0, duration: 0.4 }, "-=0.4");
+      .fromTo(root.querySelectorAll("[data-part=headlights]"), { x: -80, opacity: 0 }, { x: 440, opacity: 1, duration: 2.4, ease: "power1.inOut" })
+      .to(root.querySelectorAll("[data-part=headlights]"), { opacity: 0, duration: 0.4 }, "-=0.4");
   if (has(".glint"))
     gsap.timeline({ repeat: -1, repeatDelay: 3.5 }).fromTo(root.querySelectorAll(".glint"), { x: -3, opacity: 0 }, { x: 14, opacity: 0.9, duration: 0.45, ease: "sine.inOut" }).to(root.querySelectorAll(".glint"), { opacity: 0, duration: 0.2 });
   // Bulbs chase round the door frame.
@@ -61,13 +61,18 @@ export function startIdle(root: Element) {
     const dir = Number((el as SVGElement).dataset.dir ?? 1);
     gsap.fromTo(el, { x: 0, opacity: 0.3, scaleX: 0.6 }, { x: dir * 40, y: 2, opacity: 0, scaleX: 2.2, transformOrigin: "50% 50%", duration: 3.2, ease: "sine.out", repeat: -1, delay: i * 0.6 });
   });
-  if (has("#okada")) {
-    const bus = root.querySelector("#okada")?.getAttribute("data-sound") === "bus";
-    const sound = () => (bus ? sfx.bus() : sfx.moto());
+  if (has("[data-part=okada]")) {
+    const kind = root.querySelector("[data-part=okada]")?.getAttribute("data-sound");
+    const bus = kind === "bus";
+    const sound = () => (kind === "none" ? undefined : bus ? sfx.bus() : sfx.moto());
     gsap
       .timeline({ repeat: -1, repeatDelay: bus ? 20 : 12, delay: 6, onStart: sound, onRepeat: sound })
-      .fromTo(all("#okada"), { x: 1000 }, { x: -700, duration: bus ? 3.4 : 3.6, ease: "none" });
+      .fromTo(all("[data-part=okada]"), { x: 1000 }, { x: -700, duration: bus ? 3.4 : 3.6, ease: "none" });
   }
+  if (has(".snow")) gsap.fromTo(all(".snow"), { y: -60 }, { y: 300, x: "+=12", duration: 7, ease: "none", repeat: -1, stagger: { each: 0.1, repeat: -1 } });
+  if (has(".fog")) gsap.to(all(".fog"), { x: 60, duration: 9, ease: "sine.inOut", yoyo: true, repeat: -1, stagger: 1.5 });
+  if (has(".firework")) gsap.fromTo(all(".firework"), { scale: 0.2, opacity: 1 }, { scale: 1.3, opacity: 0, duration: 1.8, ease: "power2.out", repeat: -1, stagger: 0.7, repeatDelay: 1.2 });
+  if (has(".star")) gsap.to(all(".star"), { opacity: 0.15, duration: 1.4, ease: "sine.inOut", yoyo: true, repeat: -1, stagger: { each: 0.08, from: "random" } });
   if (has(".rain")) gsap.fromTo(all(".rain"), { y: -40 }, { y: 300, duration: 0.9, ease: "none", repeat: -1, stagger: { each: 0.013, repeat: -1 } });
   if (has(".doner")) gsap.to(all(".doner"), { opacity: 0.15, duration: 0.6, ease: "sine.inOut", yoyo: true, repeat: -1 });
   if (has(".learn-badge")) gsap.to(all(".learn-badge"), { scale: 1.15, transformOrigin: "50% 50%", duration: 0.8, ease: "sine.inOut", yoyo: true, repeat: -1 });
@@ -75,7 +80,7 @@ export function startIdle(root: Element) {
 }
 
 /** The light around the door breathes with the bass behind it; puddles shiver, the VIP strobe fires. Returns an unsubscribe. */
-export function beatGlow(root: Element, selector = "#door-glow") {
+export function beatGlow(root: Element, selector = "[data-part=door-glow]") {
   return music.onBeat((accent) => {
     const el = root.querySelectorAll(selector);
     if (el.length) gsap.fromTo(el, { opacity: accent ? 1 : 0.9 }, { opacity: 0.55, duration: 0.45, ease: "power2.out" });
@@ -89,7 +94,7 @@ export function beatGlow(root: Element, selector = "#door-glow") {
 /** On a mouse, the street in front drifts against the pointer so the scene has depth. Returns a cleanup. */
 export function parallax(root: HTMLElement) {
   if (!window.matchMedia("(pointer: fine)").matches) return () => {};
-  const near = root.querySelectorAll("#near");
+  const near = root.querySelectorAll("[data-part=near]");
   if (!near.length) return () => {};
   const qx = gsap.quickTo(near, "x", { duration: 0.8, ease: "power3.out" });
   const move = (e: PointerEvent) => {

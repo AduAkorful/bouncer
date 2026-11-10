@@ -100,12 +100,12 @@ export default function CreatorFrame() {
       sfx.clink();
       rigTo(scene, "aside", 0.6);
       gsap.timeline()
-        .to(q("#bouncer"), { x: "+=90", duration: 0.6, ease: "power2.inOut" })
-        .to(q("#rope-closed"), { opacity: 0, duration: 0.1 }, 0.15)
-        .to(q("#rope-open"), { opacity: 1, duration: 0.1 }, 0.15)
-        .to(q("#bouncer"), { x: "-=90", duration: 0.6, ease: "power2.inOut" }, 1.8)
-        .to(q("#rope-open"), { opacity: 0, duration: 0.1 }, 2.3)
-        .to(q("#rope-closed"), { opacity: 1, duration: 0.1 }, 2.3);
+        .to(q("[data-part=bouncer]"), { x: "+=90", duration: 0.6, ease: "power2.inOut" })
+        .to(q("[data-part=rope-closed]"), { opacity: 0, duration: 0.1 }, 0.15)
+        .to(q("[data-part=rope-open]"), { opacity: 1, duration: 0.1 }, 0.15)
+        .to(q("[data-part=bouncer]"), { x: "-=90", duration: 0.6, ease: "power2.inOut" }, 1.8)
+        .to(q("[data-part=rope-open]"), { opacity: 0, duration: 0.1 }, 2.3)
+        .to(q("[data-part=rope-closed]"), { opacity: 1, duration: 0.1 }, 2.3);
       gsap.delayedCall(1.8, () => rigTo(scene, "idle", 0.6));
     }
   }

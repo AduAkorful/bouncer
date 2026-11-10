@@ -7,7 +7,7 @@ const card = {
   name: "Auntie Ama",
   pitch: "We owe the fishermen. Prove it.",
   look: { build: 1, skin: 2, head: 3, outfit: 1, eyewear: 2 },
-  setting: { stall: 0, ride: 0, passer: 0, seller: 0, shop: 0, weather: 0, posters: 0, sound: 0, place: 0, crowd: 0 },
+  setting: { stall: 0, ride: 0, passer: 0, seller: 0, shop: 0, weather: 0, posters: 0, sound: 0, place: 0, crowd: 0, queue: 0, board: 0 },
 };
 
 test("a card round trips", () => {

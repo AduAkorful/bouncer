@@ -26,6 +26,7 @@ export function DoorList({
   empty,
   retryHref,
   token,
+  narrow = false,
 }: {
   title: string;
   doors: ListedDoor[];
@@ -35,6 +36,8 @@ export function DoorList({
   retryHref: string;
   /** Every vault pays the contract's one token, so one label serves the list. Without it, pots are left off. */
   token?: Promise<TokenRead>;
+  /** In a narrow column, such as the closed-queue panel, cards stay two across so signs do not break mid-word. */
+  narrow?: boolean;
 }) {
   const ordered = orderDoors(doors);
   return (
@@ -48,9 +51,12 @@ export function DoorList({
       ) : doors.length === 0 ? (
         <p className="mt-3 text-sm text-chalk/70">{empty}</p>
       ) : (
-        <div className={`mt-3 grid grid-cols-1 gap-3 min-[360px]:grid-cols-2 sm:grid-cols-3 ${WIDE_COLUMNS[ordered.length] ?? ""}`}>
+        <div className={`mt-3 grid grid-cols-1 gap-3 min-[360px]:grid-cols-2 ${narrow ? "" : `sm:grid-cols-3 ${WIDE_COLUMNS[ordered.length] ?? ""}`}`}>
           {ordered.map((door, index) => (
-            <Link key={door.id} href={door.href} className="chalk-focus min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-night-2">
+            <Link
+              key={door.id}
+              href={door.href}
+              className="chalk-focus min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-night-2">
               {door.read ? (
                 <DoorScene
                   sign={door.sign}

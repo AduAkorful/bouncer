@@ -113,9 +113,11 @@ export function PosterWall({ x, hints, slips }: { x: number; hints: boolean; sli
         <g transform="rotate(2 0 90)">
           <rect x="-19" y="58" width="38" height="62" fill="#efe8da" />
           <rect x="-19" y="58" width="38" height="11" fill="#17141c" />
-          <text x="0" y="66" textAnchor="middle" {...fitPoster(slips.sign, slips.signSize)} fontFamily="var(--font-bungee)" fill="#cbb8ff">
-            {slips.sign}
-          </text>
+          {posterSignLines(slips.sign).map((part, i, all) => (
+            <text key={i} x="0" y={all.length === 1 ? 66 : 63 + i * 4.6} textAnchor="middle" {...fitPoster(part, all.length === 1 ? slips.signSize : 3.6)} fontFamily="var(--font-bungee)" fill="#cbb8ff">
+              {part}
+            </text>
+          ))}
           <text x="0" y="78" textAnchor="middle" {...fitPoster(slips.cream[0], 3.2)} fontFamily="var(--font-bungee)" fill="#17141c">
             {slips.cream[0]}
           </text>
@@ -187,7 +189,7 @@ export function VipWindow({ x, y, p, id }: { x: number; y: number; p: string; id
 /** Next door: a concrete block with a shuttered shop and a top-up kiosk under a flickering tube. */
 const KEEPER: GoerLook = { skin: "#6b4430", top: "#8f6bff", bottom: "#1d1727", hair: "bun", hairColor: "#1c120c", outfit: "tee", pose: "phone" };
 
-export function NextDoor({ x, p, ad, kiosk, shutter, hints }: { x: number; p: string; ad: [string, string, string]; kiosk: string; shutter: string; hints: boolean }) {
+export function NextDoor({ x, p, ad, kiosk, shutter, hints, tone = "#e9b52a" }: { x: number; p: string; ad: [string, string, string]; kiosk: string; shutter: string; hints: boolean; tone?: string }) {
   return (
     <g transform={`translate(${x} 0)`}>
       <defs>
@@ -210,7 +212,7 @@ export function NextDoor({ x, p, ad, kiosk, shutter, hints }: { x: number; p: st
       {/* A hand-painted wall ad, the way chop bars advertise */}
       <g transform="translate(150 40) rotate(-1)" data-learn="ad" style={hints ? { cursor: "pointer" } : undefined}>
         <rect x="-4" y="-4" width="170" height="54" fill="#d9c7a0" opacity="0.12" />
-        <text x="0" y="16" fontFamily="var(--font-bungee)" fontSize="14" fill="#e9b52a" opacity="0.75">
+        <text x="0" y="16" fontFamily="var(--font-bungee)" fontSize="14" fill={tone} opacity="0.75">
           {ad[0]}
         </text>
         <text x="0" y="34" fontFamily="var(--font-bungee)" fontSize="11" fill="#b3243a" opacity="0.75">
@@ -340,7 +342,7 @@ export function Taxi({ x, p, rim, gossip, speaks, index }: { x: number; p: strin
 /** An okada (motorbike taxi) that crosses the front of the scene now and then. */
 export function Okada() {
   return (
-    <g id="okada" className="passer" data-learn="passer" data-sound="moto" transform="translate(-600 0)">
+    <g data-part="okada" className="passer" data-learn="passer" data-sound="moto" transform="translate(-600 0)">
       <path d="M-30,250 L-140,236 L-140,262 Z" fill="#fff6d8" opacity="0.12" />
       <circle cx="-22" cy="254" r="9" fill="#0b0810" stroke="#3a3145" strokeWidth="2" />
       <circle cx="22" cy="254" r="9" fill="#0b0810" stroke="#3a3145" strokeWidth="2" />
@@ -388,7 +390,7 @@ export function KebabVan({ x, p, gossip, speaks, index }: { x: number; p: string
           CHIPS · OPEN LATE
         </text>
         <text x="-6" y="136" textAnchor="middle" fontFamily="var(--font-bungee)" fontSize="8" fill="#b3243a">
-          DALSTON GRILL
+          LATE GRILL
         </text>
       </g>
       <Goer x={6} y={232} s={0.62} look={KEBAB_MAN} rim="#fff1c8" dark={0.05} index={index} gossip={speaks} />
@@ -478,7 +480,7 @@ export function BlackCab({ x, rim, gossip, speaks, index }: { x: number; rim: st
 /** The night bus: red double-decker, upstairs lit, crossing the front of the scene. */
 export function NightBus() {
   return (
-    <g id="okada" className="passer" data-learn="passer" data-sound="bus" transform="translate(-600 0)">
+    <g data-part="okada" className="passer" data-learn="passer" data-sound="bus" transform="translate(-600 0)">
       <path d="M-100,246 L-220,226 L-220,262 Z" fill="#fff6d8" opacity="0.12" />
       <rect x="-100" y="150" width="200" height="104" rx="8" fill="#c8202f" />
       <rect x="-94" y="158" width="188" height="30" rx="3" fill="#2a1a20" />
@@ -525,9 +527,26 @@ export function Rain() {
  * The cream poster is 38 units wide. A line shrinks to fit about 34 of them (Bungee is about 0.69 em per
  * letter), and a long one is also held to that width, so it never runs past the paper.
  */
-function fitPoster(text: string, size: number, em = 0.69): { fontSize: number; textLength?: number; lengthAdjust?: "spacingAndGlyphs" } {
+function fitPoster(text: string, size: number, em = 0.74): { fontSize: number } {
+  // Shrinking the font is enough. Squeezing glyphs with textLength spread tiny letters apart ("P ECKHA M", QA R21).
   const room = 34;
-  const fontSize = Math.min(size, room / Math.max(1, text.length * em));
-  const wide = text.length * em * fontSize;
-  return wide > room * 0.92 ? { fontSize, textLength: room, lengthAdjust: "spacingAndGlyphs" } : { fontSize };
+  return { fontSize: Math.min(size, room / Math.max(1, text.length * em)) };
+}
+
+/** A long sign takes two lines on the poster's header band, split at the space nearest the middle. */
+function posterSignLines(sign: string): string[] {
+  const text = sign.trim();
+  if (text.length <= 11 || !text.includes(" ")) return [text];
+  const words = text.split(/\s+/);
+  let best = [text, ""];
+  let gap = Infinity;
+  for (let i = 1; i < words.length; i++) {
+    const a = words.slice(0, i).join(" ");
+    const b = words.slice(i).join(" ");
+    if (Math.abs(a.length - b.length) < gap) {
+      gap = Math.abs(a.length - b.length);
+      best = [a, b];
+    }
+  }
+  return best;
 }

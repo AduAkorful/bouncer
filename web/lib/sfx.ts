@@ -10,10 +10,11 @@ let master: GainNode | null = null;
 let verbIn: GainNode | null = null;
 let white: AudioBuffer | null = null;
 let brown: AudioBuffer | null = null;
-let city: "accra" | "london" = "accra";
+type StreetSound = "accra" | "london" | "harbour" | "drums" | "quiet";
+let city: StreetSound = "accra";
 
-/** Which street's ambience plays: tro-tros in Accra, sirens in London. */
-export function setCity(c: "accra" | "london") {
+/** Which street's ambience plays: tro-tros in Accra, sirens in London, a foghorn, drums, or nothing. */
+export function setCity(c: StreetSound) {
   city = c;
 }
 
@@ -312,6 +313,16 @@ export const sfx = {
   },
   /** Somewhere down the road: a tro-tro horn in Accra, a siren in London */
   horn: () => {
+    if (city === "quiet") return;
+    if (city === "harbour") {
+      tone(98, 2.4, "sawtooth", 0.02, { pan: 0.7, verb: 0.9, attack: 0.3 });
+      tone(73, 2.4, "sine", 0.03, { pan: 0.7, verb: 0.9, attack: 0.3 });
+      return;
+    }
+    if (city === "drums") {
+      [0, 0.25, 0.5, 0.62, 0.75, 1].forEach((when, i) => tone(i % 3 === 2 ? 220 : 110, 0.14, "sine", 0.05, { pan: -0.5, verb: 0.5, when, slide: 60 }));
+      return;
+    }
     if (city === "london") {
       for (let i = 0; i < 4; i++) {
         tone(740, 0.45, "triangle", 0.012, { pan: 0.6, verb: 0.7, when: i * 0.9 });

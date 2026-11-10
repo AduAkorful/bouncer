@@ -1,9 +1,33 @@
 /**
- * A door's street. Small indexes, mixed freely. Missing or bad values stay the Accra street.
- * `place` is the kind of venue (street, beach, rooftop, basement) and `crowd` is how the queue dresses.
+ * A door's street. Small indexes into the catalogs in street-kit.ts, mixed freely. Missing or bad values
+ * stay the Accra street. `place` is the kind of venue and `crowd` is how the queue dresses.
  */
 
-import { CITIES, type CityId } from "./cities.ts";
+import { type CityId } from "./cities.ts";
+import { CROWDS } from "./crowds.ts";
+import {
+  BOARDS,
+  PASSERS,
+  POSTERS,
+  QUEUES,
+  RIDES,
+  SELLERS,
+  SHOPS,
+  SOUNDS,
+  STALLS,
+  WEATHERS,
+  type BoardId,
+  type Learn,
+  type PasserId,
+  type PosterId,
+  type QueueId,
+  type RideId,
+  type SellerId,
+  type ShopId,
+  type SoundId,
+  type StallId,
+  type WeatherId,
+} from "./street-kit.ts";
 
 export type StreetSetting = {
   stall: number;
@@ -16,9 +40,22 @@ export type StreetSetting = {
   sound: number;
   place: number;
   crowd: number;
+  queue: number;
+  board: number;
 };
 
-export const PLACES = ["street", "beach", "rooftop", "basement"] as const;
+/** Kinds of venue. A card stores the index, so places are only ever added at the end. */
+export const PLACES = ["street", "beach", "rooftop", "basement", "garden", "warehouse", "harbour", "lounge"] as const;
+export const PLACE_LABELS: Record<Place, string> = {
+  street: "Street front",
+  beach: "Beach bar",
+  rooftop: "Rooftop",
+  basement: "Basement",
+  garden: "Garden party",
+  warehouse: "Warehouse",
+  harbour: "Harbour front",
+  lounge: "Hotel lounge",
+};
 export type Place = (typeof PLACES)[number];
 
 export const ACCRA_SETTING: StreetSetting = {
@@ -32,37 +69,75 @@ export const ACCRA_SETTING: StreetSetting = {
   sound: 0,
   place: 0,
   crowd: 0,
+  queue: 0,
+  board: 0,
 };
 
+const labels = (list: readonly { label: string }[]) => list.map((item) => item.label);
+
+/** The sponsor form draws one menu per field, in this order. Every catalog entry is a choice. */
 export const SETTING_FIELDS = [
-  { key: "stall", label: "Stall", options: ["Suya stand", "Kebab van"] },
-  { key: "ride", label: "Ride", options: ["Yellow taxi", "Black cab"] },
-  { key: "passer", label: "Passer", options: ["Okada", "Night bus"] },
-  { key: "seller", label: "Seller", options: ["Water seller", "Rose seller"] },
-  { key: "shop", label: "Shop", options: ["Chop bar and MoMo kiosk", "Café and off licence"] },
-  { key: "weather", label: "Weather", options: ["Clear", "Rain"] },
-  { key: "posters", label: "Posters", options: ["Accra slips", "London slips"] },
-  { key: "sound", label: "Sound", options: ["Accra bed", "London bed"] },
-  { key: "place", label: "Place", options: ["Street front", "Beach bar", "Rooftop", "Basement"] },
-  { key: "crowd", label: "Crowd", options: ["Accra night out", "London night out"] },
+  { key: "place", label: "Place", options: PLACES.map((place) => PLACE_LABELS[place]) },
+  { key: "crowd", label: "Crowd", options: CROWDS.map((crowd) => crowd.label) },
+  { key: "queue", label: "Queue", options: labels(QUEUES) },
+  { key: "stall", label: "Food stall", options: labels(STALLS) },
+  { key: "ride", label: "Parked ride", options: labels(RIDES) },
+  { key: "passer", label: "Passing by", options: labels(PASSERS) },
+  { key: "seller", label: "Seller in the queue", options: labels(SELLERS) },
+  { key: "shop", label: "Shop next door", options: labels(SHOPS) },
+  { key: "posters", label: "Posters", options: labels(POSTERS) },
+  { key: "board", label: "Pot board", options: labels(BOARDS) },
+  { key: "weather", label: "Sky", options: labels(WEATHERS) },
+  { key: "sound", label: "Sound", options: labels(SOUNDS) },
 ] as const satisfies readonly { key: keyof StreetSetting; label: string; options: readonly string[] }[];
+
+/**
+ * Whether a piece is drawn at this place. Away from the street the ride, the traffic and the shop give way to
+ * the place's own, and a place with a bar has no food stall. The form still keeps the pick for later.
+ */
+export function pieceDrawn(key: keyof StreetSetting, place: Place): boolean {
+  if (place === "street") return true;
+  if (key === "ride" || key === "passer" || key === "shop") return false;
+  if (key === "stall") return place === "beach" || place === "harbour";
+  return true;
+}
+
+/** A random street, for the sponsor form's Surprise me. */
+export function randomSetting(random: () => number = Math.random): StreetSetting {
+  const pick = (key: keyof StreetSetting) => Math.floor(random() * COUNTS[key]);
+  return {
+    stall: pick("stall"),
+    ride: pick("ride"),
+    passer: pick("passer"),
+    seller: pick("seller"),
+    shop: pick("shop"),
+    weather: pick("weather"),
+    posters: pick("posters"),
+    sound: pick("sound"),
+    place: pick("place"),
+    crowd: pick("crowd"),
+    queue: pick("queue"),
+    board: pick("board"),
+  };
+}
+
+const COUNTS: Record<keyof StreetSetting, number> = {
+  stall: STALLS.length,
+  ride: RIDES.length,
+  passer: PASSERS.length,
+  seller: SELLERS.length,
+  shop: SHOPS.length,
+  weather: WEATHERS.length,
+  posters: POSTERS.length,
+  sound: SOUNDS.length,
+  place: PLACES.length,
+  crowd: CROWDS.length,
+  queue: QUEUES.length,
+  board: BOARDS.length,
+};
 
 /** The whole street, from the food stall through the shop and the taxi. */
 export const STREET_VIEW = "-230 -40 900 320";
-
-const ACCRA_SLIPS = {
-  purple: ["AFRO", "BEATS", "EVERY SAT"] as [string, string, string],
-  cream: ["FRI · LADIES", "SAT", "K-NOVA", "23:00 – 02:00"] as [string, string, string, string],
-  flag: ["LADIES", "NIGHT"] as [string, string],
-  wall: "OSU 4 LIFE",
-};
-
-const LONDON_SLIPS = {
-  purple: ["NIGHT", "BUS", "SATURDAY"] as [string, string, string],
-  cream: ["LAST TUBE", "SAT", "NIGHT", "ALL NIGHT"] as [string, string, string, string],
-  flag: ["LAST", "TUBE"] as [string, string],
-  wall: "ALL NIGHT",
-};
 
 export type PosterSlips = {
   purple: [string, string, string];
@@ -74,21 +149,24 @@ export type PosterSlips = {
 };
 
 export type StreetPieces = {
-  stall: "suya" | "kebab";
-  ride: "taxi" | "cab";
-  passer: "okada" | "bus";
-  seller: "water" | "roses";
-  shop: "chop" | "cafe";
-  weather: "clear" | "rain";
-  posters: "accra" | "london";
-  sound: "accra" | "london";
+  stall: StallId;
+  ride: RideId;
+  passer: PasserId;
+  seller: SellerId;
+  shop: ShopId;
+  weather: WeatherId;
+  posters: PosterId;
+  sound: SoundId;
   place: Place;
-  crowd: "accra" | "london";
+  /** The id of an entry in CROWDS. */
+  crowd: string;
+  queue: QueueId;
+  board: BoardId;
 };
 
 export function citySetting(city: CityId): StreetSetting {
   if (city === "london") {
-    return { stall: 1, ride: 1, passer: 1, seller: 1, shop: 1, weather: 1, posters: 1, sound: 1, place: 0, crowd: 1 };
+    return { ...ACCRA_SETTING, stall: 1, ride: 1, passer: 1, seller: 1, shop: 1, weather: 1, posters: 1, sound: 1, crowd: 1 };
   }
   return { ...ACCRA_SETTING };
 }
@@ -96,18 +174,21 @@ export function citySetting(city: CityId): StreetSetting {
 export function readSetting(value: unknown): StreetSetting {
   if (!value || typeof value !== "object" || Array.isArray(value)) return { ...ACCRA_SETTING };
   const row = value as Record<string, unknown>;
+  const read = (key: keyof StreetSetting) => index(row[key], COUNTS[key]);
   return {
-    stall: bit(row.stall),
-    ride: bit(row.ride),
-    passer: bit(row.passer),
-    seller: bit(row.seller),
-    shop: bit(row.shop),
-    weather: bit(row.weather),
-    posters: bit(row.posters),
-    sound: bit(row.sound),
-    place: index(row.place, PLACES.length),
+    stall: read("stall"),
+    ride: read("ride"),
+    passer: read("passer"),
+    seller: read("seller"),
+    shop: read("shop"),
+    weather: read("weather"),
+    posters: read("posters"),
+    sound: read("sound"),
+    place: read("place"),
     // A card saved before the crowd choice existed dresses its queue the way its posters read.
-    crowd: row.crowd === undefined ? bit(row.posters) : bit(row.crowd),
+    crowd: row.crowd === undefined ? (read("posters") === 1 ? 1 : 0) : read("crowd"),
+    queue: read("queue"),
+    board: read("board"),
   };
 }
 
@@ -120,25 +201,34 @@ function index(value: unknown, count: number): number {
  * as a brick street. Only the plain words are read; anything else stays the street.
  */
 export function placeFromPitch(pitch: string): number {
-  if (/\b(beach|shore|seaside|sand)\b/i.test(pitch)) return 1;
-  if (/\b(rooftop|roof|terrace)\b/i.test(pitch)) return 2;
-  if (/\b(basement|cellar|underground|downstairs)\b/i.test(pitch)) return 3;
-  return 0;
+  const words: [Place, RegExp][] = [
+    ["beach", /\b(beach|shore|seaside|sand)\b/i],
+    ["rooftop", /\b(rooftop|roof|terrace)\b/i],
+    ["basement", /\b(basement|cellar|underground|downstairs)\b/i],
+    ["garden", /\b(garden|courtyard|lawn|park)\b/i],
+    ["warehouse", /\b(warehouse|factory|depot|loft)\b/i],
+    ["harbour", /\b(harbou?r|dock|pier|marina|wharf|port)\b/i],
+    ["lounge", /\b(lounge|hotel|lobby)\b/i],
+  ];
+  const found = words.find(([, pattern]) => pattern.test(pitch));
+  return found ? PLACES.indexOf(found[0]) : 0;
 }
 
 export function streetPieces(setting: StreetSetting): StreetPieces {
   const safe = readSetting(setting);
   return {
-    stall: safe.stall === 1 ? "kebab" : "suya",
-    ride: safe.ride === 1 ? "cab" : "taxi",
-    passer: safe.passer === 1 ? "bus" : "okada",
-    seller: safe.seller === 1 ? "roses" : "water",
-    shop: safe.shop === 1 ? "cafe" : "chop",
-    weather: safe.weather === 1 ? "rain" : "clear",
-    posters: safe.posters === 1 ? "london" : "accra",
-    sound: safe.sound === 1 ? "london" : "accra",
+    stall: STALLS[safe.stall].id,
+    ride: RIDES[safe.ride].id,
+    passer: PASSERS[safe.passer].id,
+    seller: SELLERS[safe.seller].id,
+    shop: SHOPS[safe.shop].id,
+    weather: WEATHERS[safe.weather].id,
+    posters: POSTERS[safe.posters].id,
+    sound: SOUNDS[safe.sound].id,
     place: PLACES[safe.place] ?? "street",
-    crowd: safe.crowd === 1 ? "london" : "accra",
+    crowd: CROWDS[safe.crowd]?.id ?? "accra",
+    queue: QUEUES[safe.queue].id,
+    board: BOARDS[safe.board].id,
   };
 }
 
@@ -148,32 +238,41 @@ export function defaultStreet(setting: StreetSetting): boolean {
   return (Object.keys(ACCRA_SETTING) as (keyof StreetSetting)[]).every((key) => safe[key] === ACCRA_SETTING[key]);
 }
 
-export function shopCopy(setting: StreetSetting): { ad: [string, string, string]; kiosk: string; shutter: string } {
-  const city = CITIES[streetPieces(setting).shop === "cafe" ? "london" : "accra"];
-  return {
-    ad: city.ad,
-    kiosk: city.kiosk,
-    shutter: streetPieces(setting).shop === "cafe" ? "CAFF" : "KOJO",
-  };
+export function shopCopy(setting: StreetSetting): { ad: [string, string, string]; kiosk: string; shutter: string; tone: string } {
+  const shop = SHOPS[readSetting(setting).shop];
+  return { ad: [...shop.ad], kiosk: shop.kiosk, shutter: shop.shutter, tone: shop.tone };
 }
 
 export function posterLines(setting: StreetSetting, sign: string): PosterSlips {
-  const pack = streetPieces(setting).posters === "london" ? LONDON_SLIPS : ACCRA_SLIPS;
+  const pack = POSTERS[readSetting(setting).posters];
   const top = posterSign(sign);
-  return { ...pack, sign: top.text, signSize: top.size };
+  return {
+    purple: [...pack.purple],
+    cream: [...pack.cream],
+    flag: [...pack.flag],
+    wall: pack.wall,
+    sign: top.text,
+    signSize: top.size,
+  };
 }
+
+const QUIET: Learn = { title: "The street", text: "Nothing passing tonight. Just the queue and the music through the door." };
 
 /** The little card for a painted piece. A mixed street explains the piece that is actually there. */
-export function pieceLearn(setting: StreetSetting): Record<"food" | "vehicle" | "passer" | "kiosk" | "ad", { title: string; text: string }> {
-  const pieces = streetPieces(setting);
-  const food = CITIES[pieces.stall === "kebab" ? "london" : "accra"].learn.food;
-  const vehicle = CITIES[pieces.ride === "cab" ? "london" : "accra"].learn.vehicle;
-  const passer = CITIES[pieces.passer === "bus" ? "london" : "accra"].learn.passer;
-  const shop = CITIES[pieces.shop === "cafe" ? "london" : "accra"].learn;
-  return { food, vehicle, passer, kiosk: shop.kiosk, ad: shop.ad };
+export function pieceLearn(setting: StreetSetting): Record<"food" | "vehicle" | "passer" | "kiosk" | "ad", Learn> {
+  const safe = readSetting(setting);
+  const shop = SHOPS[safe.shop];
+  const passer = PASSERS[safe.passer] as { learn?: Learn };
+  return {
+    food: STALLS[safe.stall].learn,
+    vehicle: RIDES[safe.ride].learn,
+    passer: passer.learn ?? QUIET,
+    kiosk: shop.kioskLearn,
+    ad: shop.adLearn,
+  };
 }
 
-export function soundCity(setting: StreetSetting): "accra" | "london" {
+export function soundCity(setting: StreetSetting): SoundId {
   return streetPieces(setting).sound;
 }
 
@@ -181,8 +280,4 @@ function posterSign(sign: string): { text: string; size: number } {
   const text = sign.trim();
   const size = text.length > 20 ? 2 : text.length > 14 ? 2.5 : text.length > 11 ? 3.2 : 4.2;
   return { text, size };
-}
-
-function bit(value: unknown): number {
-  return value === 1 ? 1 : 0;
 }
