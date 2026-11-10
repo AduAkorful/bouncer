@@ -12,6 +12,8 @@ import { deriveSecrets } from "@/lib/device-pass";
 import { readHold, unlockHeld } from "@/lib/player-hold";
 import { readPayoutAccount, testnetAccountId, writePayoutAccount } from "@/lib/imported-account";
 import { sendClaim } from "@/lib/send-claim";
+import { setSound, sfx } from "@/lib/sfx";
+import { readSoundPref } from "@/lib/sound-pref";
 import { PayoutWallet } from "@/components/claim/PayoutWallet";
 import { PaidMoment } from "@/components/claim/PaidMoment";
 import { VerifiedPanel } from "@/components/claim/VerifiedPanel";
@@ -368,7 +370,7 @@ export function ClaimDoor({
                 <p className="mt-2 text-sm text-chalk/60">This device's passkey has to be a full-access key on that account. The account pays the gas.</p>
               </>
             )}
-            <button disabled={busy} onClick={() => void claim()} className="mt-4 w-full rounded-2xl bg-chalk py-4 font-sign text-lg text-ink disabled:opacity-40">
+            <button disabled={busy} onClick={() => { if (readSoundPref() === "on") { setSound(true); sfx.coins(); } void claim(); }} className="mt-4 w-full rounded-2xl bg-chalk py-4 font-sign text-lg text-ink disabled:opacity-40">
               {busy ? "Waiting for the passkey" : "Claim"}
             </button>
             {preference === "existing" ? (

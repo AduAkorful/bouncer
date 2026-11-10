@@ -1,4 +1,5 @@
-// All sound is synthesized in the browser, so the prototype ships no audio files.
+// The game's moments (stamps, paper, coins, the door, the stings) are recorded CC0 files in `public/audio`,
+// listed in `public/audio/AUDIO_CREDITS.md`. The street, the club loop and the voices are still synthesized here.
 // Nothing plays until the player has tapped (browsers require a gesture) and sound is on.
 //
 // Graph: every voice → master → compressor → speakers, with a send into a generated-impulse reverb.
@@ -61,9 +62,60 @@ function ensure() {
       last = (last + 0.02 * w[i]!) / 1.02;
       b[i] = last * 3.5;
     }
+    void loadSamples(ctx);
   }
   if (ctx.state === "suspended") void ctx.resume();
   return ctx;
+}
+
+// ——— Recorded moments ———
+
+export const SAMPLE_NAMES = [
+  "stamp-refused", "stamp-approved", "door-open", "coins", "paid-chips", "pen", "paper", "key", "chip",
+  "hand-over", "win", "paid", "turned-away", "tap", "error",
+] as const;
+export type SampleName = (typeof SAMPLE_NAMES)[number];
+
+const samples = new Map<SampleName, AudioBuffer>();
+const missing = new Set<SampleName>();
+let loading: Promise<void> | null = null;
+
+/** Decodes every recorded moment once, after the first tap. A file that fails is marked missing, and that moment uses the synth. */
+function loadSamples(c: AudioContext): Promise<void> {
+  if (loading) return loading;
+  const ext = typeof Audio !== "undefined" && new Audio().canPlayType('audio/ogg; codecs="vorbis"') ? "ogg" : "m4a";
+  loading = Promise.all(
+    SAMPLE_NAMES.map(async (name) => {
+      try {
+        const res = await fetch(`/audio/${name}.${ext}`);
+        if (!res.ok) throw new Error(String(res.status));
+        samples.set(name, await c.decodeAudioData(await res.arrayBuffer()));
+      } catch {
+        // A sound that will not load is not worth stopping the game for: the synth stands in.
+        missing.add(name);
+      }
+    }),
+  ).then(() => undefined);
+  return loading;
+}
+
+/**
+ * Plays a recorded moment. True when it played, or when it is still loading (then nothing plays, rather than the
+ * synth version for one tap). False only when the file is missing, so the caller falls back to the synth.
+ */
+function sample(name: SampleName, o: Out & { gain?: number; rate?: number } = {}): boolean {
+  if (!enabled || !ensure() || !ctx) return true;
+  const buf = samples.get(name);
+  if (!buf) return !missing.has(name);
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+  src.playbackRate.value = o.rate ?? 1;
+  const g = ctx.createGain();
+  g.gain.value = o.gain ?? 0.8;
+  src.connect(g);
+  route(g, o);
+  src.start(ctx.currentTime + (o.when ?? 0));
+  return true;
 }
 
 export function soundOn() {
@@ -152,19 +204,41 @@ function bell(freq: number, dur: number, gain: number, o: Out = {}) {
 }
 
 export const sfx = {
+  /** The bill sheet comes out */
+  sheet: () => void sample("paper", { gain: 0.7 }),
+  /** The APPROVED stamp */
+  approved: () => void sample("stamp-approved", { gain: 1, verb: 0.2 }),
+  /** You got in: the club's band hits a sting */
+  gotIn: () => void sample("win", { gain: 0.75, verb: 0.15 }),
+  /** Out of messages and turned away */
+  turnedAway: () => void sample("turned-away", { gain: 0.7 }),
+  /** The vault paid: chips land, then the steel-drum sting */
+  paid: () => {
+    sample("paid-chips", { gain: 0.9 });
+    sample("paid", { gain: 0.75, when: 0.35 });
+  },
+  /** Coins in the hand: Collect */
+  coins: () => void sample("coins", { gain: 0.8 }),
+  /** A toggle or small tap */
+  tap: () => void sample("tap", { gain: 0.5 }),
+  /** Something went wrong */
+  error: () => void sample("error", { gain: 0.6 }),
   /** Spending a message: a ticket punch */
   chip: () => {
+    if (sample("chip", { gain: 0.7 })) return;
     tone(2200, 0.012, "square", 0.05);
     tone(190, 0.08, "sine", 0.3, { slide: 90 });
     hiss(0.05, 0.12, "bandpass", 3000, { q: 2 });
   },
   /** A bill slid across to the bouncer: paper on wood */
   paper: () => {
+    if (sample("hand-over", { verb: 0.1 })) return;
     hiss(0.42, 0.14, "bandpass", 900, { sweep: 3600, q: 1.4, attack: 0.08, verb: 0.15 });
     hiss(0.12, 0.08, "highpass", 5000, { when: 0.32 });
   },
   /** The bouncer's pen down the list */
   scratch: () => {
+    if (sample("pen", { gain: 0.6 })) return;
     for (let i = 0; i < 6; i++) hiss(0.045, 0.07, "bandpass", 3800 + Math.random() * 900, { q: 6, when: i * 0.1 + Math.random() * 0.03 });
   },
   heartbeat: () => {
@@ -173,6 +247,7 @@ export const sfx = {
   },
   /** REFUSED: the stamp comes down */
   thud: () => {
+    if (sample("stamp-refused", { gain: 1, verb: 0.2 })) return;
     tone(1600, 0.01, "square", 0.08);
     tone(95, 0.3, "sine", 0.7, { slide: 38, verb: 0.25 });
     hiss(0.08, 0.35, "bandpass", 900, { q: 0.8 });
@@ -187,6 +262,7 @@ export const sfx = {
   },
   /** A heavy door on old hinges */
   creak: () => {
+    if (sample("door-open", { verb: 0.25 })) return;
     if (!enabled || !ensure() || !ctx) return;
     const t = ctx.currentTime;
     const o = ctx.createOscillator();
@@ -229,7 +305,7 @@ export const sfx = {
   /** Someone in the queue starts talking */
   pop: () => tone(520, 0.09, "sine", 0.12, { slide: 1100 }),
   /** A key on the phone keyboard */
-  key: () => hiss(0.018, 0.05, "bandpass", 2400 + Math.random() * 1600, { q: 3 }),
+  key: () => sample("key", { gain: 0.35, rate: 0.95 + Math.random() * 0.1 }) || hiss(0.018, 0.05, "bandpass", 2400 + Math.random() * 1600, { q: 3 }),
   /** Writing a note down */
   note: () => {
     hiss(0.07, 0.06, "bandpass", 4200, { q: 5 });

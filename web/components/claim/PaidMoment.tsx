@@ -7,6 +7,8 @@ import { readLastShare, writeLastShare } from "@/lib/last-share";
 import type { TokenRead } from "@/lib/page-vault";
 import { shareText, squares, type Square } from "@/lib/share-text";
 import { formatAtomic } from "@/lib/units";
+import { setSound, sfx } from "@/lib/sfx";
+import { readSoundPref } from "@/lib/sound-pref";
 
 /**
  * The cut has landed. A PAID stamp comes down, the amount counts up, and the player can share it and go to
@@ -38,6 +40,13 @@ function Paid({ token, atomic, sign, guard, vaultId, storageName, doorHref, reve
     }
     setLoaded(true);
   }, [storageName, vaultId]);
+
+  // The player pressed Claim on this page, so the browser lets the sound play when the payment lands.
+  useEffect(() => {
+    if (readSoundPref() !== "on") return;
+    setSound(true);
+    sfx.paid();
+  }, []);
 
   useEffect(() => {
     if (!amount || !loaded) return;

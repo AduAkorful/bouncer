@@ -748,6 +748,7 @@ export default function PlayFrame({
         setLeft(leftRef.current);
       }
       say(transcriptRef.current.at(-1)?.guard ?? OPENERS[gate]);
+      sfx.error();
       setNotice(guardNotice(error));
       setBusy(false);
       return;
@@ -770,6 +771,7 @@ export default function PlayFrame({
       if (leftRef.current === 0) {
         const doorGate = gate === "door";
         setTimeout(() => {
+          if (doorGate) sfx.turnedAway();
           setEnd(doorGate ? "out" : "door");
           setStage("end");
         }, Math.min(6000, 1800 + reply.length * 35));
@@ -840,6 +842,7 @@ export default function PlayFrame({
       if (leftRef.current === 0) {
         setEnd(gate === "door" ? "out" : "door");
         if (gate === "office") say("That's all. Out you go.");
+        if (gate === "door") setTimeout(sfx.turnedAway, 900);
         setTimeout(() => setStage("end"), 900);
       }
     }, 700);
@@ -849,9 +852,11 @@ export default function PlayFrame({
     setStage("play");
     say("Approved.");
     award(100, "you got in");
-    sfx.clink();
+    sfx.approved();
+    setTimeout(sfx.clink, 250);
     setTimeout(sfx.creak, 500);
     setTimeout(sfx.whoosh, 650);
+    setTimeout(sfx.gotIn, 950);
     setTimeout(() => music.open(), 700);
     const s = scene.current;
     anim(() => {
@@ -908,6 +913,7 @@ export default function PlayFrame({
     muted.current = !on;
     writeSoundPref(on);
     setSound(on);
+    if (on) sfx.tap();
     setSoundOn(on);
     if (on) music.start(gate === "door" ? "street" : "office");
   }
@@ -1129,7 +1135,7 @@ export default function PlayFrame({
               </button>
               <button
                 disabled={busy || left === 0}
-                onClick={() => setSheet("bill")}
+                onClick={() => { sfx.sheet(); setSheet("bill"); }}
                 className="rounded-2xl bg-chalk py-3 font-sign text-ink shadow-[0_5px_0_#9c9483] transition active:translate-y-1 active:shadow-[0_2px_0_#9c9483] disabled:opacity-40"
               >
                 Write a bill
