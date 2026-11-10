@@ -146,6 +146,15 @@ test("/crack defaults to the env vault and takes a vault id", async () => {
   assert.equal((await app.request("/crack", post("/crack", { raid_id: "r1", vault_id: "bad id!" }))).status, 400);
 });
 
+test("/crack reads a past round by number and refuses one the vault has not reached", async () => {
+  const { deps, views } = testDeps();
+  const app = createApp(deps);
+  assert.equal((await app.request("/crack", post("/crack", { raid_id: "r1", vault_id: "anchor", round: "1" }))).status, 200);
+  assert.ok(views.calls.some((c) => c.method === "get_crack" && c.args.round === 1));
+  assert.equal((await app.request("/crack", post("/crack", { raid_id: "r1", vault_id: "anchor", round: "999999" }))).status, 400);
+  assert.equal((await app.request("/crack", post("/crack", { raid_id: "r1", vault_id: "anchor", round: "0" }))).status, 400);
+});
+
 test("account creation and signing are limited per address", async () => {
   const app = createApp(testDeps().deps);
   let last = 200;

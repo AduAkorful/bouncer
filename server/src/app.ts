@@ -130,8 +130,12 @@ export function createApp(deps: Deps) {
     if (typeof raidId !== "string" || raidId.length === 0 || !validVaultId(vaultId)) return c.json({ ok: false, error: "crack" }, 400);
     const door = await readDoor(deps.rpc, env.relay.contractId, vaultId);
     if (!door.ok) return c.json(door, 502);
-    const round = Number(door.vault.round);
-    if (!Number.isSafeInteger(round)) return c.json({ ok: false, error: "crack" }, 502);
+    const current = Number(door.vault.round);
+    if (!Number.isSafeInteger(current)) return c.json({ ok: false, error: "crack" }, 502);
+    // A past round can be asked for by number; a round the vault has not reached is refused.
+    const asked = body?.round === undefined ? current : Number(body.round);
+    if (!Number.isSafeInteger(asked) || asked < 1 || asked > current) return c.json({ ok: false, error: "crack" }, 400);
+    const round = asked;
     const crackResult = await deps.rpc(viewRequest(env.relay.contractId, "get_crack", { vault_id: vaultId, round, raid_id: raidId }));
     if (!crackResult.ok) return c.json(crackResult, 502);
     const crack = parseCrack(crackResult.value);
