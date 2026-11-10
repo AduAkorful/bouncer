@@ -29,3 +29,11 @@ export function readLastShare(storageName: string): LastShare | null {
     return null;
   }
 }
+
+export function clearLastShare(storageName: string) {
+  try {
+    window.localStorage.removeItem(key(storageName));
+  } catch {
+    // Nothing to clear if the browser will not say.
+  }
+}

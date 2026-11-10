@@ -39,15 +39,16 @@ export function TonightRaid({ storageName, vaultId, round, playHref }: { storage
 export function SignedInLine() {
   const [line, setLine] = useState<string | null>(null);
   useEffect(() => {
-    const held = readHold();
-    if (!held) return;
-    held.fill(0);
     let live = true;
-    loadPlayerSession().then((result) => {
-      if (!live || !result.ok) return;
-      const { name, streak } = result.session.player;
-      setLine(`Signed in as ${name}${streak > 0 ? ` · ${streak}-day streak` : ""}`);
-    }).catch(() => undefined);
+    void readHold().then((held) => {
+      if (!held || !live) return;
+      held.fill(0);
+      loadPlayerSession().then((result) => {
+        if (!live || !result.ok) return;
+        const { name, streak } = result.session.player;
+        setLine(`Signed in as ${name}${streak > 0 ? ` · ${streak}-day streak` : ""}`);
+      }).catch(() => undefined);
+    });
     return () => { live = false; };
   }, []);
   if (!line) return null;

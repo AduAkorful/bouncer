@@ -32,6 +32,8 @@ export type StoredRaid = {
   proof?: ProofBundle | null;
   /** A guard call sent and not yet answered. A reload sends it again, and the guard replies from its store. */
   pending?: { body: Record<string, unknown>; bill: boolean; playerText: string } | null;
+  /** One entry per message the guard counted: chat is "ask", a bill is "refused" or "approved". The ending reads it. */
+  outcomes?: ("ask" | "refused" | "approved")[];
   /** The vault has a crack for this raid, even when the transaction that recorded it was not seen here. */
   recorded?: boolean;
   /** Why the vault refused the held verdict. Set, the verdict is not sent again on its own. */
@@ -223,4 +225,38 @@ export async function saveTranscript(name: string, vault: string, round: string,
     tx.onerror = () => reject(tx.error);
     tx.onabort = () => reject(tx.error);
   });
+}
+
+/**
+ * Log out. Raids, their transcripts and notes leave this browser. A win the vault has not recorded stays, with its
+ * signed verdict, so logging out can never lose a payout that was earned; the passkey rebuilds the rest.
+ * Returns how many records were kept for that reason.
+ */
+export async function clearForLogout(storageName: string): Promise<number> {
+  const name = storageName.trim();
+  if (!name) return 0;
+  let kept = 0;
+  try {
+    const db = await openDb(name);
+    const records = await allRecords(db);
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction("raids", "readwrite");
+      const store = tx.objectStore("raids");
+      for (const { key, value } of records) {
+        const raid = value as Partial<StoredRaid> | null;
+        const holdsUnrecordedWin = Boolean(raid && typeof raid === "object" && !Array.isArray(raid) && raid.verdict && raid.signature && raid.recorded === false && !raid.refused);
+        if (holdsUnrecordedWin) {
+          kept += 1;
+          continue;
+        }
+        store.delete(key);
+      }
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    });
+  } catch {
+    // Nothing more can be cleared if storage cannot be opened.
+  }
+  return kept;
 }

@@ -8,15 +8,19 @@ export function ProfileIdentity({ storageName, heading = "Your profile" }: { sto
   const [state, setState] = useState<{ account: string | null; error: boolean; signedIn: boolean } | null>(null);
 
   useEffect(() => {
-    try {
-      if (!storageName.trim()) throw new Error("storage unavailable");
-      const raw = window.localStorage.getItem(`${storageName.trim()}.payout-account`);
-      const held = readHold();
-      held?.fill(0);
-      setState({ account: raw ? testnetAccountId(raw) : null, error: false, signedIn: Boolean(held) });
-    } catch {
-      setState({ account: null, error: true, signedIn: false });
-    }
+    let live = true;
+    void (async () => {
+      try {
+        if (!storageName.trim()) throw new Error("storage unavailable");
+        const raw = window.localStorage.getItem(`${storageName.trim()}.payout-account`);
+        const held = await readHold();
+        held?.fill(0);
+        if (live) setState({ account: raw ? testnetAccountId(raw) : null, error: false, signedIn: Boolean(held) });
+      } catch {
+        if (live) setState({ account: null, error: true, signedIn: false });
+      }
+    })();
+    return () => { live = false; };
   }, [storageName]);
 
   return (

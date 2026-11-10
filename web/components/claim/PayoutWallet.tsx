@@ -100,6 +100,8 @@ export function PayoutWallet({
       <p className="mt-3 text-sm text-chalk/70">
         {balanceError ? balanceError : shown ? `${shown} ${symbol ?? ""}${opened ? "" : ". This account is not on testnet yet."}`.trim() : "Reading the balance."}
       </p>
+      {/* There is nothing to move until the account holds something, so the section waits for a balance. */}
+      {balance !== null && balance > 0n ? (
       <details className="mt-4 group">
         <summary className="chalk-focus inline-flex min-h-11 cursor-pointer items-center text-sm text-chalk/80 underline decoration-white/20">Move your winnings</summary>
         <p className="mt-2 text-sm text-chalk/60">Send the token to another testnet account, or take this account to another wallet. You do not need either to be paid.</p>
@@ -136,6 +138,7 @@ export function PayoutWallet({
         </button>
       </form>
       </details>
+      ) : null}
       {note ? <p role="status" className="mt-3 text-sm text-chalk/70">{note}</p> : null}
       {payment ? (
         <a href={payment} target="_blank" rel="noreferrer" className="chalk-focus mt-3 inline-flex min-h-11 items-center text-sm text-chalk underline decoration-white/20">

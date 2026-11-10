@@ -12,7 +12,7 @@ import { accessMessage, accessOnAccount, testnetAccountId, writePayoutAccount } 
 type Step = "create" | "signing" | "add" | "done" | "error";
 
 async function keepPlayer(ikm: Uint8Array): Promise<{ secrets: DeviceSecrets } | { error: string }> {
-  holdIkm(ikm);
+  await holdIkm(ikm);
   const secrets = await deriveSecrets(ikm, "account", "0");
   if ("error" in secrets) return { error: "This device cannot keep a key in the passkey." };
   const session = await postPlayerSession(secrets);
@@ -45,11 +45,14 @@ export function PasskeySheet({
   // A browser that is already signed in is sent on, not offered a second passkey (a second identity).
   const [signedIn, setSignedIn] = useState(false);
   useEffect(() => {
-    const held = readHold();
-    if (held) {
-      held.fill(0);
-      setSignedIn(true);
-    }
+    let live = true;
+    void readHold().then((held) => {
+      if (held && live) {
+        held.fill(0);
+        setSignedIn(true);
+      }
+    });
+    return () => { live = false; };
   }, []);
   const nextHref = next === "profile" ? "/profile" : doorPaths(door)[next];
   useEffect(() => () => {

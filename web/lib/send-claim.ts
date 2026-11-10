@@ -1,12 +1,12 @@
-import { Account, actions, KeyPair, PublicKey, type KeyPairString } from "near-api-js";
+import { Account, actions, KeyPair, KeyPairSigner, PublicKey, type KeyPairString } from "near-api-js";
 import { apiPost, apiPostOnce } from "./api";
 import { claimMessage } from "./claim";
+import { CLAIM_GAS, CLAIM_TTL_BLOCKS, claimDelegate } from "./claim-relay";
 import { deriveSecrets } from "./device-pass";
 import { unlockHeld } from "./player-hold";
 import { accessMessage, accessOnAccount, testnetAccountId } from "./imported-account";
 import { reasonOf } from "./vault-errors";
 
-const CLAIM_GAS = 300_000_000_000_000n;
 const SPONSOR_ACCOUNT = "This passkey's account sponsors this door, and a door's sponsor cannot be paid from it. Nothing was sent.";
 
 export async function sendClaim(input: {
@@ -38,30 +38,40 @@ export async function sendClaim(input: {
       if (check !== "full") return { ok: false, error: accessMessage(check) };
     }
     const signature = KeyPair.fromString(secrets.claimSecret).sign(claimMessage(input.vaultId, BigInt(input.round), input.raidId, accountId));
+    const args = {
+      vault_id: input.vaultId,
+      round: Number(input.round),
+      raid_id: input.raidId,
+      payout: accountId,
+      claim_sig: [...signature.signature],
+    };
+    // The player signs; the relay sends it and pays the gas, so a new account never has to hold NEAR for it.
     const player = new Account(accountId, input.rpcUrl, secrets.accountSecret);
-    const outcome = await player.signAndSendTransaction({
+    const signer = KeyPairSigner.fromSecretKey(secrets.accountSecret);
+    const publicKey = await signer.getPublicKey();
+    const draft = await player.createMetaTransaction({
       receiverId: input.contractId,
-      waitUntil: "FINAL",
-      actions: [
-        actions.functionCall(
-          "claim",
-          {
-            vault_id: input.vaultId,
-            round: Number(input.round),
-            raid_id: input.raidId,
-            payout: accountId,
-            claim_sig: [...signature.signature],
-          },
-          CLAIM_GAS,
-          0n,
-        ),
-      ],
+      actions: [actions.functionCall("claim", args, CLAIM_GAS, 0n)],
+      blockHeightTtl: CLAIM_TTL_BLOCKS,
+      publicKey,
     });
-    const hash = outcome.transaction?.hash;
-    if (!hash) return { ok: false, error: "The claim was not sent." };
-    if (outcome.status && typeof outcome.status === "object" && "Failure" in outcome.status) {
-      return { ok: false, error: reasonOf(outcome.status) };
-    }
+    const delegate = claimDelegate({ senderId: accountId, receiverId: input.contractId, publicKey, nonce: draft.nonce, maxBlockHeight: draft.maxBlockHeight, args });
+    const { signedDelegate } = await signer.signDelegateAction(delegate);
+    const data = signedDelegate.signature.ed25519Signature?.data;
+    if (!data) return { ok: false, error: "The claim was not sent." };
+    const sent = await apiPostOnce("/passkey/claim", {
+      senderId: accountId,
+      publicKey: publicKey.toString(),
+      nonce: draft.nonce.toString(),
+      maxBlockHeight: draft.maxBlockHeight.toString(),
+      args,
+      signature: btoa(String.fromCharCode(...data)),
+    });
+    if (!sent.ok) return { ok: false, error: "The claim could not be sent. Nothing was paid. Try again in a minute." };
+    const reply = sent.body as { ok?: boolean; hash?: string; reason?: string } | null;
+    if (sent.status === 422) return { ok: false, error: typeof reply?.reason === "string" ? reply.reason : reasonOf(null) };
+    if (!reply?.ok || typeof reply.hash !== "string") return { ok: false, error: "The claim could not be sent. Nothing was paid. Try again in a minute." };
+    const hash = reply.hash;
     return { ok: true, transactionHash: hash, accountId };
   } catch (error) {
     return { ok: false, error: shortError(error) };
@@ -131,9 +141,9 @@ async function deviceSecrets(
   return secrets;
 }
 
+/** A node error carries account ids and raw yocto amounts. None of it reaches the screen. */
 function shortError(error: unknown): string {
-  const message = error instanceof Error ? error.message : "The claim was not sent.";
+  const message = error instanceof Error ? error.message : "";
   if (message.includes("sponsor cannot claim")) return reasonOf(message);
-  if (message.length > 180 || message.includes("ed25519:")) return "The claim was not sent.";
-  return message;
+  return "The claim was not sent. Nothing was paid. Try again in a minute.";
 }

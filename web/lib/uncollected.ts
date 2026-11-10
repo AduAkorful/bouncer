@@ -13,7 +13,7 @@ const PAYABLE = new Set(["Reserved", "Settled", "Failed"]);
  * browser that is not signed in, and no passkey prompt is shown: the sign-in already on this browser is used.
  */
 export async function uncollected(rounds: { vaultId: string; round: string }[]): Promise<Uncollected[]> {
-  const held = readHold();
+  const held = await readHold();
   if (!held) return [];
   const found: Uncollected[] = [];
   try {

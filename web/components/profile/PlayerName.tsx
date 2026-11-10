@@ -5,6 +5,8 @@ import { loadPlayerSession, rollPlayerName, savePlayerName, type PlayerSession }
 import { deriveSecrets, unlockDevice } from "@/lib/device-pass";
 import { clearHold, holdIkm, readHold, unlockHeld } from "@/lib/player-hold";
 import { writePayoutAccount } from "@/lib/imported-account";
+import { clearLastShare } from "@/lib/last-share";
+import { clearForLogout } from "@/lib/session-store";
 import { publishNights } from "@/lib/session-nights";
 
 /** The name, streak, and nights come back with the passkey. This browser is not the record. */
@@ -25,33 +27,40 @@ export function PlayerName({ initial = null, storageName = "" }: { initial?: Pla
   useEffect(() => {
     if (initial) return;
     let live = true;
-    if (!readHold()) {
-      setChecked(true);
-      return;
-    }
-    setSignedIn(true);
-    setBusy(true);
-    loadPlayerSession().then((result) => {
+    void readHold().then((held) => {
       if (!live) return;
-      setBusy(false);
-      setChecked(true);
-      if (!result.ok) {
-        setError(result.error);
+      if (!held) {
+        setChecked(true);
         return;
       }
-      setSession(result.session);
-      setDraft(result.session.player.name);
-    }).catch(() => {
-      if (!live) return;
-      setBusy(false);
-      setChecked(true);
-      setError("The player record could not be read.");
+      held.fill(0);
+      setSignedIn(true);
+      setBusy(true);
+      loadPlayerSession().then((result) => {
+        if (!live) return;
+        setBusy(false);
+        setChecked(true);
+        if (!result.ok) {
+          setError(result.error);
+          return;
+        }
+        setSession(result.session);
+        setDraft(result.session.player.name);
+      }).catch(() => {
+        if (!live) return;
+        setBusy(false);
+        setChecked(true);
+        setError("The player record could not be read.");
+      });
     });
     return () => { live = false; };
   }, [initial]);
 
-  function logout() {
-    clearHold();
+  async function logout() {
+    await clearHold();
+    // The raids and the last share on this browser go with the sign-in. A win the vault has not recorded stays.
+    await clearForLogout(storageName);
+    clearLastShare(storageName);
     // The saved payout account goes too, so the next person on this browser does not see its key or Send.
     writePayoutAccount(window.localStorage, storageName, null);
     setSession(null);
@@ -80,7 +89,7 @@ export function PlayerName({ initial = null, storageName = "" }: { initial?: Pla
       setError(unlocked.error);
       return;
     }
-    holdIkm(unlocked.ikm);
+    await holdIkm(unlocked.ikm);
     unlocked.ikm.fill(0);
     const result = await loadPlayerSession();
     setBusy(false);
@@ -248,7 +257,7 @@ function LogoutDialog({ onStay, onLogout }: { onStay: () => void; onLogout: () =
         onClick={(event) => event.stopPropagation()}
       >
         <h2 id="logout-title" className="font-sign text-2xl">Log out?</h2>
-        <p id="logout-note" className="mt-2 text-sm">This browser forgets the sign-in and the saved payout account. Your passkey, your name, and your account stay. Signing in again brings them back.</p>
+        <p id="logout-note" className="mt-2 text-sm">This browser forgets the sign-in, the saved payout account, and the raids and share card stored here. A win that has not been sent to the vault yet is kept. Your passkey, your name, and your account stay. Signing in again brings them back.</p>
         <div className="mt-4 flex flex-wrap gap-2">
           <button ref={stayRef} type="button" onClick={onStay} className="chalk-focus min-h-11 rounded-2xl bg-on-paper px-4 py-2 text-sm text-paper">Stay signed in</button>
           <button ref={leaveRef} type="button" onClick={onLogout} className="chalk-focus min-h-11 rounded-2xl border border-rule px-4 py-2 text-sm">Log out</button>

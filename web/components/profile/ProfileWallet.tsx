@@ -17,13 +17,14 @@ export function useWalletAccount(storageName: string): { status: "reading" | "ou
   const [accountId, setAccountId] = useState<string | null>(null);
 
   useEffect(() => {
-    const ikm = readHold();
-    if (!ikm) {
-      setStatus("out");
-      return;
-    }
     let live = true;
     (async () => {
+      const ikm = await readHold();
+      if (!live) return;
+      if (!ikm) {
+        setStatus("out");
+        return;
+      }
       const saved = readPayoutAccount(window.localStorage, storageName);
       const secrets = await deriveSecrets(ikm, "account", "0");
       ikm.fill(0);

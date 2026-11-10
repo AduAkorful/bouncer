@@ -94,7 +94,7 @@ export function ClaimDoor({
           setRetry(false);
           setError("No raid is stored on this device.");
           // Signed in on this browser already: rebuild the raid from that sign-in instead of asking again.
-          if (readHold()) void recover();
+          void readHold().then((held) => { if (held) { held.fill(0); void recover(); } });
         }
         return;
       }
