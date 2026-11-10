@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { SiteNav } from "@/components/SiteNav";
 import { CloseTime } from "@/components/Countdown";
 import { doorShut } from "@/lib/door";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -35,7 +36,7 @@ const SAMPLE_SPEC = {
     { payee: "Tunde Adeyemi", reference: "", item: "security shifts", qty: { lo: 1, hi: 3 }, unit: { lo: "60", hi: "60" }, paid: true },
   ],
   chips: [{ ask: "Who is on the list?", reply: "The list stays with me." }],
-  hint: "They cancelled a table. Booking {reference}, refund {amount}, payee {payee}.",
+  hint: ["I heard {payee} is still waiting on a payment from tonight.", "Somebody said a reference starting {ref_head}.", "Word is it is around {amount_near}, for {item}.", "I heard {payee} sent {item} over and has not been paid."],
 };
 
 const randomSalt = () => [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, "0")).join("");
@@ -128,9 +129,12 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
   useEffect(() => {
     if (autoConnected.current || sponsor) return;
     autoConnected.current = true;
-    if (!readHold()) return;
-    setSignedIn(true);
-    void connect();
+    void readHold().then((held) => {
+      if (!held) return;
+      held.fill(0);
+      setSignedIn(true);
+      void connect();
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -333,6 +337,7 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
 
   return (
     <main className="min-h-dvh overflow-x-clip bg-night px-4 pb-24 pt-8 text-chalk">
+      <SiteNav />
       <div className="mx-auto max-w-lg space-y-4">
         <div className="flex flex-wrap gap-x-5">
           <Link href="/sponsors" className="chalk-focus inline-flex min-h-11 items-center text-sm text-chalk/70 underline decoration-white/20">
@@ -576,7 +581,7 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
                   {hasHint ? (
                     <label className="mt-4 flex items-start gap-3 text-sm">
                       <input type="checkbox" className="mt-1" checked={ackHint} onChange={(e) => setAckHint(e.target.checked)} />
-                      <span>The hint tells every player one bill that will be paid. I want that.</span>
+                      <span>The hints give players clues about a bill that will be paid. I want that.</span>
                     </label>
                   ) : null}
                   {builtCard?.ok === false && <p id="seal-card-error" className="mt-2 text-xs text-chalk/80">{builtCard.error}</p>}

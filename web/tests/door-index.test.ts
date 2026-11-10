@@ -32,7 +32,7 @@ test("listed doors keep creation order and their own card", async () => {
   if (index.ok) {
     assert.equal(index.truncated, false);
     assert.deepEqual(index.doors.map((door) => [door.id, door.href, door.sign, door.name, door.line, door.sponsored]), [
-      ["velvet-1", "/v/velvet-1", "velvet-1", "velvet-1", "Closed", false],
+      ["velvet-1", "/v/velvet-1", "velvet-1", "velvet-1", "Not opened yet", false],
       ["qa-coast-05", "/v/qa-coast-05", "COASTLINE NIGHT", "Kwame", "Open", true],
     ]);
   }
@@ -108,4 +108,16 @@ test("the biggest open pot is the front door, and open doors are listed first", 
   const unread = { ...shut, id: "unread", read: false };
   assert.deepEqual(doorCandidates([unread, shut, small, big]).map((door) => door.id), ["big", "small", "shut"]);
   assert.equal(doorCandidates([unread, shut, small, big])[0].id, frontDoor([unread, shut, small, big])?.id);
+});
+
+test("a door that ran a round and shut says closed; a full round is listed as taken", async () => {
+  const index = await readDoorIndex(rpcFor({
+    "list:0": ["ran", "full"],
+    "get_vault:ran": row({ open: false, opens_at: "5", commitment: key }),
+    "get_vault:full": row({ crack_count: 1, max_cracks: 1 }),
+  }), "vault.test", 0);
+  assert.ok(index.ok);
+  if (index.ok) {
+    assert.deepEqual(index.doors.map((door) => [door.id, door.line, door.shut]), [["ran", "Closed", true], ["full", "Taken tonight", true]]);
+  }
 });

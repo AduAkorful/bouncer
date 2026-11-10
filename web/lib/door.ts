@@ -33,7 +33,13 @@ export function doorShut(vault: Pick<VaultView, "open" | "closesAt">, nowMs: num
   return nowMs >= ms;
 }
 
+/** Every crack the round allows has been recorded. The vault refuses another, so the door must not sell one. */
+export function doorFull(vault: Pick<VaultView, "open" | "crackCount" | "maxCracks">): boolean {
+  return vault.open && vault.maxCracks > 0 && vault.crackCount >= vault.maxCracks;
+}
+
 export function playerDetail(error: string): string {
+  if (error === "full") return "Tonight's cut has been taken. Nothing is left to win.";
   if (HIDDEN.has(error)) return "The door did not answer.";
   return error;
 }
@@ -47,6 +53,13 @@ export function playStop(detail: string): { title: string; detail: string } {
 /** A closed door has no stored next opening. The other-doors list is the place to look. */
 export const CLOSED_DOOR_NOTE = "This door has no round open. Its sponsor opens the next one. Other doors are listed below.";
 
+/** Play on a door whose round has no crack left. */
+export const FULL_QUEUE = {
+  kicker: "Taken",
+  title: "Tonight's cut is taken.",
+  detail: "Someone already got in tonight, so this round has nothing left to win. The next round opens when its sponsor opens it. Other doors are listed below.",
+};
+
 /** Closed play. No retry: the queue is shut, and the door page lists any other door. */
 export const CLOSED_QUEUE = {
   kicker: "Closed",
@@ -54,7 +67,7 @@ export const CLOSED_QUEUE = {
   detail: "This door has no round open tonight. Its sponsor opens the next one. The other doors are listed below.",
 };
 
-export const COMMITMENT_LINE = "Tonight's ledger committed before the door opened";
+export const COMMITMENT_LINE = "Ledger committed before the door opened";
 export const NO_COMMITMENT = "No commitment is stored on this vault.";
 
 /** A stored hash stays visible after the door shuts. A missing hash stays missing. */

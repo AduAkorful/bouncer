@@ -2,7 +2,7 @@
 
 type Range = { lo: string | number; hi: string | number };
 type Line = { payee: string; reference: string; item: string; qty: Range; unit: Range; paid: boolean };
-type Spec = { lines?: Line[]; hint?: string; guard?: { voice?: string } } & Record<string, unknown>;
+type Spec = { lines?: Line[]; hint?: string | string[]; guard?: { voice?: string } } & Record<string, unknown>;
 
 const field = "w-full rounded-xl border border-white/15 bg-night px-2.5 py-2 text-sm";
 const small = "block text-xs text-chalk/70";
@@ -67,10 +67,12 @@ export function SpecForm({ text, onChange, currency }: { text: string; onChange:
         Add a bill
       </button>
       <label className={small}>
-        Street hint (optional). It can use {"{payee} {reference} {amount}"}.
-        <textarea className={field} rows={2} value={typeof spec.hint === "string" ? spec.hint : ""} onChange={(e) => {
+        Street hints (optional), one per line, up to 6. Each player hears one of them, so the street is not the same for everyone. They can use {"{payee} {item} {ref_head} {amount_near}"}, which give a clue. {"{reference}"} and {"{amount}"} give the exact bill, and using both hands players the whole of it.
+        <textarea className={field} rows={4} value={Array.isArray(spec.hint) ? spec.hint.join("\n") : typeof spec.hint === "string" ? spec.hint : ""} onChange={(e) => {
           const next: Spec = { ...spec };
-          if (e.target.value) next.hint = e.target.value;
+          const lines = e.target.value.split("\n").filter((line) => line.trim().length > 0).slice(0, 6);
+          if (lines.length > 1) next.hint = lines;
+          else if (lines.length === 1) next.hint = lines[0];
           else delete next.hint;
           write(next);
         }} />

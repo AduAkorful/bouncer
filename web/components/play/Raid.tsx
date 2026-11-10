@@ -203,7 +203,7 @@ export default function PlayFrame({
       }
       if (ready && "playerId" in ready) {
         // A raid on this browser is not reopened for whoever is here: after a log out, the passkey has to match it.
-        const signedIn = readHold();
+        const signedIn = await readHold();
         if (!signedIn) {
           parked.current = ready;
           setWait("key");
@@ -213,7 +213,7 @@ export default function PlayFrame({
         await adoptStored(ready, () => cancel);
         return;
       }
-      const held = readHold();
+      const held = await readHold();
       if (held) {
         held.fill(0);
         setWait("opening");
@@ -226,6 +226,17 @@ export default function PlayFrame({
       cancel = true;
     };
   }, [storageName, vaultId, vault.round]);
+
+  // When the last message has been answered and read, the raid ends. This does not depend on the reply's own timer,
+  // so a sixth message that was chat still ends the raid without a reload.
+  useEffect(() => {
+    if (confirmedLeft !== 0 || busy || stage !== "play" || !session || session.pending || session.signature || heldVerdict(session)) return;
+    const timer = setTimeout(() => {
+      setEnd("out");
+      setStage("end");
+    }, 2500);
+    return () => clearTimeout(timer);
+  }, [confirmedLeft, busy, stage, session]);
 
   async function adoptStored(ready: StoredRaid, cancelled: () => boolean = () => false) {
     try {
@@ -243,6 +254,13 @@ export default function PlayFrame({
     // A raid stored before the count was kept falls back to the conversation on this device: one turn per message or bill.
     if (typeof ready.used === "number") countFrom(ready.used);
     else if (transcriptRef.current.length > 0) countFrom(transcriptRef.current.length);
+    // The squares come back as they were. A raid stored before they were kept falls back to one per message.
+    const spent = typeof ready.used === "number" ? ready.used : transcriptRef.current.length;
+    const won = Boolean(ready.verdict) && (ready.recorded === true || Boolean(ready.transactionHash));
+    const squares: Decision[] = ready.outcomes && ready.outcomes.length > 0
+      ? ready.outcomes
+      : Array.from({ length: Math.min(messageBudget, spent) }, (_, i) => (won && i === spent - 1 ? "approved" : "ask"));
+    setGrid(squares);
     if (ready.pending) {
       const pending = ready.pending;
       setYou(pending.playerText);
@@ -252,6 +270,13 @@ export default function PlayFrame({
       return;
     }
     const held = heldVerdict(ready);
+    // A raid the vault recorded as a win reopens on the Got-in ending, the same one seen when the win happened.
+    if (!held && won) {
+      setSignedAmount(verdictAmount(ready.verdict as Record<string, unknown>));
+      setEnd("door");
+      setStage("end");
+      return;
+    }
     // A raid that already used every message reopens on its ending, not on a dead desk.
     if (!held && leftRef.current === 0) {
       setEnd("out");
@@ -583,13 +608,14 @@ export default function PlayFrame({
   }
 
   /** An unanswered call goes first. A new message on the same blob would be refused as a replay. */
-  function resendPending(): boolean {
+  function resendPending(newBill = false): boolean {
     const current = sessionRef.current;
     if (!current?.pending) return false;
     setBusy(true);
     setSheet(null);
     setYou(current.pending.playerText);
-    setNotice("Sending your last message again…");
+    // The new bill is not lost silently: it stays in the sheet's draft, and the player is told why it did not go.
+    setNotice(newBill ? "Sending your last message again first. Your bill is kept. Write it again when this has gone." : "Sending your last message again…");
     void guardCall(current, current.pending.body, current.pending.bill, current.pending.playerText);
     return true;
   }
@@ -621,7 +647,7 @@ export default function PlayFrame({
   async function handOver(b: DraftBill) {
     const current = sessionRef.current;
     if (busy || stage !== "play" || leftRef.current === 0 || !current?.blob) return;
-    if (resendPending()) return;
+    if (resendPending(true)) return;
     const resolved = tokenLabel ?? await token;
     if (sessionRef.current !== current || stage !== "play" || leftRef.current === 0) return;
     if (!resolved.ok) {
@@ -677,8 +703,12 @@ export default function PlayFrame({
   function applyGuard(answered: StoredRaid, payload: Record<string, unknown>, bill: boolean, playerText: string) {
     setNotice(null);
     // The guard's count is saved with the raid, so a reload shows the messages that are really left.
-    const current = typeof payload.used === "number" ? { ...answered, used: payload.used } : answered;
+    let current = typeof payload.used === "number" ? { ...answered, used: payload.used } : answered;
     if (payload.ok === true && typeof payload.reply === "string" && payload.reply && typeof payload.blob === "string") {
+      // One square per counted message, kept with the raid so a reload ends on the same count.
+      const entry: Decision = !bill ? "ask" : payload.signature && payload.verdict ? "approved" : "refused";
+      current = { ...current, outcomes: [...(answered.outcomes ?? []), entry] };
+      setGrid((g) => [...g, entry]);
       const history = [...transcriptRef.current, { player: playerText, guard: payload.reply }].slice(-12);
       transcriptRef.current = history;
       setTranscript(history);
@@ -716,7 +746,8 @@ export default function PlayFrame({
       const amount = verdictAmount(payload.verdict);
       setSignedAmount(amount);
       setSignedHex(typeof payload.signature === "string" ? payload.signature : null);
-      say(typeof payload.reply === "string" && payload.reply ? payload.reply : "Approved.");
+      // The signed verdict is the answer. The model's own words can read like a refusal, so they are not shown here.
+      say("Approved.");
       void recordHeld(gate === "door" ? "door" : "office");
       return;
     }
@@ -782,7 +813,6 @@ export default function PlayFrame({
   function refuse() {
     say("Not approved.");
     setRefused(true);
-    setGrid((g) => [...g, "refused"]);
     award(10, "bill sent");
     sfx.thud();
     const s = scene.current;
@@ -808,7 +838,6 @@ export default function PlayFrame({
   function approveDoor() {
     setStage("play");
     say("Approved.");
-    setGrid((g) => [...g, "approved"]);
     award(100, "you got in");
     sfx.clink();
     setTimeout(sfx.creak, 500);
@@ -842,7 +871,6 @@ export default function PlayFrame({
   function approveOffice() {
     setStage("play");
     say("…Fine. Approved.");
-    setGrid((g) => [...g, "approved"]);
     award(250, "cracked the office");
     sfx.dial();
     setTimeout(sfx.safe, 900);
@@ -886,12 +914,16 @@ export default function PlayFrame({
   }
   if (!session?.blob) {
     return (
-      <main className="flex h-dvh flex-col bg-night text-chalk">
+      <main className="flex min-h-dvh flex-col bg-night text-chalk">
+        <Suspense fallback={null}>
+          <TokenBridge token={token} onReady={setTokenLabel} />
+        </Suspense>
         <h1 className="sr-only">{signText} · the queue</h1>
         <header className="px-4 pt-4">
           <a href={doorHref} className="chalk-focus inline-flex min-h-11 items-center font-sign text-lg">BOUNCER</a>
         </header>
-        <div className="relative min-h-0 flex-1">
+        {/* A phone on its side keeps a street to look at: the gate scrolls instead of squeezing it away. */}
+        <div className="relative min-h-[45dvh] flex-1">
           <StreetScroll bar>
             <SceneLife className="absolute inset-0">
               <DoorScene sign={signText} look={doorLook} setting={setting} neighbors className="size-full" viewBox={STREET_VIEW} />
@@ -1356,16 +1388,17 @@ function EndScreen({
 function useStanding(): { streak: number; line: string | null } {
   const [standing, setStanding] = useState<{ streak: number; line: string | null }>({ streak: 0, line: null });
   useEffect(() => {
-    const held = readHold();
-    if (!held) return;
-    held.fill(0);
     let live = true;
-    loadPlayerSession().then((result) => {
-      if (!live || !result.ok) return;
-      const { streak } = result.session.player;
-      const place = result.session.place;
-      setStanding({ streak, line: `Tonight still counts${streak > 0 ? ` · ${streak}-day streak` : ""}${place ? ` · #${place} on the board` : ""}` });
-    }).catch(() => undefined);
+    void readHold().then((held) => {
+      if (!held || !live) return;
+      held.fill(0);
+      loadPlayerSession().then((result) => {
+        if (!live || !result.ok) return;
+        const { streak } = result.session.player;
+        const place = result.session.place;
+        setStanding({ streak, line: `Tonight still counts${streak > 0 ? ` · ${streak}-day streak` : ""}${place ? ` · #${place} on the board` : ""}` });
+      }).catch(() => undefined);
+    });
     return () => { live = false; };
   }, []);
   return standing;
@@ -1443,6 +1476,11 @@ function TurnedAway({ sign, guardName, grid, sq, line, rivals, token, closesAt, 
         <a href={first ? "/home" : doorHref} className="text-sm text-chalk/70 underline decoration-white/20">
           {first ? "All of tonight's doors" : "Back to the door"}
         </a>
+        {first ? null : (
+          <a href="/vip" className="text-sm text-chalk/70 underline decoration-white/20">
+            See every door
+          </a>
+        )}
       </div>
       <DemoBadge className="end-rest mt-4" />
     </>
@@ -1478,6 +1516,7 @@ async function postGuard(body: Record<string, unknown>): Promise<{ payload: Reco
 function guardNotice(error: string): string {
   if (error === "replay") return "This raid moved on in another tab or after a refresh. Reload the page to pick it up.";
   if (error === "spent") return "No messages left.";
+  if (error === "full") return "Tonight's cut has been taken. Nothing is left to win, and no message was used.";
   if (error === "model") return "The guard did not answer. No message was used. Try again.";
   if (error === "busy" || error.startsWith("The door is busy")) return "The door is busy. No message was used. Try again in a minute.";
   return "The door did not answer. No message was used. Try again.";

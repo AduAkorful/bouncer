@@ -73,6 +73,14 @@ export function parseVaultList(value: unknown): Parsed<string[]> {
 
 export type TokenMeta = { symbol: string; decimals: number };
 
+/**
+ * The test token calls itself USDC on chain. On testnet every amount says tUSDC, so a pot is never mistaken for
+ * real USDC. Another symbol is shown as the token gives it.
+ */
+export function testnetSymbol(symbol: string): string {
+  return symbol === "USDC" && process.env.NEXT_PUBLIC_NETWORK_ID === "testnet" ? "tUSDC" : symbol;
+}
+
 export function parseTokenMeta(value: unknown): Parsed<TokenMeta> {
   if (!value || typeof value !== "object") return { ok: false, error: "token" };
   const row = value as Record<string, unknown>;
@@ -80,7 +88,7 @@ export function parseTokenMeta(value: unknown): Parsed<TokenMeta> {
   if (typeof row.symbol !== "string" || row.symbol.length === 0 || !Number.isInteger(decimals) || (decimals as number) < 0 || (decimals as number) > 36) {
     return { ok: false, error: "token" };
   }
-  return { ok: true, value: { symbol: row.symbol, decimals: decimals as number } };
+  return { ok: true, value: { symbol: testnetSymbol(row.symbol), decimals: decimals as number } };
 }
 
 /** A token balance is a decimal string. */

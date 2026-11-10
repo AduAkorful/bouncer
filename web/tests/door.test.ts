@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CLOSED_DOOR_NOTE, CLOSED_QUEUE, COMMITMENT_LINE, NO_COMMITMENT, closesAtMs, commitmentFooter, doorShut, doorTitle, playableRaid, playerDetail, playGateStatus, playStop } from "../lib/door.ts";
+import { CLOSED_DOOR_NOTE, CLOSED_QUEUE, COMMITMENT_LINE, NO_COMMITMENT, closesAtMs, commitmentFooter, doorFull, doorShut, doorTitle, playableRaid, playerDetail, playGateStatus, playStop } from "../lib/door.ts";
 
 const OPEN = "1793577600000000000";
 
@@ -36,7 +36,7 @@ test("an open door that does not start says why", () => {
 test("a shut door keeps a stored commitment", () => {
   const hash = "ab".repeat(32);
   assert.deepEqual(commitmentFooter(hash), { hash });
-  assert.equal(COMMITMENT_LINE, "Tonight's ledger committed before the door opened");
+  assert.equal(COMMITMENT_LINE, "Ledger committed before the door opened");
   assert.deepEqual(commitmentFooter(null), { empty: true });
   assert.deepEqual(commitmentFooter(undefined), { empty: true });
   assert.equal(NO_COMMITMENT, "No commitment is stored on this vault.");
@@ -61,4 +61,12 @@ test("a row with no blob is not a raid", () => {
   assert.deepEqual(playableRaid({ error: "claim key" }), { error: "claim key" });
   assert.equal(playableRaid({ playerId: "a", blob: null }), null);
   assert.deepEqual(playableRaid({ playerId: "a", blob: "sealed" }), { playerId: "a", blob: "sealed" });
+});
+
+test("a round with no crack left is full, and a round with room is not", () => {
+  const base = { open: true, crackCount: 1, maxCracks: 1 };
+  assert.equal(doorFull(base), true);
+  assert.equal(doorFull({ ...base, maxCracks: 2 }), false);
+  assert.equal(doorFull({ ...base, open: false }), false);
+  assert.equal(doorFull({ open: true, crackCount: 0, maxCracks: 0 }), false);
 });

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 /**
  * The door card's Join button sits under the street, below the fold on many screens.
- * This bar carries the same link while that button is out of view, and steps aside when it shows.
+ * This bar carries the same link whenever that button is out of view, above or below, and steps aside when it shows.
  */
 export function QueueBar({ href, targetId }: { href: string; targetId: string }) {
   const [below, setBelow] = useState(false);
@@ -12,8 +12,8 @@ export function QueueBar({ href, targetId }: { href: string; targetId: string })
   useEffect(() => {
     const target = document.getElementById(targetId);
     if (!target || typeof IntersectionObserver === "undefined") return;
-    // Shown only while the card's own button is still below the screen; once it is in view or scrolled past, the bar steps aside.
-    const observer = new IntersectionObserver(([entry]) => setBelow(!entry.isIntersecting && entry.boundingClientRect.top > 0), { threshold: 0.6 });
+    // Shown while the card's own button is out of view, whether the page is above it or past it.
+    const observer = new IntersectionObserver(([entry]) => setBelow(!entry.isIntersecting), { threshold: 0.6 });
     observer.observe(target);
     // The first screen is left as drawn: the bar covered the pitch and the pot before anyone moved (QA R21 N-01).
     const onScroll = () => setScrolled(window.scrollY > 24);

@@ -147,3 +147,10 @@ test("Surprise me stays inside every list, and away from the street the ride, tr
   assert.equal(pieceDrawn("stall", "lounge"), false);
   assert.equal(pieceDrawn("crowd", "lounge"), true);
 });
+
+test("a basement has no sky, so weather is not drawn there", async () => {
+  const { pieceDrawn } = await import("../lib/street-setting.ts");
+  assert.equal(pieceDrawn("weather", "basement"), false);
+  assert.equal(pieceDrawn("weather", "rooftop"), true);
+  assert.equal(pieceDrawn("weather", "street"), true);
+});

@@ -1,6 +1,6 @@
 import { connection } from "next/server";
 import { readPublicEnv } from "@/lib/config";
-import { doorShut } from "@/lib/door";
+import { doorFull, doorShut } from "@/lib/door";
 import { cardResponse, DEFAULT_CARD } from "@/lib/og-card";
 import { readPageVault } from "@/lib/page-vault";
 import { pageRpc } from "@/lib/page-rpc";
@@ -19,7 +19,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const token = await page.page.token;
   const shut = doorShut(vault, Date.now());
   const pot = token.ok ? formatAtomic(vault.dayPot, token.decimals) : null;
-  const line = shut ? "The door is closed tonight." : pot && token.ok ? `Tonight's pot: ${pot} ${token.symbol}` : "The door is open tonight.";
+  const line = shut ? "The door is closed tonight." : doorFull(vault) ? "Tonight's cut is taken." : pot && token.ok ? `Tonight's pot: ${pot} ${token.symbol}` : "The door is open tonight.";
   return cardResponse(
     {
       sign: card?.sign || id,

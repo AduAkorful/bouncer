@@ -32,10 +32,14 @@ export function BillBuilder({
     writeDraft(draftKey, { bill: b, unitText });
   }, [draftKey, b, unitText]);
   const set = <K extends keyof DraftBill>(k: K, v: DraftBill[K]) => setB((x) => ({ ...x, [k]: v }));
+  const [limited, setLimited] = useState(false);
   const setUnit = (raw: string) => {
     const clean = raw.replace(/[^\d.]/g, "");
     const dot = clean.indexOf(".");
-    const text = dot < 0 ? clean : `${clean.slice(0, dot)}.${clean.slice(dot + 1).replace(/\./g, "").slice(0, 2)}`;
+    const decimals = dot < 0 ? "" : clean.slice(dot + 1).replace(/\./g, "");
+    const text = dot < 0 ? clean : `${clean.slice(0, dot)}.${decimals.slice(0, 2)}`;
+    // A third decimal is refused out loud, not dropped without a word.
+    setLimited(decimals.length > 2);
     setUnitText(text);
     set("unit", Number(text) || 0);
   };
@@ -87,6 +91,7 @@ export function BillBuilder({
               placeholder="0.00"
               className={field}
             />
+            {limited ? <span role="status" className="mt-1 block font-mono text-[10px] text-on-paper/70">Prices use two decimal places.</span> : null}
           </label>
         </div>
         <div className="flex items-baseline justify-between border-t-2 border-rule pt-2">

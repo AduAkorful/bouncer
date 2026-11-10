@@ -77,10 +77,21 @@ export function DoorList({
                 {door.card?.name ? <div className="mt-0.5 text-xs text-chalk/60">Guard {door.card.name}</div> : null}
                 <div className={`mt-1 text-xs ${door.shut ? "text-chalk/60" : "text-brass"}`}>
                   {door.line}
-                  {door.round && door.read ? <span className="text-chalk/60"> · Round {door.round}</span> : null}
+                  {door.round && door.read && door.line !== "Not opened yet" ? <span className="text-chalk/60"> · Round {door.round}</span> : null}
                 </div>
                 {!door.shut && token && door.dayPot ? <TokenAmount token={token} atomic={door.dayPot} className="mt-1 text-sm text-chalk" /> : null}
                 {!door.shut && door.closesAt ? <CloseTime endsAtNs={door.closesAt} prefix="Closes at" className="block text-xs text-chalk/60" /> : null}
+                {/* A door that is not taking a queue still fills the lines an open one does, so cards in a row stay level. */}
+                {door.shut && door.read && ["Closed", "Not opened yet", "Taken tonight"].includes(door.line) ? (
+                  <>
+                    <div className="mt-1 text-sm text-chalk/50">
+                      {door.line === "Not opened yet" ? "Waiting on its sponsor" : door.line === "Taken tonight" ? "Cut taken" : "No pot tonight"}
+                    </div>
+                    {door.line === "Not opened yet" ? null : (
+                      <div className="text-xs text-chalk/50">{door.line === "Taken tonight" ? "Back with the next round" : "Round over"}</div>
+                    )}
+                  </>
+                ) : null}
               </div>
             </Link>
           ))}

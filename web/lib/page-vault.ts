@@ -67,6 +67,15 @@ async function loadToken(rpc: Rpc, contractId: string): Promise<{ ok: true; acco
   return { ok: true, account: account.value, symbol: parsed.value.symbol, decimals: parsed.value.decimals };
 }
 
+/**
+ * A vault with no sealed story plays one of the guard's built-in venues, which are named without the round suffix:
+ * `velvet-1` is the `velvet` venue. Sending the vault id itself made the guard refuse the door as an unknown venue.
+ */
+export function builtInVenue(vaultId: string): string {
+  const match = /^(velvet|lions|builders|cuts)(?:-[A-Za-z0-9._-]*)?$/.exec(vaultId);
+  return match ? match[1] : vaultId;
+}
+
 export async function readPageVault(rpc: Rpc, env: PageEnv, vaultId: string): Promise<{ ok: true; page: PageVault } | { ok: false; error: string }> {
   if (!/^[A-Za-z0-9._-]{1,64}$/.test(vaultId)) return { ok: false, error: "id" };
   const token = readTokenLabel(rpc, env.contractId);
@@ -76,7 +85,7 @@ export async function readPageVault(rpc: Rpc, env: PageEnv, vaultId: string): Pr
   if (!parsed.ok) return { ok: false, error: parsed.error === "missing vault" ? "missing vault" : "vault" };
   const vault = parsed.vault;
   if (!vault.specHash) {
-    return { ok: true, page: { vaultId, vault, venueId: vaultId, card: null, specCt: null, token } };
+    return { ok: true, page: { vaultId, vault, venueId: builtInVenue(vaultId), card: null, specCt: null, token } };
   }
   const spec = await rpc(viewRequest(env.contractId, "get_spec", { vault_id: vaultId }));
   const ct = spec.ok ? parseSpecCt(spec.value) : null;

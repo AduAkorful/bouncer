@@ -9,7 +9,7 @@ export type Rival = { sign: string; guard: string | null; pot: string | null };
 const WITH_RIVAL: ((r: { who: string; door: string; pot: string | null }) => string)[] = [
   ({ who, door }) => `Go and bother ${who} at ${door}. They think their door is tougher than mine. Prove them wrong.`,
   ({ who, door, pot }) => `Not here, not tonight. ${who} is still letting people try at ${door}${pot ? `. ${pot} on the board` : ""}.`,
-  ({ who, door }) => `You talk a lot for my door. ${who} at ${door} likes talkers. I don't.`,
+  ({ who, door }) => `You talk a lot for my door. ${who} at ${door} has a whole queue of talkers. Go and join it.`,
   ({ who, door }) => `Six tries. I've seen worse. Tell ${who} at ${door} I sent you. They'll love that.`,
   ({ who, door, pot }) => `My list is closed to you. ${door} is still open${pot ? `, ${pot} in the pot` : ""}. Ask for ${who}.`,
 ];

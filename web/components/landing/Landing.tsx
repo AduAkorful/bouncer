@@ -44,6 +44,7 @@ export function Landing({ live = null }: { live?: ReactNode }) {
         <div className="relative z-10 flex min-h-dvh flex-col px-4 pb-5 pt-[max(44dvh,250px)] short:min-h-0 short:px-6 short:pb-4 short:pt-4 sm:px-8 md:items-center md:pt-[max(50dvh,250px)] short:items-start lg:items-start lg:justify-center lg:px-12 lg:py-10">
           <h1 className="max-lg:sr-only font-sign text-5xl leading-[0.8] text-chalk drop-shadow-[0_3px_0_rgb(0_0_0/0.7)] sm:text-7xl xl:text-8xl">BOUNCER</h1>
           <p className="max-w-sm text-lg leading-snug md:text-center lg:text-left lg:mt-3 text-chalk/90 drop-shadow-[0_2px_0_rgb(0_0_0/0.8)]">Get a bill past the door.</p>
+          <a href="#how-to-play" className="chalk-focus mt-1 inline-flex min-h-11 items-center text-sm text-chalk/85 underline decoration-white/30 short:hidden">How to play</a>
           <div className="mt-4 h-1 w-14 bg-rope" />
 
           <div className="mt-auto w-full max-w-md short:mt-3 lg:mt-6">

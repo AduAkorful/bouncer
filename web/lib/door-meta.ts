@@ -15,6 +15,8 @@ export async function doorPageScreen(rawId: string, page: string, description: s
   const labels = readPublicEnv(process.env);
   if (!labels.ok) return screen(page, description, { index: false });
   const read = await readPageVault(pageRpc(labels.env), { contractId: labels.env.contractId }, id);
+  // An id no vault uses is titled like its door page, with no echo of the address.
+  if (!read.ok && (read.error === "missing vault" || read.error === "id")) return screen("No door", "No door uses that address.", { index: false });
   const sign = read.ok ? read.page.card?.sign || id : id;
   return screen(`${sign} · ${page}`, description, { index: false, path: `/v/${encodeURIComponent(id)}${path}`, image: `/og/door/${encodeURIComponent(id)}` });
 }

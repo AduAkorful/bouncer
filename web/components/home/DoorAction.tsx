@@ -16,12 +16,15 @@ export function DoorAction({
   vaultId,
   round,
   open,
+  full = false,
   token,
   storageName,
 }: {
   vaultId: string;
   round: string;
   open: boolean;
+  /** The round has no crack left: the door is not shut, but there is nothing to join. */
+  full?: boolean;
   token: Promise<TokenRead>;
   storageName: string | null;
 }) {
@@ -65,7 +68,7 @@ export function DoorAction({
           Join the queue
         </a>
       ) : (
-        !win && <p className="mt-5 rounded-2xl border border-white/10 py-4 text-center font-sign text-xl text-chalk/50">The queue is closed</p>
+        !win && <p className="mt-5 rounded-2xl border border-white/10 py-4 text-center font-sign text-xl text-chalk/50">{full ? "Tonight's cut is taken" : "The queue is closed"}</p>
       )}
       {open && !win ? <QueueBar href={paths.play} targetId="join-queue" /> : null}
       {storageName && !win ? <TonightRaid storageName={storageName} vaultId={vaultId} round={round} playHref={paths.play} /> : null}

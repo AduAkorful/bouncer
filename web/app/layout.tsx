@@ -14,6 +14,7 @@ const site = siteUrl();
 export const metadata = {
   ...screen("Bouncer", "An AI door-guard game. The vault pays. The model does not."),
   // Relative image and canonical paths resolve against the public site.
+  title: { default: "Bouncer", template: "%s · Bouncer" },
   ...(site ? { metadataBase: site } : {}),
 };
 

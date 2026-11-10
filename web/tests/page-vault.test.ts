@@ -34,7 +34,7 @@ test("a vault with no sealed story loads without get_owner and uses the token sy
   }, seen), env, "velvet-1");
   assert.ok(out.ok);
   if (out.ok) {
-    assert.equal(out.page.venueId, "velvet-1");
+    assert.equal(out.page.venueId, "velvet");
     assert.equal(out.page.card, null);
     assert.equal(out.page.specCt, null);
     assert.equal("owner" in out.page, false);
@@ -209,4 +209,28 @@ test("two vault reads share one token request", async () => {
     assert.deepEqual(await a.page.token, { ok: true, symbol: "USDC", decimals: 6 });
     assert.deepEqual(await b.page.token, await a.page.token);
   }
+});
+
+test("on testnet the test token reads tUSDC, and another symbol is left alone", async () => {
+  const { testnetSymbol } = await import("../lib/sponsor-views.ts");
+  const before = process.env.NEXT_PUBLIC_NETWORK_ID;
+  try {
+    process.env.NEXT_PUBLIC_NETWORK_ID = "testnet";
+    assert.equal(testnetSymbol("USDC"), "tUSDC");
+    assert.equal(testnetSymbol("NEAR"), "NEAR");
+    process.env.NEXT_PUBLIC_NETWORK_ID = "mainnet";
+    assert.equal(testnetSymbol("USDC"), "USDC");
+  } finally {
+    if (before === undefined) delete process.env.NEXT_PUBLIC_NETWORK_ID;
+    else process.env.NEXT_PUBLIC_NETWORK_ID = before;
+  }
+});
+
+test("a vault with no story plays the built-in venue its id names", async () => {
+  const { builtInVenue } = await import("../lib/page-vault.ts");
+  assert.equal(builtInVenue("velvet-1"), "velvet");
+  assert.equal(builtInVenue("velvet"), "velvet");
+  assert.equal(builtInVenue("lions-2"), "lions");
+  assert.equal(builtInVenue("velvetine"), "velvetine");
+  assert.equal(builtInVenue("some-door"), "some-door");
 });

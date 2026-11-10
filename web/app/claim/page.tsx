@@ -3,7 +3,7 @@ import { Suspense } from "react";
 import { ClaimGate } from "@/components/gates";
 import { NightShell } from "@/components/NightShell";
 
-export const metadata = screen("Your cut", "The payout for a raid on this device.");
+export const metadata = screen("Your cut", "The payout for a raid on this device.", { index: false });
 
 export default function ClaimPage() {
   return (

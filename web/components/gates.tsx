@@ -10,7 +10,7 @@ import { RevealDoor } from "@/components/reveal/RevealDoor";
 import type { Rpc } from "@/lib/chain";
 import { pageRpc } from "@/lib/page-rpc";
 import { readPublicEnv } from "@/lib/config";
-import { CLOSED_QUEUE, doorShut, doorTitle } from "@/lib/door";
+import { CLOSED_QUEUE, doorFull, doorShut, doorTitle, FULL_QUEUE } from "@/lib/door";
 import { doorPaths, unreadDoor, type UnreadDoor } from "@/lib/door-read";
 import { doorCandidates, readDoorIndex } from "@/lib/door-index";
 import type { TokenRead } from "@/lib/page-vault";
@@ -150,11 +150,13 @@ export async function PlayGate({ vaultId }: { vaultId?: string }) {
   if (!loaded.ok) return unread("play", vaultId, loaded.failure);
   const { page, labels } = loaded;
   const paths = doorPaths(page.vaultId);
-  if (doorShut(page.vault, Date.now())) {
-    // A shut door points at the doors that are open instead of ending on one card.
+  const shutNow = doorShut(page.vault, Date.now());
+  if (shutNow || doorFull(page.vault)) {
+    // A shut or full door points at the doors that are open instead of ending on one card.
     const rpc = pageRpc(labels);
+    const stop = shutNow ? CLOSED_QUEUE : FULL_QUEUE;
     return (
-      <Blocked kicker={CLOSED_QUEUE.kicker} title={CLOSED_QUEUE.title} detail={CLOSED_QUEUE.detail} href={paths.door} door={doorTitle(page.card, page.vaultId).sign}>
+      <Blocked kicker={stop.kicker} title={stop.title} detail={stop.detail} href={paths.door} door={doorTitle(page.card, page.vaultId).sign}>
         <Suspense fallback={<DoorListPending />}>
           <HomeIndex index={readDoorIndex(rpc, labels.contractId, Date.now())} exclude={page.vaultId} retryHref={paths.play} token={page.token} narrow />
         </Suspense>

@@ -2,7 +2,7 @@
 
 import { parseCard, type Card } from "./card.ts";
 import type { Rpc } from "./chain.ts";
-import { doorShut } from "./door.ts";
+import { doorFull, doorShut } from "./door.ts";
 import { doorPaths, isVaultId } from "./door-read.ts";
 import { parseVaultList } from "./sponsor-views.ts";
 import { parseVault, viewRequest, type VaultView } from "./vault.ts";
@@ -110,5 +110,9 @@ async function readListed(rpc: Rpc, contractId: string, id: string, nowMs: numbe
 function doorState(vault: VaultView, nowMs: number): { line: string; shut: boolean } {
   if (vault.suspended) return { line: "Suspended", shut: true };
   const shut = doorShut(vault, nowMs);
+  // A vault that never had a round committed has not opened. Calling it closed would say it had been.
+  if (!vault.open && vault.opensAt === "0" && !vault.commitment) return { line: "Not opened yet", shut: true };
+  // A round with no crack left cannot take another raid, so it is listed with the doors that are not taking a queue.
+  if (!shut && doorFull(vault)) return { line: "Taken tonight", shut: true };
   return { line: shut ? "Closed" : "Open", shut };
 }

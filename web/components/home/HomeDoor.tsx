@@ -12,8 +12,9 @@ import { ACCRA_SETTING, STREET_VIEW, streetPieces } from "@/lib/street-setting";
 import { PotBoard } from "@/components/home/PotBoard";
 import { WalletChip } from "@/components/profile/ProfileWallet";
 import { cardLook, type Card } from "@/lib/card";
+import { SoundToggle } from "@/components/home/SoundToggle";
 import { SceneLife } from "@/components/SceneLife";
-import { CLOSED_DOOR_NOTE, COMMITMENT_LINE, NO_COMMITMENT, commitmentFooter, doorShut, doorTitle } from "@/lib/door";
+import { CLOSED_DOOR_NOTE, COMMITMENT_LINE, NO_COMMITMENT, commitmentFooter, doorFull, doorShut, doorTitle } from "@/lib/door";
 import type { TokenRead } from "@/lib/page-vault";
 import type { VaultView } from "@/lib/vault";
 
@@ -25,6 +26,10 @@ const phaseCopy = {
   cracked: {
     line: "People got in. The ledger stays shut until this round closes.",
     note: "Six messages, including bills · Street talk is free",
+  },
+  full: {
+    line: "Somebody already got past me tonight. Come back when the next round opens.",
+    note: "Tonight's cut is taken. The ledger opens when this round closes.",
   },
   closed: {
     line: "Last call is over. The door is shut.",
@@ -60,9 +65,11 @@ export function HomeDoor({
 }) {
   const title = doorTitle(card, vaultId);
   const shut = vault ? doorShut(vault, Date.now()) : false;
-  const phase = !vault ? "closed" : shut ? "closed" : vault.crackCount > 0 ? "cracked" : "open";
+  const full = vault && !shut ? doorFull(vault) : false;
+  const phase = !vault ? "closed" : shut ? "closed" : full ? "full" : vault.crackCount > 0 ? "cracked" : "open";
   // A shut door has no pot tonight, even when the chain still lists the round as open past its close.
-  const atomic = vault && !shut ? (phase === "cracked" || vault.open ? vault.dayPot : vault.pot) : null;
+  // A full round has nothing left to win, whatever the pot still holds for the claims.
+  const atomic = vault && !shut && !full ? (phase === "cracked" || vault.open ? vault.dayPot : vault.pot) : null;
   const commitment = commitmentFooter(vault?.commitment);
   return (
     <main className="min-h-dvh overflow-x-clip bg-night pb-24 text-chalk">
@@ -78,9 +85,10 @@ export function HomeDoor({
         </Link>
         <div className="order-3 flex w-full items-center gap-1.5 sm:order-2 sm:ml-auto sm:w-auto sm:flex-nowrap sm:justify-end sm:gap-2">
           <NetworkTag label={networkTag} className="whitespace-nowrap bg-black/40 text-chalk/80 backdrop-blur" />
-          {vault && vault.crackCount > 0 ? <span className="font-mono text-xs text-chalk/80">{vault.crackCount} got in tonight</span> : null}
+          {vault && vault.crackCount > 0 ? <span className="font-mono text-xs text-chalk/80">{vault.crackCount} got in{shut ? ` in round ${vault.round}` : " tonight"}</span> : null}
         </div>
         <div className="order-2 flex items-center gap-1.5 sm:order-3">
+          <SoundToggle />
           <Link href="/sponsors" className="chalk-focus inline-flex min-h-11 items-center whitespace-nowrap rounded-full bg-black/50 px-3 font-mono text-xs backdrop-blur">
             Sponsor
           </Link>
@@ -101,7 +109,7 @@ export function HomeDoor({
               look={card ? cardLook(card) : undefined}
               setting={card?.setting}
               neighbors
-              open={phase === "cracked"}
+              open={phase === "cracked" || phase === "full"}
               p="home"
               viewBox={STREET_VIEW}
               lampFigureX={356}
@@ -119,7 +127,7 @@ export function HomeDoor({
               </g>
             }
             front={
-              <PotBoard style={streetPieces(card?.setting ?? ACCRA_SETTING).board} title={shut ? "CLOSED" : "TONIGHT\u2019S POT"}>
+              <PotBoard style={streetPieces(card?.setting ?? ACCRA_SETTING).board} title={shut ? "CLOSED" : full ? "TAKEN" : "TONIGHT\u2019S POT"}>
                 {atomic ? <TokenPotGlyph token={token} atomic={atomic} /> : null}
               </PotBoard>
             }
@@ -142,9 +150,9 @@ export function HomeDoor({
           <div className="mt-3 flex items-end justify-between gap-3">
             <div>
               <div className="font-mono text-xs uppercase tracking-[0.2em] text-chalk/80">
-                {vault ? (phase === "cracked" ? "Splitting now" : phase === "closed" ? "Closed" : "Tonight's pot") : "No vault"}
+                {vault ? (phase === "cracked" ? "Tonight's pot" : phase === "full" ? "Taken tonight" : phase === "closed" ? "Closed" : "Tonight's pot") : "No vault"}
               </div>
-              {atomic ? <TokenAmount token={token} atomic={atomic} className="text-2xl text-brass" /> : <p className="text-sm text-chalk/60">{shut && vault ? "No pot tonight." : "No pot is stored."}</p>}
+              {atomic ? <TokenAmount token={token} atomic={atomic} className="text-2xl text-brass" /> : <p className="text-sm text-chalk/60">{full ? "Nothing left to win." : shut && vault ? "No pot tonight." : "No pot is stored."}</p>}
             </div>
             {vault && !shut ? (
               <div className="text-right">
@@ -156,7 +164,7 @@ export function HomeDoor({
           </div>
           <p className="mt-3 font-sign text-xl leading-tight sm:text-2xl">{notice ?? (card?.pitch || phaseCopy[phase].line)}</p>
           {vault ? (
-            <DoorAction vaultId={vaultId} round={vault.round} open={!shut} token={token} storageName={wallet?.storageName ?? null} />
+            <DoorAction vaultId={vaultId} round={vault.round} open={!shut && !full} full={full} token={token} storageName={wallet?.storageName ?? null} />
           ) : (
             <p className="mt-5 rounded-2xl border border-white/10 py-4 text-center font-sign text-xl text-chalk/50">The queue is not open</p>
           )}
@@ -164,34 +172,25 @@ export function HomeDoor({
           {wallet ? <WalletChip {...wallet} /> : null}
           <p className="mt-3 text-center text-sm text-chalk/60">{vault ? phaseCopy[phase].note : "Nothing on this door was filled in."}</p>
           </div>
-          <div className="lg:border-l lg:border-white/10 lg:pl-8">
+          <div className="lg:flex lg:flex-col lg:justify-center lg:gap-4 lg:border-l lg:border-white/10 lg:pl-8">
           {/* A shared link can land here first, so the rules are on the door, not only on the front page. */}
-          <section aria-labelledby="door-rules" className="mt-4 rounded-2xl border lg:mt-0 border-white/10 px-4 py-3">
+          <section aria-labelledby="door-rules" className="mt-4 rounded-2xl border border-white/10 px-4 py-3 lg:mt-0 lg:px-6 lg:py-5">
             <h2 id="door-rules" className="font-mono text-xs uppercase tracking-[0.2em] text-chalk/80">How to play</h2>
-            <ol className="mt-2 space-y-1.5 text-sm">
+            <ol className="mt-2 space-y-1.5 text-sm lg:mt-4 lg:space-y-4 lg:text-base">
               {RULES.map((rule, index) => (
-                <li key={rule.title} className="grid grid-cols-[1.1rem_minmax(0,1fr)] gap-2">
-                  <span className="font-sign text-[#ff6b7e]">{index + 1}</span>
-                  <span><span className="font-sign">{rule.title}</span> <span className="text-chalk/70">{rule.text}</span></span>
+                <li key={rule.title} className="grid grid-cols-[1.1rem_minmax(0,1fr)] gap-2 lg:grid-cols-[2rem_minmax(0,1fr)] lg:gap-3">
+                  <span className="font-sign text-[#ff6b7e] lg:text-3xl lg:leading-none">{index + 1}</span>
+                  <span><span className="font-sign lg:text-lg">{rule.title}</span> <span className="text-chalk/70">{rule.text}</span></span>
                 </li>
               ))}
             </ol>
-            <p className="mt-2 text-xs text-chalk/60">A wrong bill only hears &ldquo;Not approved.&rdquo;</p>
+            <p className="mt-2 text-xs text-chalk/60 lg:mt-5 lg:border-t lg:border-white/10 lg:pt-3 lg:text-sm">A wrong bill only hears &ldquo;Not approved.&rdquo; Nothing says what was wrong with it.</p>
           </section>
-          <p className="mt-3 text-center text-xs leading-relaxed text-chalk/70">Test tokens have no cash value. Playing costs no money.</p>
-          <p className="flex flex-wrap justify-center gap-x-5">
-            <Link href="/sponsors" className="chalk-focus inline-flex min-h-11 items-center text-sm text-chalk/80 underline decoration-white/20">
-              Sponsor a door
-            </Link>
-            <Link href="/fame" className="chalk-focus inline-flex min-h-11 items-center text-sm text-chalk/80 underline decoration-white/20">
-              Hall of fame
-            </Link>
-          </p>
-          <p className="mt-2 text-center text-sm">
-            <Link href={`${base}/reveal`} className="chalk-focus inline-flex min-h-11 items-center text-chalk/80 underline decoration-white/20">
-              {shut && vault ? `Round ${vault.round} ledger` : "Tonight\u2019s ledger"}
-            </Link>
-          </p>
+          <p className="mt-3 text-center text-xs leading-relaxed text-chalk/70 lg:mt-0 lg:text-left">Test tokens have no cash value. Playing costs no money.</p>
+          <Link href={`${base}/reveal`} className="chalk-focus flex min-h-11 flex-col justify-center rounded-2xl border border-white/10 px-4 py-2 transition hover:bg-white/5">
+            <span className="font-sign text-sm lg:text-base">{shut && vault ? `Round ${vault.round} ledger` : "Tonight\u2019s ledger"}</span>
+            <span className="text-xs text-chalk/60">{shut ? "The bills that were on the list." : "Opens to players when the round closes."}</span>
+          </Link>
           </div>
         </div>
       </section>
@@ -201,7 +200,7 @@ export function HomeDoor({
       <footer className="mx-auto mt-8 max-w-5xl px-4 font-mono text-[11px] leading-relaxed text-chalk/50">
         {"hash" in commitment ? (
           <p className="break-words">
-            <span className="text-uv-glow">●</span> {COMMITMENT_LINE} · <abbr title={commitment.hash} className="no-underline">{commitment.hash.slice(0, 8)}…{commitment.hash.slice(-6)}</abbr> <a href={`${base}/reveal`} className="underline decoration-white/20">Checked against the ledger when the round closes</a>
+            <span className="text-uv-glow">●</span> {COMMITMENT_LINE} · <abbr title={commitment.hash} className="no-underline">{commitment.hash.slice(0, 8)}…{commitment.hash.slice(-6)}</abbr> <a href={`${base}/reveal`} className="underline decoration-white/20">Your ledger opens here when the round closes</a>
           </p>
         ) : (
           <p>{NO_COMMITMENT}</p>

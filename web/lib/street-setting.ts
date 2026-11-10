@@ -98,6 +98,8 @@ export const SETTING_FIELDS = [
 export function pieceDrawn(key: keyof StreetSetting, place: Place): boolean {
   if (place === "street") return true;
   if (key === "ride" || key === "passer" || key === "shop") return false;
+  // A basement has no sky to put weather in.
+  if (key === "weather") return place !== "basement";
   if (key === "stall") return place === "beach" || place === "harbour";
   return true;
 }
