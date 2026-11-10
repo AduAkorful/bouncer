@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { KeyPair } from "near-api-js";
 import { createPlayerAuth, playerChallenge } from "../src/player-auth.ts";
-import { boardEntry, memoryPlayers, nextStreak, openSession, publicBoard, recordGotIn, recordOpen, renamePlayer, shownStreak, utcDay } from "../src/player-record.ts";
+import { boardEntry, memoryPlayers, nextStreak, openSession, publicBoard, recordGotIn, recordOpen, recordTurn, renamePlayer, shownStreak, utcDay } from "../src/player-record.ts";
 
 const DAY = 24 * 60 * 60 * 1000;
 const START = Date.parse("2026-11-01T12:00:00.000Z");
@@ -101,4 +101,30 @@ test("the board lists only players who opened a raid, and level players share a 
   assert.equal(boardEntry(board, "ALPHA")?.name, "Alpha");
   assert.equal(boardEntry(board, "quiet1"), null);
   assert.match(board[1].line, /2nd on Bouncer · 0 nights in · 1-day streak/);
+});
+
+test("a later turn replaces the stored blob, so another device resumes where this one stopped", async () => {
+  const store = memoryPlayers();
+  const keys = pair();
+  await openSession(store, { ...keys, now: START, random: () => 0 });
+  await recordOpen(store, { claimKey: keys.claimKey, vaultId: "door", round: "1", blob: "first", now: START });
+  await recordTurn(store, { claimKey: keys.claimKey, vaultId: "door", round: "1", blob: "third" });
+  assert.equal(await store.readBlob(keys.claimKey, "door", "1"), "third");
+  // A turn for a player with no record stores nothing.
+  await recordTurn(store, { claimKey: "cd".repeat(32), vaultId: "door", round: "1", blob: "x" });
+  assert.equal(await store.readBlob("cd".repeat(32), "door", "1"), null);
+});
+
+test("the weekly board ranks the last seven days only, and a new player can place", async () => {
+  const { weeklyBoard, weekStart } = await import("../src/player-record.ts");
+  const today = "2026-11-10";
+  assert.equal(weekStart(today), "2026-11-04");
+  const mk = (n: string, created: string, streak: number, lastDay: string, nightsIn: number) => ({ publicKey: n, claimKey: n.repeat(64).slice(0, 64), name: n, renameUsed: false, streak, lastDay, nightsIn, created });
+  const old = mk("a", "2026-10-01", 1, "2026-11-10", 9);
+  const fresh = mk("b", "2026-11-09", 2, "2026-11-10", 1);
+  const idle = mk("c", "2026-10-02", 0, "2026-10-20", 4);
+  const night = (p: ReturnType<typeof mk>, day: string, state: "opened" | "in") => ({ claimKey: p.claimKey, vaultId: "door", round: "1", state, day });
+  const board = weeklyBoard([old, fresh, idle], [night(old, "2026-11-10", "opened"), night(old, "2026-10-30", "in"), night(fresh, "2026-11-09", "in"), night(idle, "2026-10-20", "in")], today);
+  // The all-time leader won nothing this week, so the new player leads; the idle player is not listed.
+  assert.deepEqual(board.map((row) => [row.name, row.place, row.nights]), [["b", 1, 1], ["a", 2, 0]]);
 });

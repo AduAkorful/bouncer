@@ -5,7 +5,7 @@ const PROMPT = [
   "Turn the venue story into one JSON door spec object.",
   'Use this nested JSON shape: {"guard":{"voice":"Speak plainly."},"lines":[{"payee":"Coastline Drinks","item":"Delivery","reference":"CD-{d4}","qty":{"lo":1,"hi":1},"unit":{"lo":"4","hi":"12"},"paid":false}],"chips":[]}.',
   "Use 3 to 8 lines. The voice is at most 600 characters. Chips are optional and have ask and reply strings.",
-  "If including a hint, use a single sentence containing only these placeholders: {payee}, {reference}, {amount}.",
+  "If including a hint, use a single sentence containing only these placeholders: {payee}, {reference}, {amount}, {item}, {ref_head}, {amount_near}.",
   "Each line needs payee (at least four letters), item, reference (an uppercase letter prefix, a dash, then the literal token {d4}, such as CD-{d4}. Never use another token), qty (integer lo and hi), unit (decimal string lo and hi), and paid (boolean).",
   "Include at least one paid line. Give unpaid references at least 100 possible values. Keep unpaid amounts small.",
   "Chip replies must never reveal a payee, reference or amount. Omit v, salt and decimals.",
@@ -45,7 +45,7 @@ export async function generateSponsorDraft(key: string, story: string, decimals:
       v: 1,
       decimals,
       salt: randomBytes(16).toString("hex"),
-      ...(cap === undefined ? {} : { hint: "I heard {payee} is owed {amount} on invoice {reference}." }),
+      ...(cap === undefined ? {} : { hint: ["I heard {payee} is still waiting on a payment from tonight.", "Somebody said a reference starting {ref_head}.", "Word is it is around {amount_near}, for {item}.", "I heard {payee} sent {item} over and has not been paid."] }),
     };
   } catch {
     return null;

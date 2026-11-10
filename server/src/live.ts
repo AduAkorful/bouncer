@@ -7,6 +7,7 @@ import { createPasskeyAccount, signPasskeyTransaction } from "../../web/lib/pass
 import { submitVerdict } from "../../web/lib/submit-verdict.ts";
 import type { Call } from "../../web/lib/vault-calls.ts";
 import type { Deps } from "./app.ts";
+import { createClaimRelay } from "./claim-relay.ts";
 import { createAttestationLookup } from "./attestation.ts";
 import { requestCommit } from "./commit-flow.ts";
 import type { ServerEnv } from "./env.ts";
@@ -52,6 +53,7 @@ export function liveDeps(env: ServerEnv, status: () => unknown): Deps {
     submitVerdict: (verdict, signature) => submitVerdict(env.relay, verdict, signature),
     createAccount: (publicKey) => createPasskeyAccount(env.relay, env.authContractId, publicKey),
     signTransaction: (body) => signPasskeyTransaction(env.relay, env.authContractId, body),
+    relayClaim: createClaimRelay(env.relay),
     chainNowMs: () => chainNowMs(env.relay.rpcUrl),
     status,
   };

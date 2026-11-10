@@ -28,6 +28,8 @@ export type PlayerStore = {
   insert(row: PlayerRow): Promise<void>;
   save(row: PlayerRow): Promise<void>;
   nightsFor(claimKey: string): Promise<NightRow[]>;
+  /** Every player's nights on or after a UTC day, for the weekly board. */
+  nightsSince(day: string): Promise<NightRow[]>;
   saveNight(night: NightRow): Promise<void>;
   readBlob(claimKey: string, vaultId: string, round: string): Promise<string | null>;
   saveBlob(claimKey: string, vaultId: string, round: string, blob: string): Promise<void>;
@@ -73,6 +75,8 @@ export function shareLine(name: string, place: number, nights: number, streak: n
 }
 
 /** How the board is ordered, in the words the board shows. */
+export const WEEK_RULE = "This week: nights got in over the last seven days, then streak. Resets as days pass.";
+
 export const BOARD_RULE = "Ranked by nights in, then by streak. Players level on both share a place.";
 
 /**
@@ -94,6 +98,34 @@ export function publicBoard(players: PlayerRow[], today: string): PublicPlayer[]
     if (!previous || previous.nights !== player.nightsIn || previous.streak !== streak) place = index + 1;
     previous = { nights: player.nightsIn, streak };
     return { name: player.name, place, nights: player.nightsIn, streak, line: shareLine(player.name, place, player.nightsIn, streak) };
+  });
+}
+
+/** The UTC day a week window starts on: today and the six days before it. */
+export function weekStart(today: string): string {
+  let day = today;
+  for (let i = 0; i < 6; i += 1) day = previousUtcDay(day);
+  return day;
+}
+
+/**
+ * This week's board: nights got in during the last seven UTC days, then the current streak. A new player can place
+ * here without catching the all-time leaders. Only players who opened a raid this week are listed.
+ */
+export function weeklyBoard(players: PlayerRow[], nights: NightRow[], today: string): PublicPlayer[] {
+  const from = weekStart(today);
+  const inWeek = nights.filter((night) => night.day >= from && night.day <= today);
+  const opened = new Set(inWeek.map((night) => night.claimKey));
+  const wins = new Map<string, number>();
+  for (const night of inWeek) if (night.state === "in") wins.set(night.claimKey, (wins.get(night.claimKey) ?? 0) + 1);
+  const rows = players.filter((player) => opened.has(player.claimKey)).map((player) => ({ player, nights: wins.get(player.claimKey) ?? 0, streak: shownStreak(player.streak, player.lastDay, today) }));
+  rows.sort((a, b) => b.nights - a.nights || b.streak - a.streak || (a.player.created < b.player.created ? -1 : a.player.created > b.player.created ? 1 : 0));
+  let place = 0;
+  let previous: { nights: number; streak: number } | null = null;
+  return rows.map((row, index) => {
+    if (!previous || previous.nights !== row.nights || previous.streak !== row.streak) place = index + 1;
+    previous = { nights: row.nights, streak: row.streak };
+    return { name: row.player.name, place, nights: row.nights, streak: row.streak, line: shareLine(row.player.name, place, row.nights, row.streak) };
   });
 }
 
@@ -163,6 +195,13 @@ export async function recordOpen(store: PlayerStore, input: { claimKey: string; 
   await store.saveBlob(input.claimKey, input.vaultId, input.round, input.blob);
 }
 
+/** Keeps the raid's latest blob, so another device resumes where this one stopped instead of at the opening. */
+export async function recordTurn(store: PlayerStore, input: { claimKey: string; vaultId: string; round: string; blob: string }): Promise<void> {
+  if (!CLAIM.test(input.claimKey) || !input.vaultId || !/^[0-9]+$/.test(input.round) || input.blob.length === 0) return;
+  if (!(await store.findByClaim(input.claimKey))) return;
+  await store.saveBlob(input.claimKey, input.vaultId, input.round, input.blob);
+}
+
 export async function recordGotIn(store: PlayerStore, input: { claimKey: string; vaultId: string; round: string; now: number }): Promise<void> {
   if (!CLAIM.test(input.claimKey) || !input.vaultId || !/^[0-9]+$/.test(input.round)) return;
   const player = await store.findByClaim(input.claimKey);
@@ -176,8 +215,8 @@ export async function recordGotIn(store: PlayerStore, input: { claimKey: string;
   await store.save({ ...player, nightsIn: player.nightsIn + 1, streak: prior ? player.streak : stepped.streak, lastDay: prior ? player.lastDay : stepped.lastDay });
 }
 
-export function viewOf(player: PlayerRow, today: string): { name: string; renameUsed: boolean; streak: number; nights: number; created: string } {
-  return { name: player.name, renameUsed: player.renameUsed, streak: shownStreak(player.streak, player.lastDay, today), nights: player.nightsIn, created: player.created };
+export function viewOf(player: PlayerRow, today: string): { name: string; renameUsed: boolean; streak: number; nights: number; created: string; raidedToday: boolean } {
+  return { name: player.name, renameUsed: player.renameUsed, streak: shownStreak(player.streak, player.lastDay, today), nights: player.nightsIn, created: player.created, raidedToday: player.lastDay === today };
 }
 
 async function freshName(store: PlayerStore, random: () => number): Promise<string> {
@@ -212,6 +251,7 @@ export function memoryPlayers(): PlayerStore {
       if (index >= 0) players[index] = { ...row };
     },
     async nightsFor(claimKey) { return nights.filter((night) => night.claimKey === claimKey).map((night) => ({ ...night })); },
+    async nightsSince(day) { return nights.filter((night) => night.day >= day).map((night) => ({ ...night })); },
     async saveNight(night) {
       const index = nights.findIndex((row) => row.claimKey === night.claimKey && row.vaultId === night.vaultId && row.round === night.round);
       if (index >= 0) nights[index] = { ...night };

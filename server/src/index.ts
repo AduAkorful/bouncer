@@ -4,6 +4,7 @@ import { readServerEnv } from "./env.ts";
 import { createKeeper } from "./keeper.ts";
 import { liveDeps, liveKeeperChain } from "./live.ts";
 import { readSurrealEnv } from "./player-db.ts";
+import { createRelayWatch } from "./relay-watch.ts";
 
 const parsed = readServerEnv(process.env);
 if (!parsed.ok) {
@@ -18,8 +19,9 @@ if (!surreal.ok) {
 }
 const env = parsed.env;
 
+const relayWatch = createRelayWatch(env.relay.rpcUrl, env.relay.accountId, (line) => console.log(`relay ${line}`));
 let statusOf: () => unknown = () => null;
-const deps = liveDeps(env, () => statusOf());
+const deps = liveDeps(env, () => ({ keeper: statusOf(), relay: relayWatch.state() }));
 const app = createApp(deps);
 
 if (env.keeper) {
@@ -29,5 +31,8 @@ if (env.keeper) {
   void run();
   setInterval(run, 60_000);
 }
+
+void relayWatch.check();
+setInterval(() => void relayWatch.check(), 5 * 60_000);
 
 serve({ fetch: app.fetch, port: env.port }, (info) => console.log(`server listening on ${info.port}`));

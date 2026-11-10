@@ -85,6 +85,7 @@ export function testDeps(over: Partial<Deps> = {}, views?: Views): { deps: Deps;
     submitVerdict: async () => ({ ok: true, transactionHash: "hash" }),
     createAccount: async () => ({ ok: true, accountId: "a.relay.test" }),
     signTransaction: async () => ({ ok: true, hash: "h", result: {} }),
+    relayClaim: async () => ({ ok: true, hash: "claimhash" }),
     chainNowMs: async () => ({ ok: true, nowMs: t }),
     status: () => ({}),
     ...over,

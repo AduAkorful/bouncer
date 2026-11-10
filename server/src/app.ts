@@ -1,6 +1,7 @@
 import { Hono, type Context } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { readDoor, type Rpc } from "../../web/lib/chain.ts";
+import { parseCard } from "../../web/lib/card.ts";
 import { runGuardTurn } from "../../web/lib/guard-turn.ts";
 import type { Mark } from "../../web/lib/marks.ts";
 import { parseVerdictSubmission, submissionAllowed, type VerdictBody } from "../../web/lib/verdict-turn.ts";
@@ -14,8 +15,9 @@ import type { Budget, Counter, Limiter } from "./limits.ts";
 import { draftFitsCap } from "./sponsor-draft.ts";
 import { createAuthenticator } from "./auth.ts";
 import { createPlayerAuth } from "./player-auth.ts";
-import { BOARD_RULE, boardEntry, openSession, publicBoard, recordGotIn, recordOpen, renamePlayer, rollName, utcDay, viewOf, type NightRow, type PlayerRow, type PlayerStore } from "./player-record.ts";
+import { BOARD_RULE, WEEK_RULE, boardEntry, weekStart, weeklyBoard, openSession, publicBoard, recordGotIn, recordOpen, recordTurn, renamePlayer, rollName, utcDay, viewOf, type NightRow, type PlayerRow, type PlayerStore } from "./player-record.ts";
 import { playerNameToStore } from "../../web/lib/player-name.ts";
+import type { ClaimRelay } from "./claim-relay.ts";
 import { accountIdForPublicKey } from "../../web/lib/passkey-account.ts";
 
 export type Deps = {
@@ -34,6 +36,8 @@ export type Deps = {
   submitVerdict: (verdict: VerdictBody, signature: number[]) => Promise<{ ok: true; transactionHash: string } | { ok: false; error: string; reason?: string }>;
   createAccount: (publicKey: string) => Promise<unknown & { ok: boolean }>;
   signTransaction: (body: unknown) => Promise<unknown & { ok: boolean }>;
+  /** Sends a claim the player signed and pays its gas from the relay. */
+  relayClaim: ClaimRelay;
   chainNowMs: () => Promise<{ ok: true; nowMs: number } | { ok: false; error: string }>;
   status: () => unknown;
   /** Looks a guard call's attestation up at OutLayer. Absent in tests that do not need it. */
@@ -84,7 +88,7 @@ export function createApp(deps: Deps) {
   };
 
   app.get("/health", (c) => c.json({ ok: true }));
-  app.get("/status", (c) => c.json({ ok: true, keeper: deps.status(), budget: { used: deps.budget.used() }, bills: deps.bills.snapshot() }));
+  app.get("/status", (c) => c.json({ ok: true, ...statusParts(deps.status()), budget: { used: deps.budget.used() }, bills: deps.bills.snapshot() }));
 
   app.post("/guard", async (c) => {
     if (!take(c, "guard", 240, MINUTE)) return slow(c);
@@ -97,11 +101,22 @@ export function createApp(deps: Deps) {
       const key = `${String(body.vault_id)}|${String(body.round)}`;
       if (!deps.bills.take(key, env.roundBills)) return c.json({ ok: false, error: BUSY }, 429);
     }
+    // The vault records one crack per slot and refuses the rest. A round with none left sells no new raid and
+    // signs no new verdict. If the read fails the turn goes on, because the vault is the final check.
+    if ((body.op === "open" || body.op === "bill") && typeof body.vault_id === "string" && validVaultId(body.vault_id)) {
+      const door = await readDoor(deps.rpc, env.relay.contractId, body.vault_id);
+      if (door.ok && door.vault.open && door.vault.maxCracks > 0 && door.vault.crackCount >= door.vault.maxCracks && String(body.round) === door.vault.round) {
+        return c.json({ ok: false, error: "full" }, 409);
+      }
+    }
     const result = await runGuardTurn(env.guard, deps.marks, body, deps.post);
     if (deps.players && result.status === 200) {
       const payload = result.body as { ok?: unknown; blob?: unknown };
       if (payload?.ok === true && body.op === "open" && typeof payload.blob === "string" && typeof body.player_id === "string" && typeof body.vault_id === "string") {
         await recordOpen(deps.players, { claimKey: body.player_id, vaultId: body.vault_id, round: String(body.round), blob: payload.blob, now: deps.now() }).catch(() => undefined);
+      }
+      if (payload?.ok === true && (body.op === "say" || body.op === "bill") && typeof payload.blob === "string" && typeof body.player_id === "string" && typeof body.vault_id === "string") {
+        await recordTurn(deps.players, { claimKey: body.player_id, vaultId: body.vault_id, round: String(body.round), blob: payload.blob }).catch(() => undefined);
       }
     }
     return c.json(result.body as Record<string, unknown>, result.status as 200);
@@ -173,6 +188,15 @@ export function createApp(deps: Deps) {
     if (typeof body?.publicKey !== "string") return c.json({ ok: false, error: "account" }, 400);
     const created = (await deps.createAccount(body.publicKey)) as { ok: boolean };
     return c.json(created as Record<string, unknown>, created.ok ? 200 : 502);
+  });
+
+  app.post("/passkey/claim", async (c) => {
+    if (!take(c, "claim", 20, HOUR) || !deps.limiter.take("claim:all", 500, DAY)) return slow(c);
+    const body = await bodyOf(c);
+    if (!body) return c.json({ ok: false, error: "claim" }, 400);
+    const sent = await deps.relayClaim(body);
+    if (sent.ok) return c.json({ ok: true, hash: sent.hash });
+    return c.json(sent, sent.error === "refused" ? 422 : 502);
   });
 
   app.post("/passkey/sign-tx", async (c) => {
@@ -342,10 +366,12 @@ export function createApp(deps: Deps) {
 
   app.get("/player/board", (c) => stored(c, async () => {
     if (!deps.players) return unavailable(c);
-    const board = publicBoard(await deps.players.allPlayers(), utcDay(deps.now()));
+    const today = utcDay(deps.now());
+    const week = c.req.query("period") === "week";
+    const board = week ? weeklyBoard(await deps.players.allPlayers(), await deps.players.nightsSince(weekStart(today)), today) : publicBoard(await deps.players.allPlayers(), today);
     const limit = Math.min(100, Math.max(1, Number.parseInt(c.req.query("limit") ?? "50", 10) || 50));
     const offset = Math.max(0, Number.parseInt(c.req.query("offset") ?? "0", 10) || 0);
-    return c.json({ ok: true, players: board.slice(offset, offset + limit), total: board.length, offset, rule: BOARD_RULE });
+    return c.json({ ok: true, players: board.slice(offset, offset + limit), total: board.length, offset, rule: week ? WEEK_RULE : BOARD_RULE });
   }));
 
   /** One player's place, so a place page does not download the whole board. */
@@ -355,6 +381,24 @@ export function createApp(deps: Deps) {
     if (name.length < 1 || name.length > 40) return c.json({ ok: false, error: "name" }, 400);
     const board = publicBoard(await deps.players.allPlayers(), utcDay(deps.now()));
     return c.json({ ok: true, player: boardEntry(board, name), total: board.length, rule: BOARD_RULE });
+  }));
+
+  /** A player's last nights: the door's name, the day, and whether they got in. Never a bill. */
+  app.get("/player/recent/:name", (c) => stored(c, async () => {
+    if (!deps.players) return unavailable(c);
+    if (!take(c, "recent", 60, MINUTE)) return slow(c);
+    const name = playerNameToStore(c.req.param("name"));
+    if (!name) return c.json({ ok: false, error: "name" }, 404);
+    const player = await deps.players.findByName(name);
+    if (!player) return c.json({ ok: true, nights: [] });
+    const nights = (await deps.players.nightsFor(player.claimKey)).sort((a, b) => (a.day < b.day ? 1 : a.day > b.day ? -1 : 0)).slice(0, 8);
+    const signs = new Map<string, string>();
+    for (const id of new Set(nights.map((night) => night.vaultId))) {
+      const door = await readDoor(deps.rpc, env.relay.contractId, id);
+      const card = door.ok ? parseCard(door.vault.card) : null;
+      signs.set(id, card && card.ok && card.card.sign ? card.card.sign : id);
+    }
+    return c.json({ ok: true, nights: nights.map((night) => ({ door: signs.get(night.vaultId) ?? night.vaultId, vaultId: night.vaultId, round: night.round, day: night.day, state: night.state })) });
   }));
 
   app.get("/player/share/:name", (c) => stored(c, async () => {
@@ -390,4 +434,10 @@ async function playerView(store: PlayerStore, player: PlayerRow, nights: NightRo
     line: place?.line ?? null,
     nights: nights.map((night) => ({ vaultId: night.vaultId, round: night.round, state: night.state, day: night.day })),
   };
+}
+
+/** The keeper's own status, and the relay's balance state when the process watches it. */
+function statusParts(status: unknown): Record<string, unknown> {
+  if (status && typeof status === "object" && "relay" in status) return status as Record<string, unknown>;
+  return { keeper: status };
 }

@@ -278,3 +278,33 @@ test("cap-aware drafting rejects an unpaid maximum above the selected cap even i
   unit = "10";
   assert.equal((await app.request(path, signed(path, input))).status, 200);
 });
+
+test("a round with no crack left sells no new raid and signs no new bill", async () => {
+  const views = { vaults: { anchor: vaultRow({ open: true, crack_count: 2, max_cracks: 2, round: "1" }), other: vaultRow({ open: true, crack_count: 1, max_cracks: 2, round: "1" }) }, specs: {}, owner: "owner.test", calls: [] };
+  const { deps, posts } = testDeps({}, views);
+  const app = createApp(deps);
+  const guard = (body: unknown) => app.request("/guard", post("/guard", body));
+  const full = await guard({ op: "open", vault_id: "anchor", round: 1, player_id: "p" });
+  assert.equal(full.status, 409);
+  assert.deepEqual(await full.json(), { ok: false, error: "full" });
+  assert.equal((await guard({ op: "bill", vault_id: "anchor", round: 1, player_id: "p" })).status, 409);
+  assert.equal(posts.length, 0);
+  assert.notEqual((await guard({ op: "open", vault_id: "other", round: 1, player_id: "p" })).status, 409);
+});
+
+test("recent nights give the door and the result, never a bill, and the weekly board is a query", async () => {
+  const { memoryPlayers } = await import("../src/player-record.ts");
+  const players = memoryPlayers();
+  const claimKey = "ab".repeat(32);
+  await players.insert({ publicKey: "ed25519:AAA", claimKey, name: "QuietOwl22", renameUsed: false, streak: 1, lastDay: "2026-11-05", nightsIn: 1, created: "2026-11-05" });
+  await players.saveNight({ claimKey, vaultId: "anchor", round: "1", state: "in", day: "2026-11-05" });
+  const { deps } = testDeps({ players });
+  const app = createApp(deps);
+  const recent = await app.request("/player/recent/QuietOwl22", { headers: { origin: ORIGIN } });
+  const body = (await recent.json()) as { ok: boolean; nights: { door: string; state: string; day: string }[] };
+  assert.equal(body.ok, true);
+  assert.deepEqual(body.nights.map((n) => [n.door, n.state, n.day]), [["anchor", "in", "2026-11-05"]]);
+  assert.equal(JSON.stringify(body).includes("bill"), false);
+  const week = await app.request("/player/board?period=week", { headers: { origin: ORIGIN } });
+  assert.equal(((await week.json()) as { ok: boolean }).ok, true);
+});

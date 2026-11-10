@@ -57,6 +57,7 @@ export function surrealPlayers(env: SurrealEnv): PlayerStore {
     async insert(row) { await rows("CREATE player CONTENT $row", { row: storedPlayer(row) }); },
     async save(row) { await rows("UPDATE player SET name = $row.name, rename_used = $row.rename_used, streak = $row.streak, last_day = $row.last_day, nights_in = $row.nights_in WHERE public_key = $row.public_key", { row: storedPlayer(row) }); },
     async nightsFor(claimKey) { return (await rows("SELECT * FROM night WHERE claim_key = $claimKey", { claimKey })).map(nightFrom); },
+    async nightsSince(day) { return (await rows("SELECT * FROM night WHERE day >= $day", { day })).map(nightFrom); },
     async saveNight(night) {
       await rows("DELETE night WHERE claim_key = $claimKey AND vault_id = $vaultId AND round = $round", night);
       await rows("CREATE night CONTENT $night", { night: { claim_key: night.claimKey, vault_id: night.vaultId, round: night.round, state: night.state, day: night.day } });
