@@ -4,7 +4,7 @@ import { Suspense } from "react";
 import { connection } from "next/server";
 import { HomeGate } from "@/components/gates";
 import { NightShell } from "@/components/NightShell";
-import { httpRpc, PAGE_READ_MS } from "@/lib/chain";
+import { pageRpc } from "@/lib/page-rpc";
 import { readPublicEnv } from "@/lib/config";
 import { readPageVault } from "@/lib/page-vault";
 
@@ -17,15 +17,15 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const id = decodeURIComponent((await params).vault);
   const labels = readPublicEnv(process.env);
   if (!labels.ok) return screen(id, "A door run by a sponsor.");
-  const rpc = httpRpc(labels.env.rpcUrl, fetch, { signal: AbortSignal.timeout(PAGE_READ_MS), fallbackUrl: labels.env.rpcFallbackUrl, keep: true });
+  const rpc = pageRpc(labels.env);
   const page = await readPageVault(rpc, { contractId: labels.env.contractId }, id);
   if (!page.ok) {
-    if (page.error === "missing vault" || page.error === "id") return screen("No door", "No vault uses that id.", { index: false });
+    if (page.error === "missing vault" || page.error === "id") return screen("No door", "No door uses that address.", { index: false });
     return screen(id, "A door run by a sponsor.");
   }
   const card = page.page.card;
   if (!card) return screen(id, "A door run by a sponsor.");
-  return screen(card.sign, card.pitch || `${card.name} is on the door.`, { path: `/v/${encodeURIComponent(id)}`, line: card.pitch || undefined });
+  return screen(card.sign, card.pitch || `${card.name} is on the door.`, { path: `/v/${encodeURIComponent(id)}`, image: `/og/door/${encodeURIComponent(id)}` });
 }
 
 export default function Page({ params }: Props) {

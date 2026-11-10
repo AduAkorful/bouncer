@@ -1,3 +1,4 @@
+import { SiteNav } from "@/components/SiteNav";
 import { screen } from "@/lib/screen";
 import Link from "next/link";
 
@@ -25,6 +26,7 @@ const steps = [
 export default function SponsorsPage() {
   return (
     <main className="min-h-dvh overflow-x-clip bg-night px-4 pb-24 pt-8 text-chalk">
+      <SiteNav />
       <div className="mx-auto max-w-lg">
         <p className="font-mono text-xs uppercase tracking-[0.22em] text-chalk/80">Sponsors</p>
         <h1 className="mt-2 font-sign text-4xl leading-none sm:text-5xl">Sponsor a door.</h1>

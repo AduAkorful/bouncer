@@ -1,3 +1,4 @@
+import { SiteNav } from "@/components/SiteNav";
 import type { Metadata } from "next";
 import { screen } from "@/lib/screen";
 import Link from "next/link";
@@ -27,7 +28,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const entry = await placeOf(name);
   if (entry === null) return screen("Not on the board", `${name} is not on the Bouncer board.`, { index: false });
   if (entry === "unread") return screen(`${name} · Bouncer`, `${name}'s place on the Bouncer board.`);
-  return screen(`${entry.name} · #${entry.place} on Bouncer`, `${entry.line}. No bill is on this page.`, { path: `/p/${encodeURIComponent(entry.name)}`, line: entry.line });
+  return screen(`${entry.name} · #${entry.place} on Bouncer`, `${entry.line}. No bill is on this page.`, { path: `/p/${encodeURIComponent(entry.name)}`, image: `/og/p/${encodeURIComponent(entry.name)}` });
 }
 
 export default function Page({ params }: Props) {
@@ -46,8 +47,9 @@ async function Place({ params }: Props) {
 function PlaceShell({ name, pending = false }: { name: string; pending?: boolean }) {
   return (
     <main className="min-h-dvh overflow-x-clip bg-night px-4 pb-24 pt-8 text-chalk">
+      <SiteNav />
       <div className="mx-auto max-w-lg">
-        <p className="font-mono text-xs uppercase tracking-[0.2em] text-chalk/80">A place</p>
+        <p className="font-mono text-xs uppercase tracking-[0.2em] text-chalk/80">On the board</p>
         <h1 className="mt-1 break-words font-sign text-3xl leading-tight">{name || (pending ? "" : "Not a player")}</h1>
         {name ? <PlayerPlace name={name} /> : pending ? null : <p className="mt-6 text-sm text-chalk/70">That is not a player name.</p>}
         <Link href="/fame" prefetch={false} className="chalk-focus mt-6 inline-flex min-h-11 items-center text-sm text-chalk/80 underline decoration-white/20">

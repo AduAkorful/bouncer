@@ -1,9 +1,11 @@
-import { screen } from "@/lib/screen";
+import { doorPageScreen } from "@/lib/door-meta";
 import { Suspense } from "react";
 import { PlayGate } from "@/components/gates";
 import { NightShell } from "@/components/NightShell";
 
-export const metadata = screen("The queue", "Six messages at the door.");
+export async function generateMetadata({ params }: { params: Promise<{ vault: string }> }) {
+  return doorPageScreen((await params).vault, "The queue", "Six messages at the door.", "/play");
+}
 
 export default function Page({ params }: { params: Promise<{ vault: string }> }) {
   return (

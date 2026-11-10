@@ -1,3 +1,4 @@
+import { SiteNav } from "@/components/SiteNav";
 import { screen } from "@/lib/screen";
 import Link from "next/link";
 import { ProfileIdentity } from "@/components/profile/ProfileIdentity";
@@ -8,6 +9,7 @@ export const metadata = screen("This device", "Settings for this device.");
 export default function SettingsPage() {
   return (
     <main className="min-h-dvh overflow-x-clip bg-night px-4 pb-24 pt-8 text-chalk">
+      <SiteNav />
       <div className="mx-auto max-w-lg">
         <p className="font-mono text-xs uppercase tracking-[0.2em] text-chalk/80">Settings</p>
         <ProfileIdentity storageName={process.env.NEXT_PUBLIC_STORAGE_NAME ?? ""} heading="This device" />

@@ -1,10 +1,12 @@
-import { screen } from "@/lib/screen";
+import { doorPageScreen } from "@/lib/door-meta";
 import { Suspense } from "react";
 import { ClaimGate } from "@/components/gates";
 import { NightShell } from "@/components/NightShell";
 import { doorPaths } from "@/lib/door-read";
 
-export const metadata = screen("Your cut", "The payout for a raid on this device.");
+export async function generateMetadata({ params }: { params: Promise<{ vault: string }> }) {
+  return doorPageScreen((await params).vault, "Your cut", "The payout for a raid on this device.", "/claim");
+}
 
 type Props = { params: Promise<{ vault: string }>; searchParams: Promise<{ round?: string | string[] }> };
 

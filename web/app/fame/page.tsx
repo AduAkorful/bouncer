@@ -1,12 +1,14 @@
+import { SiteNav } from "@/components/SiteNav";
 import { screen } from "@/lib/screen";
 import Link from "next/link";
 import { PlayerBoard } from "@/components/fame/PlayerBoard";
 
-export const metadata = screen("Hall of fame · Bouncer", "The players who got bills past the door, ranked by nights in. The bill that worked stays off this page.", { path: "/fame" });
+export const metadata = screen("Hall of fame · Bouncer", "Everyone who has raided a door, ranked by nights in, then by streak. The bill that worked stays off this page.", { path: "/fame" });
 
 export default function FamePage() {
   return (
     <main className="min-h-dvh overflow-x-clip bg-night px-4 pb-24 pt-8 text-chalk">
+      <SiteNav />
       <div className="mx-auto max-w-lg">
         <p className="font-mono text-xs uppercase tracking-[0.2em] text-chalk/80">Hall of fame</p>
         <h1 className="mt-1 font-sign text-3xl leading-tight">Names, not ledgers.</h1>
