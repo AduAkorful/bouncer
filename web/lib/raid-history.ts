@@ -50,7 +50,7 @@ export function raidHistoryLabel(state: RaidHistoryState): string {
   if (state === "in") return "Got in";
   if (state === "held") return "Approved, not recorded";
   if (state === "stuck") return "Approved, cannot be sent";
-  if (state === "opened") return "Opened";
+  if (state === "opened") return "Played";
   return "Not opened";
 }
 

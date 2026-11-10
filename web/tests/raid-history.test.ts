@@ -16,7 +16,7 @@ test("a raid record becomes a door, a round, and a state", () => {
   assert.equal(raidHistoryRow("velvet-1:1", { blob: "sealed", verdict: { amount: "100" }, transactionHash: null, recorded: true })?.state, "in");
   assert.equal(raidHistoryLabel("held"), "Approved, not recorded");
   assert.equal(raidHistoryLabel("in"), "Got in");
-  assert.equal(raidHistoryLabel("opened"), "Opened");
+  assert.equal(raidHistoryLabel("opened"), "Played");
   assert.equal(raidHistoryLabel("shut"), "Not opened");
 });
 

@@ -43,11 +43,11 @@ test("a shut door keeps a stored commitment", () => {
 });
 
 test("a closed door names no opening time", () => {
-  assert.equal(CLOSED_DOOR_NOTE, "No next opening is stored. Other doors are listed below.");
+  assert.equal(CLOSED_DOOR_NOTE, "This door has no round open. Its sponsor opens the next one. Other doors are listed below.");
   assert.deepEqual(CLOSED_QUEUE, {
     kicker: "Closed",
     title: "The queue is closed.",
-    detail: "This door is shut. No next opening is stored. The other doors are listed below.",
+    detail: "This door has no round open tonight. Its sponsor opens the next one. The other doors are listed below.",
   });
 });
 

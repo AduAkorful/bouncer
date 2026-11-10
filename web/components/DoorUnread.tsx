@@ -1,3 +1,4 @@
+import { SiteNav } from "@/components/SiteNav";
 import Link from "next/link";
 import { TryAgain } from "@/components/TryAgain";
 import type { UnreadDoor } from "@/lib/door-read";
@@ -6,6 +7,7 @@ import type { UnreadDoor } from "@/lib/door-read";
 export function DoorUnread({ label, kicker, title, detail, retryHref, backHref, backLabel = "Back to the door" }: UnreadDoor & { retryHref: string | null; backHref: string | null; backLabel?: string }) {
   return (
     <main className="min-h-dvh overflow-x-clip bg-night px-4 pb-24 pt-8 text-chalk">
+      <SiteNav />
       <div className="mx-auto max-w-lg rounded-3xl border border-white/10 bg-night-2 p-6">
         <p className="font-mono text-xs uppercase tracking-[0.22em] text-chalk/80">{kicker}</p>
         {label ? <p className="mt-3 break-all font-mono text-sm text-chalk">{label}</p> : null}

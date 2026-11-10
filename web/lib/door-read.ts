@@ -20,7 +20,7 @@ export function unreadDoor(error: string, vaultId?: string): UnreadDoor {
     return { label: null, kicker: "Unavailable", title: "No door is listed.", detail: "The vault has no doors.", retry: true };
   }
   if (ABSENT.has(error)) {
-    return { label, kicker: "Missing", title: "There is no door with that id.", detail: "No vault uses that id.", retry: false };
+    return { label, kicker: "Missing", title: "There is no door with that id.", detail: "No door uses that address. Check the link, or pick one of tonight's doors.", retry: false };
   }
   return { label, kicker: "Unavailable", title: "This door could not be read.", detail: "The page could not load this door. Try again.", retry: true };
 }

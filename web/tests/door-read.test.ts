@@ -8,7 +8,7 @@ test("a missing id is not a failed read", () => {
       label: "qa-coast-05",
       kicker: "Missing",
       title: "There is no door with that id.",
-      detail: "No vault uses that id.",
+      detail: "No door uses that address. Check the link, or pick one of tonight's doors.",
       retry: false,
     });
   }

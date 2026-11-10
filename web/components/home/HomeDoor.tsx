@@ -3,12 +3,13 @@ import type { ReactNode } from "react";
 import { CloseTime, Countdown } from "@/components/Countdown";
 import { NetworkTag } from "@/components/bits";
 import { RULES } from "@/lib/rules";
-import { SignedInLine, TonightRaid } from "@/components/home/TonightRaid";
+import { SignedInLine } from "@/components/home/TonightRaid";
+import { DoorAction } from "@/components/home/DoorAction";
 import { DoorScene } from "@/components/DoorScene";
-import { QueueBar } from "@/components/home/QueueBar";
 import { StreetScroll } from "@/components/home/StreetScroll";
 import { TokenAmount, TokenPotGlyph } from "@/components/TokenAmount";
-import { STREET_VIEW } from "@/lib/street-setting";
+import { ACCRA_SETTING, STREET_VIEW, streetPieces } from "@/lib/street-setting";
+import { PotBoard } from "@/components/home/PotBoard";
 import { WalletChip } from "@/components/profile/ProfileWallet";
 import { cardLook, type Card } from "@/lib/card";
 import { SceneLife } from "@/components/SceneLife";
@@ -118,21 +119,14 @@ export function HomeDoor({
               </g>
             }
             front={
-              <g>
-                <path d="M282,224 L290,166 M330,224 L322,166" stroke="#5a4630" strokeWidth="3" />
-                <rect x="281" y="156" width="50" height="58" rx="3" fill="#1b2420" stroke="#5a4630" strokeWidth="3" />
-                <g transform="rotate(-3 306 185)">
-                  <text x="306" y="170" textAnchor="middle" fontFamily="var(--font-jetbrains)" fontSize="4.4" letterSpacing="0.3" fill="#efe8da" opacity="0.85">
-                    {shut ? "CLOSED" : "TONIGHT\u2019S POT"}
-                  </text>
-                  {atomic ? <TokenPotGlyph token={token} atomic={atomic} /> : null}
-                </g>
-              </g>
+              <PotBoard style={streetPieces(card?.setting ?? ACCRA_SETTING).board} title={shut ? "CLOSED" : "TONIGHT\u2019S POT"}>
+                {atomic ? <TokenPotGlyph token={token} atomic={atomic} /> : null}
+              </PotBoard>
             }
             />
           </SceneLife>
         </StreetScroll>
-        <p className="pointer-events-none absolute bottom-5 left-4 font-mono text-[10px] text-chalk/70 lg:hidden">Swipe the street</p>
+        <p className="pointer-events-none absolute bottom-5 left-4 rounded-full bg-black/60 px-2.5 py-1 font-mono text-xs text-chalk lg:hidden">Swipe the street ↔</p>
         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-b from-transparent to-night" />
       </section>
 
@@ -161,21 +155,11 @@ export function HomeDoor({
             ) : null}
           </div>
           <p className="mt-3 font-sign text-xl leading-tight sm:text-2xl">{notice ?? (card?.pitch || phaseCopy[phase].line)}</p>
-          {vault && !shut ? (
-            <a
-              id="join-queue"
-              href={`${base}/play`}
-              className="chalk-focus mt-5 block rounded-2xl bg-chalk py-4 text-center font-sign text-xl text-ink shadow-[0_6px_0_#9c9483] transition hover:bg-[#f4efe4] active:translate-y-1 active:shadow-[0_2px_0_#9c9483]"
-            >
-              Join the queue
-            </a>
+          {vault ? (
+            <DoorAction vaultId={vaultId} round={vault.round} open={!shut} token={token} storageName={wallet?.storageName ?? null} />
           ) : (
-            <p className="mt-5 rounded-2xl border border-white/10 py-4 text-center font-sign text-xl text-chalk/50">
-              {vault ? "The queue is closed" : "The queue is not open"}
-            </p>
+            <p className="mt-5 rounded-2xl border border-white/10 py-4 text-center font-sign text-xl text-chalk/50">The queue is not open</p>
           )}
-          {vault && !shut ? <QueueBar href={`${base}/play`} targetId="join-queue" /> : null}
-          {vault && wallet ? <TonightRaid storageName={wallet.storageName} vaultId={vaultId} round={vault.round} playHref={`${base}/play`} /> : null}
           <SignedInLine />
           {wallet ? <WalletChip {...wallet} /> : null}
           <p className="mt-3 text-center text-sm text-chalk/60">{vault ? phaseCopy[phase].note : "Nothing on this door was filled in."}</p>
@@ -217,7 +201,7 @@ export function HomeDoor({
       <footer className="mx-auto mt-8 max-w-5xl px-4 font-mono text-[11px] leading-relaxed text-chalk/50">
         {"hash" in commitment ? (
           <p className="break-words">
-            <span className="text-uv-glow">●</span> {COMMITMENT_LINE} · <span className="break-all">{commitment.hash}</span>
+            <span className="text-uv-glow">●</span> {COMMITMENT_LINE} · <abbr title={commitment.hash} className="no-underline">{commitment.hash.slice(0, 8)}…{commitment.hash.slice(-6)}</abbr> <a href={`${base}/reveal`} className="underline decoration-white/20">Checked against the ledger when the round closes</a>
           </p>
         ) : (
           <p>{NO_COMMITMENT}</p>

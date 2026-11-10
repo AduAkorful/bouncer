@@ -45,13 +45,13 @@ export function playStop(detail: string): { title: string; detail: string } {
 }
 
 /** A closed door has no stored next opening. The other-doors list is the place to look. */
-export const CLOSED_DOOR_NOTE = "No next opening is stored. Other doors are listed below.";
+export const CLOSED_DOOR_NOTE = "This door has no round open. Its sponsor opens the next one. Other doors are listed below.";
 
 /** Closed play. No retry: the queue is shut, and the door page lists any other door. */
 export const CLOSED_QUEUE = {
   kicker: "Closed",
   title: "The queue is closed.",
-  detail: "This door is shut. No next opening is stored. The other doors are listed below.",
+  detail: "This door has no round open tonight. Its sponsor opens the next one. The other doors are listed below.",
 };
 
 export const COMMITMENT_LINE = "Tonight's ledger committed before the door opened";

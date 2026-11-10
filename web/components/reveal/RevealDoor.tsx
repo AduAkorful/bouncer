@@ -1,5 +1,6 @@
 "use client";
 
+import { SiteNav } from "@/components/SiteNav";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { CloseTime, Countdown } from "@/components/Countdown";
@@ -127,6 +128,7 @@ export function RevealDoor({
 
   return (
     <main className="min-h-dvh overflow-x-clip bg-night px-4 pb-24 pt-8 text-chalk">
+      <SiteNav />
       <div className="mx-auto max-w-lg">
         <div className="flex items-center justify-between gap-3">
           <p className="font-mono text-xs uppercase tracking-[0.22em] text-chalk/80">Round {round}</p>

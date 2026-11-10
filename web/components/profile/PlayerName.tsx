@@ -193,7 +193,7 @@ export function PlayerName({ initial = null, storageName = "" }: { initial?: Pla
       {session.line ? <p className="mt-2 text-sm text-chalk/70">{session.line}</p> : null}
       {session.player.renameUsed ? <p className="mt-2 text-sm text-chalk/60">This name was changed once. It stays.</p> : (
         <div className="mt-3 flex flex-wrap gap-2">
-          <button type="button" disabled={busy} onClick={() => void save(draft)} className="chalk-focus min-h-11 rounded-2xl bg-chalk px-4 py-2 text-sm text-ink disabled:opacity-40">Save name</button>
+          <button type="button" disabled={busy || draft.trim() === session.player.name} onClick={() => void save(draft)} className="chalk-focus min-h-11 rounded-2xl bg-chalk px-4 py-2 text-sm text-ink disabled:opacity-40">Save name</button>
           <button type="button" disabled={busy} onClick={() => void another()} className="chalk-focus min-h-11 rounded-2xl border border-chalk/30 px-4 py-2 text-sm disabled:opacity-40">Another name</button>
         </div>
       )}

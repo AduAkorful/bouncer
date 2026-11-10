@@ -2,17 +2,20 @@
 
 import { useEffect, useState } from "react";
 import { testnetAccountId } from "@/lib/imported-account";
+import { readHold } from "@/lib/player-hold";
 
 export function ProfileIdentity({ storageName, heading = "Your profile" }: { storageName: string; heading?: string }) {
-  const [state, setState] = useState<{ account: string | null; error: boolean } | null>(null);
+  const [state, setState] = useState<{ account: string | null; error: boolean; signedIn: boolean } | null>(null);
 
   useEffect(() => {
     try {
       if (!storageName.trim()) throw new Error("storage unavailable");
       const raw = window.localStorage.getItem(`${storageName.trim()}.payout-account`);
-      setState({ account: raw ? testnetAccountId(raw) : null, error: false });
+      const held = readHold();
+      held?.fill(0);
+      setState({ account: raw ? testnetAccountId(raw) : null, error: false, signedIn: Boolean(held) });
     } catch {
-      setState({ account: null, error: true });
+      setState({ account: null, error: true, signedIn: false });
     }
   }, [storageName]);
 
@@ -27,6 +30,8 @@ export function ProfileIdentity({ storageName, heading = "Your profile" }: { sto
           {/* A passkey account name is one long word, so only it may break anywhere. */}
           <p className="mt-1 break-all font-mono text-[12px]">{state.account}</p>
         </div>
+      ) : state.signedIn ? (
+        <p className="mt-2 text-sm text-chalk/70">Signed in with your passkey on this browser.</p>
       ) : (
         <p className="mt-2 text-sm text-chalk/70">Use your passkey when you need your account. A testnet account can be created when needed.</p>
       )}
