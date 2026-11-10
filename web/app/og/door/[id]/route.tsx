@@ -25,7 +25,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       sign: card?.sign || id,
       line,
       detail: card ? [card.name ? `Guard ${card.name}` : "", card.pitch].filter(Boolean).join(" · ") : "Get a bill past the door.",
-      stamp: shut ? undefined : { text: "OPEN", color: "#4fd18b" },
+      stamp: shut ? undefined : doorFull(vault) ? { text: "TAKEN", color: "#f2a93b" } : { text: "OPEN", color: "#4fd18b" },
     },
     300,
   );

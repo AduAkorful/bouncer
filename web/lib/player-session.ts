@@ -35,10 +35,28 @@ export async function rollPlayerName(secrets: DeviceSecrets): Promise<{ ok: true
   return readSession(await apiPost("/player/roll", {}, () => ({ "x-player-auth": playerHeader(secrets, "/player/roll") })));
 }
 
-export async function resumeRaid(secrets: DeviceSecrets, vaultId: string, round: string): Promise<string | null> {
+export type ResumedRaid = {
+  blob: string;
+  progress: { used: number; outcomes: ("ask" | "refused" | "approved")[]; street: unknown; won: boolean; amount: string | null };
+};
+
+/** The raid this passkey left on the server: the guard's blob and the counts, outcomes and win another device needs. */
+export async function resumeRaid(secrets: DeviceSecrets, vaultId: string, round: string): Promise<ResumedRaid | null> {
   const result = await apiPost("/player/resume", { vaultId, round }, () => ({ "x-player-auth": playerHeader(secrets, "/player/resume") }));
-  const body = result.ok && result.body && typeof result.body === "object" ? result.body as { blob?: unknown } : null;
-  return typeof body?.blob === "string" && body.blob.length > 0 ? body.blob : null;
+  const body = result.ok && result.body && typeof result.body === "object" ? result.body as { blob?: unknown; progress?: Partial<ResumedRaid["progress"]> } : null;
+  if (typeof body?.blob !== "string" || body.blob.length === 0) return null;
+  const p = body.progress ?? {};
+  const outcomes = Array.isArray(p.outcomes) ? p.outcomes.filter((item): item is "ask" | "refused" | "approved" => item === "ask" || item === "refused" || item === "approved") : [];
+  return {
+    blob: body.blob,
+    progress: {
+      used: typeof p.used === "number" && Number.isSafeInteger(p.used) && p.used >= 0 ? p.used : outcomes.length,
+      outcomes,
+      street: p.street ?? null,
+      won: p.won === true,
+      amount: typeof p.amount === "string" && /^[0-9]+$/.test(p.amount) ? p.amount : null,
+    },
+  };
 }
 
 export function playerHeader(secrets: DeviceSecrets, route: string): string {

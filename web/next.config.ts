@@ -30,6 +30,8 @@ const POLICY = [
 ].join("; ");
 
 const nextConfig: NextConfig = {
+  // Share previews read the head, and some crawlers (Signal, desktop apps) are not on Next's bot list, so metadata is never streamed into the body.
+  htmlLimitedBots: /.*/,
   /* config options here */
   // The repo-root AGENTS.md is the handoff. Do not let `next dev` write another one here.
   agentRules: false,

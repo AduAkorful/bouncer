@@ -1,5 +1,6 @@
 "use client";
 
+import { SiteNav } from "@/components/SiteNav";
 import gsap from "gsap";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
@@ -111,7 +112,8 @@ export default function CreatorFrame() {
   }
 
   return (
-    <main ref={root} className="min-h-dvh bg-night pb-24 text-chalk lg:grid lg:h-dvh lg:grid-cols-[1.2fr_1fr] lg:pb-0">
+    <main ref={root} className="min-h-dvh bg-night pb-24 text-chalk lg:grid lg:h-dvh lg:grid-cols-[1.2fr_1fr] lg:grid-rows-[auto_minmax(0,1fr)] lg:pb-0">
+      <div className="px-4 pt-8 lg:col-span-2"><SiteNav /></div>
       {/* Live preview at the door. Shorter on a phone so Save sits on the first screen. */}
       <section className="scene-box relative h-[34dvh] min-h-[220px] bg-[#1a1424] sm:h-[48dvh] sm:min-h-[340px] lg:h-full">
         <header className="absolute inset-x-0 top-0 z-10 flex items-center justify-between px-4 py-3">

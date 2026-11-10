@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { mergeHistory, raidHistoryHref, raidHistoryLabel, type RaidHistoryRow } from "@/lib/raid-history";
+import { doorLabel, mergeHistory, raidHistoryHref, raidHistoryLabel, type RaidHistoryRow } from "@/lib/raid-history";
 import { listRaidHistory } from "@/lib/session-store";
 import { subscribeNights, type ServerNight } from "@/lib/session-nights";
 import { uncollected, type Uncollected } from "@/lib/uncollected";
@@ -54,7 +54,7 @@ export function ProfileHistory({ storageName }: { storageName: string }) {
         href={raidHistoryHref({ vaultId: win.vaultId, round: win.round, state: "in" })}
         className="chalk-focus mt-3 block rounded-2xl bg-brass px-4 py-3 font-sign text-lg text-ink"
       >
-        A cut is waiting · {win.vaultId}, round {win.round}
+        A cut is waiting · {doorLabel(win.vaultId)}, round {win.round}
         <span className="block font-mono text-xs uppercase tracking-wider">{win.ready ? "Collect it" : "Collect it when the time lock opens"}</span>
       </a>
     ))}
@@ -63,7 +63,7 @@ export function ProfileHistory({ storageName }: { storageName: string }) {
         <li key={`${row.vaultId}:${row.round}`}>
           <a href={raidHistoryHref(row)} className="chalk-focus flex min-h-11 items-center justify-between gap-3 py-2">
             <span>
-              <span className="block text-sm">{row.vaultId}</span>
+              <span className="block text-sm">{doorLabel(row.vaultId)}</span>
               <span className="font-mono text-xs text-chalk/60">Round {row.round}</span>
             </span>
             <span className="text-sm text-chalk/80">{raidHistoryLabel(row.state)}</span>

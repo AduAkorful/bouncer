@@ -64,3 +64,10 @@ export function raidHistoryHref(row: RaidHistoryRow): string {
   if (row.state === "opened") return `${paths.reveal}?round=${row.round}`;
   return paths.door;
 }
+
+/** A door's address as a name for a list: the trailing number goes and the words are capitalised ("jamestown-wharf-09" reads "Jamestown Wharf"). */
+export function doorLabel(vaultId: string): string {
+  const words = vaultId.replace(/-\d+$/, "").split(/[-_]+/).filter(Boolean);
+  if (words.length === 0) return vaultId;
+  return words.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
+}

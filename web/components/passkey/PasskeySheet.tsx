@@ -1,5 +1,6 @@
 "use client";
 
+import { SiteNav } from "@/components/SiteNav";
 import Link from "next/link";
 import { doorPaths } from "@/lib/door-read";
 import { useEffect, useRef, useState } from "react";
@@ -150,7 +151,8 @@ export function PasskeySheet({
   }
 
   return (
-    <main className="flex min-h-dvh items-end bg-night px-4 pb-24 pt-10 text-chalk sm:items-center sm:justify-center">
+    <main className="relative flex min-h-dvh items-end bg-night px-4 pb-24 pt-10 text-chalk sm:items-center sm:justify-center">
+      <div className="absolute inset-x-0 top-0 px-4 pt-8"><SiteNav /></div>
       <div className="mx-auto w-full max-w-md rounded-3xl border border-white/10 bg-night-2 p-6 shadow-2xl">
         <p className="font-mono text-xs uppercase tracking-[0.22em] text-chalk/80">Account</p>
         <h1 className="mt-2 font-sign text-3xl leading-none">{step === "done" ? "Saved." : step === "add" ? "Add this key" : "Your passkey"}</h1>

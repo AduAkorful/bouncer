@@ -38,8 +38,12 @@ export function doorFull(vault: Pick<VaultView, "open" | "crackCount" | "maxCrac
   return vault.open && vault.maxCracks > 0 && vault.crackCount >= vault.maxCracks;
 }
 
+const SPONSOR_DETAIL_CODE = "sponsor";
+export const SPONSOR_DETAIL = "You sponsor this door, so you cannot raid it: the vault never pays a door's sponsor. Try another door.";
+
 export function playerDetail(error: string): string {
   if (error === "full") return "Tonight's cut has been taken. Nothing is left to win.";
+  if (error === SPONSOR_DETAIL_CODE) return SPONSOR_DETAIL;
   if (HIDDEN.has(error)) return "The door did not answer.";
   return error;
 }
@@ -47,6 +51,7 @@ export function playerDetail(error: string): string {
 /** The panel when an open door does not start a raid. A closed queue is a separate panel. */
 export function playStop(detail: string): { title: string; detail: string } {
   if (detail === "The door did not answer.") return { title: detail, detail: "The raid stays shut." };
+  if (detail === SPONSOR_DETAIL) return { title: "You sponsor this door.", detail };
   return { title: "This device's passkey did not open.", detail };
 }
 

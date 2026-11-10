@@ -10,6 +10,7 @@ import { RevealDoor } from "@/components/reveal/RevealDoor";
 import type { Rpc } from "@/lib/chain";
 import { pageRpc } from "@/lib/page-rpc";
 import { readPublicEnv } from "@/lib/config";
+import { TonightRaid } from "@/components/home/TonightRaid";
 import { CLOSED_QUEUE, doorFull, doorShut, doorTitle, FULL_QUEUE } from "@/lib/door";
 import { doorPaths, unreadDoor, type UnreadDoor } from "@/lib/door-read";
 import { doorCandidates, readDoorIndex } from "@/lib/door-index";
@@ -157,6 +158,8 @@ export async function PlayGate({ vaultId }: { vaultId?: string }) {
     const stop = shutNow ? CLOSED_QUEUE : FULL_QUEUE;
     return (
       <Blocked kicker={stop.kicker} title={stop.title} detail={stop.detail} href={paths.door} door={doorTitle(page.card, page.vaultId).sign}>
+        {/* The winner who comes back to a taken door is told it was them, with the way to their cut. */}
+        {labels.storageName ? <div className="mx-auto max-w-lg"><TonightRaid storageName={labels.storageName} vaultId={page.vaultId} round={page.vault.round} playHref={paths.play} /></div> : null}
         <Suspense fallback={<DoorListPending />}>
           <HomeIndex index={readDoorIndex(rpc, labels.contractId, Date.now())} exclude={page.vaultId} retryHref={paths.play} token={page.token} narrow />
         </Suspense>

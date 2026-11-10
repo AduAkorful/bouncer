@@ -3,14 +3,13 @@ import type { ReactNode } from "react";
 import { CloseTime, Countdown } from "@/components/Countdown";
 import { NetworkTag } from "@/components/bits";
 import { RULES } from "@/lib/rules";
-import { SignedInLine } from "@/components/home/TonightRaid";
+import { LazySignedInLine, LazyWalletChip } from "@/components/home/DoorExtras";
 import { DoorAction } from "@/components/home/DoorAction";
 import { DoorScene } from "@/components/DoorScene";
 import { StreetScroll } from "@/components/home/StreetScroll";
 import { TokenAmount, TokenPotGlyph } from "@/components/TokenAmount";
 import { ACCRA_SETTING, STREET_VIEW, streetPieces } from "@/lib/street-setting";
 import { PotBoard } from "@/components/home/PotBoard";
-import { WalletChip } from "@/components/profile/ProfileWallet";
 import { cardLook, type Card } from "@/lib/card";
 import { SoundToggle } from "@/components/home/SoundToggle";
 import { SceneLife } from "@/components/SceneLife";
@@ -168,8 +167,8 @@ export function HomeDoor({
           ) : (
             <p className="mt-5 rounded-2xl border border-white/10 py-4 text-center font-sign text-xl text-chalk/50">The queue is not open</p>
           )}
-          <SignedInLine />
-          {wallet ? <WalletChip {...wallet} /> : null}
+          <LazySignedInLine />
+          {wallet ? <LazyWalletChip {...wallet} /> : null}
           <p className="mt-3 text-center text-sm text-chalk/60">{vault ? phaseCopy[phase].note : "Nothing on this door was filled in."}</p>
           </div>
           <div className="lg:flex lg:flex-col lg:justify-center lg:gap-4 lg:border-l lg:border-white/10 lg:pl-8">

@@ -31,8 +31,8 @@ import { Blocked } from "@/components/Blocked";
 import { doorPaths } from "@/lib/door-read";
 import { heldRefusal, heldVerdict, submitHeld, verdictAmount } from "@/lib/held-verdict";
 import { mergeProof } from "@/lib/proof-bundle";
-import { doorTitle, playableRaid, playerDetail, playGateStatus, playStop } from "@/lib/door";
-import { resumeRaid, postPlayerSession } from "@/lib/player-session";
+import { doorTitle, playableRaid, playerDetail, playGateStatus, playStop, SPONSOR_DETAIL } from "@/lib/door";
+import { resumeRaid, postPlayerSession, playerHeader } from "@/lib/player-session";
 import type { VaultView } from "@/lib/vault";
 import { guardRule } from "@/lib/rules";
 import type { TokenRead } from "@/lib/page-vault";
@@ -331,7 +331,7 @@ export default function PlayFrame({
     if (await sponsorsThisDoor(secrets.accountPublicKey, storageName, vault.sponsor)) {
       setBusy(false);
       setWait("key");
-      setDoorError("You sponsor this door, so you cannot raid it: the vault never pays a door's sponsor. Try another door.");
+      setDoorError(SPONSOR_DETAIL);
       return;
     }
     await postPlayerSession(secrets);
@@ -343,26 +343,36 @@ export default function PlayFrame({
     }
     const restored = await resumeRaid(secrets, vaultId, vault.round);
     if (restored) {
-      const next = { ...minted, blob: restored };
-      sessionRef.current = next;
-      setSession(next);
+      // Another browser left this raid: the count, the squares, the street hints and a recorded win come with it.
+      const { progress } = restored;
+      const next: StoredRaid = {
+        ...minted,
+        blob: restored.blob,
+        used: progress.used,
+        outcomes: progress.outcomes,
+        street: readStreet(progress.street),
+        ...(progress.won ? { verdict: { amount: progress.amount }, recorded: true } : {}),
+      };
       await saveRaid(storageName, vaultId, vault.round, next);
       setBusy(false);
+      await adoptStored(next);
       return;
     }
     setWait("opening");
     sessionRef.current = minted;
-    await openDoor(minted);
+    await openDoor(minted, playerHeader(secrets, "/guard/open"));
     setBusy(false);
   }
 
-  async function openDoor(current: StoredRaid) {
+  /** `auth` proves the passkey's account and claim key to the server, which refuses the door's sponsor. */
+  async function openDoor(current: StoredRaid, auth: string) {
     const round = Number(vault.round);
     if (!Number.isSafeInteger(round)) {
       setDoorError("The door did not answer.");
       return;
     }
-    const { payload } = await send({
+    const { payload } = await postGuard({
+      ...(specCt ? { spec_ct: specCt } : {}),
       op: "open",
       vault_id: vaultId,
       round,
@@ -371,7 +381,7 @@ export default function PlayFrame({
       venue: venueId,
       rule: guardRule(vault.rule),
       claim_pk: current.publicKeyHex,
-    });
+    }, auth);
     if (payload.ok !== true || typeof payload.blob !== "string") {
       if (!current.blob) setDoorError(playerDetail(typeof payload.error === "string" ? payload.error : "guard"));
       return;
@@ -979,7 +989,7 @@ export default function PlayFrame({
             <span
               key={i}
               data-chip={i}
-              className={`grid size-5 place-items-center rounded-full border-2 font-sign text-[8px] sm:size-6 sm:text-[9px] ${
+              className={`grid size-4 place-items-center rounded-full border-2 font-sign text-[7px] min-[380px]:size-5 min-[380px]:text-[8px] sm:size-6 sm:text-[9px] ${
                 i < messageBudget - left ? "border-chalk/15 text-chalk/15" : "border-chalk bg-chalk text-ink shadow-[0_0_10px_rgb(239_232_218/0.35)]"
               }`}
             >
@@ -988,11 +998,11 @@ export default function PlayFrame({
           ))}
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
-          <span className="flex items-center gap-1 rounded-full bg-night-3 px-2 py-1 font-mono text-[11px]">
+          <span className="hidden items-center gap-1 rounded-full bg-night-3 px-2 py-1 font-mono text-[11px] min-[380px]:flex">
             Round {vault.round}
           </span>
-          <button onClick={toggleSound} data-sound-toggle className="relative shrink-0 whitespace-nowrap rounded-full bg-night-3 px-2 py-1 font-mono text-[11px] after:absolute after:-inset-x-1 after:-inset-y-2.5 after:content-[''] sm:px-2.5 sm:text-xs" aria-pressed={sound}>
-            {sound ? "♪ on" : "♪ off"}
+          <button onClick={toggleSound} data-sound-toggle aria-label={sound ? "Street sound on" : "Street sound off"} className="relative shrink-0 whitespace-nowrap rounded-full bg-night-3 px-2 py-1 font-mono text-[11px] after:absolute after:-inset-x-1 after:-inset-y-2.5 after:content-[''] sm:px-2.5 sm:text-xs" aria-pressed={sound}>
+            {sound ? "♪ sound on" : "♪ sound off"}
           </button>
         </div>
       </header>
@@ -1505,8 +1515,8 @@ function Thinking() {
 }
 
 /** `answered` is false only when no reply came back, so the same call can be sent again. */
-async function postGuard(body: Record<string, unknown>): Promise<{ payload: Record<string, unknown>; answered: boolean }> {
-  const result = await apiPost("/guard", body);
+async function postGuard(body: Record<string, unknown>, auth?: string): Promise<{ payload: Record<string, unknown>; answered: boolean }> {
+  const result = auth ? await apiPost("/guard", body, () => ({ "x-player-auth": auth })) : await apiPost("/guard", body);
   const answered = result.ok && result.status < 500 && Boolean(result.body) && typeof result.body === "object";
   return { payload: asObject(result), answered };
 }
@@ -1516,6 +1526,7 @@ async function postGuard(body: Record<string, unknown>): Promise<{ payload: Reco
 function guardNotice(error: string): string {
   if (error === "replay") return "This raid moved on in another tab or after a refresh. Reload the page to pick it up.";
   if (error === "spent") return "No messages left.";
+  if (error === "sponsor") return "You sponsor this door, so you cannot raid it. Try another door.";
   if (error === "full") return "Tonight's cut has been taken. Nothing is left to win, and no message was used.";
   if (error === "model") return "The guard did not answer. No message was used. Try again.";
   if (error === "busy" || error.startsWith("The door is busy")) return "The door is busy. No message was used. Try again in a minute.";

@@ -42,7 +42,7 @@ async function VipDoors({ contractId, rpcUrl, fallbackUrl }: { contractId: strin
   const doors = index.ok ? index.doors.filter((door) => door.sponsored || !door.read) : [];
   return (
     <DoorList
-      title="Tonight"
+      title="Doors on the list"
       doors={doors}
       token={readTokenLabel(rpc, contractId)}
       failed={!index.ok}

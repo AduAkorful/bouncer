@@ -23,21 +23,9 @@ import { createBytes, depositFor, specBytes } from "@/lib/storage-cost";
 import { fromBaseUnits, shortUnits, toBaseUnits } from "@/lib/token";
 import { commitRound, createSponsorVault, fund, reclaim, setKeeper, setSpec, type Call } from "@/lib/vault-calls";
 import type { VaultView } from "@/lib/vault";
+import { SAMPLE_SPEC, usesSamplePayee } from "@/lib/sample-spec";
 
 type Props = { rpcUrl: string; contractId: string; networkId: string; storageName: string; keeperAccount: string | null };
-
-const SAMPLE_SPEC = {
-  v: 1,
-  salt: "",
-  decimals: 6,
-  guard: { voice: "Dry and tired. Polite, and never says why." },
-  lines: [
-    { payee: "Coastline Drinks", reference: "CD-{d4}", item: "bar delivery", qty: { lo: 1, hi: 1 }, unit: { lo: "4", hi: "12" }, paid: false },
-    { payee: "Tunde Adeyemi", reference: "", item: "security shifts", qty: { lo: 1, hi: 3 }, unit: { lo: "60", hi: "60" }, paid: true },
-  ],
-  chips: [{ ask: "Who is on the list?", reply: "The list stays with me." }],
-  hint: ["I heard {payee} is still waiting on a payment from tonight.", "Somebody said a reference starting {ref_head}.", "Word is it is around {amount_near}, for {item}.", "I heard {payee} sent {item} over and has not been paid."],
-};
 
 const randomSalt = () => [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, "0")).join("");
 
@@ -277,7 +265,7 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
       const registered = await vaultRegistered(rpc, chain.tokenId, contractId);
       let check = preflightFund({ vault, accountId: sponsor.accountId, amount, funds, vaultRegistered: registered, token: symbol ? { symbol, decimals } : undefined });
       // Point at the faucet note under the balances when that is where test USDC comes from.
-      if (!check.ok && funds.tokenUnits < amount && networkId === "testnet" && symbol.toUpperCase() === "USDC") {
+      if (!check.ok && funds.tokenUnits < amount && networkId === "testnet" && /USDC$/i.test(symbol)) {
         check = { ...check, error: `${check.error} The Circle faucet steps are under the balances.` };
       }
       return sendChecked(check, () => fund(chain.tokenId, contractId, vaultId, amount), "Funded.");
@@ -398,7 +386,7 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
                 Refresh balances
               </button>
               <p className="text-chalk/60">You need {symbol} for the pot and a little NEAR for storage. This site does not send you either.</p>
-              {networkId === "testnet" && symbol.toUpperCase() === "USDC" && (
+              {networkId === "testnet" && /USDC$/i.test(symbol) && (
                 <p className="text-chalk/70">For test USDC, open the <a className="underline chalk-focus" href="https://faucet.circle.com/" target="_blank" rel="noreferrer">Circle faucet</a>, set Network to NEAR Testnet, and paste the account name above. Complete the faucet verification, then refresh balances after the transfer.</p>
               )}
             </div>
@@ -648,13 +636,6 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
       </div>
     </main>
   );
-}
-
-function usesSamplePayee(spec: unknown): boolean {
-  const lines = (spec as { lines?: unknown })?.lines;
-  if (!Array.isArray(lines)) return false;
-  const sample = new Set(SAMPLE_SPEC.lines.map((line) => line.payee.toLowerCase()));
-  return lines.some((line) => typeof (line as { payee?: unknown })?.payee === "string" && sample.has(((line as { payee: string }).payee).trim().toLowerCase()));
 }
 
 /** A fresh account can take a few seconds to appear on the node, so a missing balance is read again twice. */

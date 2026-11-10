@@ -11,14 +11,14 @@ export function SoundToggle({ className = "" }: { className?: string }) {
     <button
       type="button"
       aria-pressed={on}
-      aria-label="Street sound"
+      aria-label={on ? "Street sound on" : "Street sound off"}
       onClick={() => {
         writeSoundPref(!on);
         setOn(!on);
       }}
       className={`chalk-focus inline-flex min-h-11 items-center whitespace-nowrap rounded-full bg-black/50 px-3 font-mono text-xs backdrop-blur ${className}`}
     >
-      {on ? "♪ on" : "♪ off"}
+      {on ? "♪ sound on" : "♪ sound off"}
     </button>
   );
 }

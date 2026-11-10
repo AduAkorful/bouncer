@@ -67,7 +67,7 @@ export function SpecForm({ text, onChange, currency }: { text: string; onChange:
         Add a bill
       </button>
       <label className={small}>
-        Street hints (optional), one per line, up to 6. Each player hears one of them, so the street is not the same for everyone. They can use {"{payee} {item} {ref_head} {amount_near}"}, which give a clue. {"{reference}"} and {"{amount}"} give the exact bill, and using both hands players the whole of it.
+        Street hints (optional), one per line, up to 6. Each player hears one of them, so the street is not the same for everyone. They can use {"{payee} {item} {ref_head} {amount_near}"}, which give a clue. {"{reference}"} and {"{amount}"} give the exact bill, and using them with {"{payee}"} hands players the whole of it, so the fairness test fails it.
         <textarea className={field} rows={4} value={Array.isArray(spec.hint) ? spec.hint.join("\n") : typeof spec.hint === "string" ? spec.hint : ""} onChange={(e) => {
           const next: Spec = { ...spec };
           const lines = e.target.value.split("\n").filter((line) => line.trim().length > 0).slice(0, 6);

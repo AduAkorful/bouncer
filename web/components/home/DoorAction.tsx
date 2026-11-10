@@ -2,11 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { QueueBar } from "@/components/home/QueueBar";
-import { TonightRaid } from "@/components/home/TonightRaid";
+import dynamic from "next/dynamic";
 import { TokenAmount } from "@/components/TokenAmount";
 import { doorPaths } from "@/lib/door-read";
 import type { TokenRead } from "@/lib/page-vault";
-import { uncollected, type Uncollected } from "@/lib/uncollected";
+import type { Uncollected } from "@/lib/uncollected";
+
+// The sign-in and the raid store need the key libraries. The Join button does not, so they load after the page is up.
+const TonightRaid = dynamic(() => import("@/components/home/TonightRaid").then((m) => m.TonightRaid), { ssr: false });
 
 /**
  * The door's main button. A signed-in player with a win the vault has not paid sees Collect first;
@@ -36,7 +39,7 @@ export function DoorAction({
     const rounds = [round];
     // Last night's win is still payable during the guest hold, after the round has moved on.
     if (BigInt(round) > 1n) rounds.push((BigInt(round) - 1n).toString());
-    uncollected(rounds.map((r) => ({ vaultId, round: r }))).then((found) => {
+    import("@/lib/uncollected").then(({ uncollected }) => uncollected(rounds.map((r) => ({ vaultId, round: r })))).then((found) => {
       if (live) setWin(found[0] ?? null);
     }).catch(() => undefined);
     return () => { live = false; };

@@ -47,8 +47,8 @@ export function SettingsDevice({ storageName }: { storageName: string }) {
           <h2 className="font-sign text-lg">Street sound</h2>
           <p className="mt-1 text-sm text-chalk/70">{sound ? "Plays from your first tap on the street." : "Off until you turn it on."}</p>
         </div>
-        <button type="button" onClick={toggle} aria-pressed={sound} className="chalk-focus min-h-11 shrink-0 rounded-full border border-white/20 px-4 text-sm">
-          {sound ? "On" : "Off"}
+        <button type="button" onClick={toggle} aria-pressed={sound} aria-label={sound ? "Street sound on" : "Street sound off"} className="chalk-focus min-h-11 shrink-0 rounded-full border border-white/20 px-4 text-sm">
+          {sound ? "Sound on" : "Sound off"}
         </button>
       </section>
     </div>

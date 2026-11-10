@@ -11,7 +11,7 @@ import { TokenAmount, TokenWord } from "@/components/TokenAmount";
 import { deriveSecrets } from "@/lib/device-pass";
 import { readHold, unlockHeld } from "@/lib/player-hold";
 import { readPayoutAccount, testnetAccountId, writePayoutAccount } from "@/lib/imported-account";
-import { addWalletKey, sendClaim } from "@/lib/send-claim";
+import { sendClaim } from "@/lib/send-claim";
 import { PayoutWallet } from "@/components/claim/PayoutWallet";
 import { PaidMoment } from "@/components/claim/PaidMoment";
 import { VerifiedPanel } from "@/components/claim/VerifiedPanel";
@@ -63,8 +63,6 @@ export function ClaimDoor({
   const [raidId, setRaidId] = useState<string | null>(null);
   const [missing, setMissing] = useState(false);
   const [retry, setRetry] = useState(false);
-  const [walletKey, setWalletKey] = useState("");
-  const [keyNote, setKeyNote] = useState<string | null>(null);
   const [namedAccount, setNamedAccount] = useState("");
   const [preference, setPreference] = useState<"unset" | "new" | "existing">("unset");
   const [payoutHash, setPayoutHash] = useState<string | null>(null);
@@ -313,23 +311,6 @@ export function ClaimDoor({
     setPhase("paying");
   }
 
-  async function addKey() {
-    if (!raidId || !payoutAccount) return;
-    setBusy(true);
-    setKeyNote(null);
-    const added = await addWalletKey({
-      vaultId,
-      round,
-      raidId,
-      rpcUrl,
-      networkId,
-      accountId: payoutAccount,
-      walletPublicKey: walletKey,
-    });
-    setBusy(false);
-    setKeyNote(added.ok ? "That key can use this account." : added.error);
-  }
-
   return (
     <main className="min-h-dvh overflow-x-clip bg-night px-4 pb-24 pt-8 text-chalk">
       <SiteNav />
@@ -414,7 +395,8 @@ export function ClaimDoor({
           </>
         ) : null}
         {phase === "closed" && <p className="mt-5 text-sm text-chalk/70">This crack can no longer be claimed.</p>}
-        {payoutAccount && (
+        {/* A passkey's own account name is long and means nothing to a player, so only an account they named is shown. */}
+        {payoutAccount && preference === "existing" && (
           <section className="mt-5 rounded-3xl border border-white/10 bg-night-2 p-5">
             <p className="break-all font-mono text-[12px] text-chalk/70">{payoutAccount}</p>
             <button
@@ -424,21 +406,6 @@ export function ClaimDoor({
             >
               Copy account
             </button>
-            {preference !== "existing" && (
-              <>
-                <p className="mt-4 text-sm text-chalk/70">The key stays on this device. Paste a wallet public key to use this account there.</p>
-                <input
-                  value={walletKey}
-                  onChange={(event) => setWalletKey(event.target.value)}
-                  placeholder="ed25519:"
-                  className="mt-3 w-full rounded-2xl border border-white/10 bg-night px-3 py-3 font-mono text-sm"
-                />
-                <button disabled={busy || !walletKey.trim()} onClick={() => void addKey()} className="mt-3 w-full rounded-2xl border border-chalk/30 py-3 text-sm disabled:opacity-40">
-                  Add this key
-                </button>
-                {keyNote ? <p className="mt-3 text-sm text-chalk/70">{keyNote}</p> : null}
-              </>
-            )}
           </section>
         )}
         {payoutAccount && phase === "paid" ? (
