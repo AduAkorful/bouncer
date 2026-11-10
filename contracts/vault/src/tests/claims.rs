@@ -226,3 +226,28 @@ fn registered_receiver_skips_the_storage_deposit() {
     assert!(fresh.iter().all(|call| call.method != "storage_deposit"));
     assert!(fresh.iter().any(|call| call.method == "ft_transfer" && call.deposit == NearToken::from_yoctonear(1)));
 }
+
+#[test]
+fn payout_callbacks_run_on_the_vault_not_the_token() {
+    let mut door = pay_door();
+    door.submit("r1", PLAYER, 40, 1, 1);
+    let unlock = door.crack(1, "r1").unlock_at;
+    let signature = sign_claim(&door.claim, "velvet", 1, "r1", PLAYER);
+    claim_at(&mut door, "r1", PLAYER, unlock, signature);
+    let claimed = call_targets();
+    let check = claimed.iter().find(|(_, method)| method == "on_storage_checked").expect("storage callback");
+    assert_eq!(check.0, CONTRACT, "on_storage_checked must run on the vault");
+    assert!(claimed.iter().any(|(to, method)| method == "storage_balance_of" && to != CONTRACT));
+
+    door.world.at(CONTRACT, unlock);
+    let before = call_targets().len();
+    door.world.contract.on_storage_checked(
+        id(PLAYER),
+        U128(40),
+        Outflow::Claim { vault_id: "velvet".into(), round: 1, raid_id: "r1".into() },
+        Ok(None),
+    );
+    let fresh: Vec<_> = call_targets().into_iter().skip(before).collect();
+    let done = fresh.iter().find(|(_, method)| method == "on_transfer_done").expect("done callback");
+    assert_eq!(done.0, CONTRACT, "on_transfer_done must run on the vault");
+}

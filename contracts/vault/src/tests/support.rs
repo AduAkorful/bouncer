@@ -206,3 +206,17 @@ pub fn calls() -> Vec<Call> {
     }
     out
 }
+
+/// Each function call with the account its receipt is addressed to, so a test can tell a callback that
+/// runs on the vault from one that was appended to the token's receipt.
+pub fn call_targets() -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    for receipt in get_created_receipts() {
+        for action in receipt.actions {
+            if let MockAction::FunctionCallWeight { method_name, .. } = action {
+                out.push((receipt.receiver_id.to_string(), String::from_utf8(method_name).unwrap()));
+            }
+        }
+    }
+    out
+}

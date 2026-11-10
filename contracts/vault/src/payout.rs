@@ -49,10 +49,11 @@ impl Payout for UsdcPayout {
         let balance = ext_usdc::ext(usdc_account())
             .with_static_gas(GAS_READ)
             .storage_balance_of(to.clone());
-        ext_vault::ext_on(balance).with_static_gas(GAS_AFTER_READ).on_storage_checked(
-            to,
-            U128(amount),
-            outflow,
+        // `then` targets the vault; `ext_on` would append the call to the token's receipt, where it does not exist.
+        balance.then(
+            ext_vault::ext(env::current_account_id())
+                .with_static_gas(GAS_AFTER_READ)
+                .on_storage_checked(to, U128(amount), outflow),
         )
     }
 
@@ -60,9 +61,11 @@ impl Payout for UsdcPayout {
         let balance = ext_usdc::ext(usdc_account())
             .with_static_gas(GAS_READ)
             .ft_balance_of(env::current_account_id());
-        ext_vault::ext_on(balance)
-            .with_static_gas(GAS_RECOVER_CB)
-            .on_recover_balance(to, U128(amount))
+        balance.then(
+            ext_vault::ext(env::current_account_id())
+                .with_static_gas(GAS_RECOVER_CB)
+                .on_recover_balance(to, U128(amount)),
+        )
     }
 }
 
@@ -94,9 +97,12 @@ impl VaultContract {
                 .with_static_gas(GAS_TRANSFER)
                 .ft_transfer(to, amount, None)
         };
-        ext_vault::ext_on(transfer)
-            .with_static_gas(GAS_DONE)
-            .on_transfer_done(outflow, amount)
+        transfer
+            .then(
+                ext_vault::ext(env::current_account_id())
+                    .with_static_gas(GAS_DONE)
+                    .on_transfer_done(outflow, amount),
+            )
             .detach();
     }
 
