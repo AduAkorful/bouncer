@@ -10,6 +10,7 @@ mod ids;
 mod ledger;
 mod manifest;
 pub mod model_diagnostic;
+pub mod proof;
 mod rules;
 mod session;
 mod spec;

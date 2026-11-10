@@ -18,6 +18,14 @@ pub trait Model {
     fn complete_draft(&mut self, system: &str, user: &str) -> Result<String, crate::model_diagnostic::ModelFailure> {
         self.complete(system, user).map_err(|_| crate::model_diagnostic::ModelFailure::Unknown)
     }
+    /// Evidence for the last completion, when the host could get it. Evidence only: it never gates play.
+    fn evidence(&mut self) -> Option<serde_json::Value> {
+        None
+    }
+    /// The model's attestation, fetched with a fresh nonce before any completion in a raid.
+    fn preflight(&mut self) -> Option<serde_json::Value> {
+        None
+    }
 }
 
 pub trait Chain {

@@ -50,6 +50,7 @@ where
 
 fn open<M, S, C, R, B>(value: &Value, host: &mut Host<M, S, C, R, B>) -> String
 where
+    M: Model,
     R: Random,
 {
     let vault_id = match id_field(value, "vault_id") {
@@ -109,7 +110,14 @@ where
         (None, None) => return fail("venue"),
     };
     match seal(&session, &host.seed, host.random.nonce()) {
-        Ok(blob) => json!({"ok": true, "blob": blob, "used": 0, "street": heard}).to_string(),
+        Ok(blob) => {
+            let mut response = json!({"ok": true, "blob": blob, "used": 0, "street": heard});
+            // Evidence about the model, taken before any reply in this raid. A missing one is simply absent.
+            if let Some(preflight) = host.model.preflight() {
+                response["model_proof"] = preflight;
+            }
+            response.to_string()
+        }
         Err(error) => fail(error),
     }
 }
@@ -142,6 +150,7 @@ where
         Ok(rules) => rules,
         Err(error) => return fail_blob(error, &blob),
     };
+    let mut proof = None;
     let reply = if let Some(reply) = rules.chip(&text) {
         reply
     } else {
@@ -149,11 +158,15 @@ where
         match host.model.complete(&rules.system, &prompt) {
             Err(()) => return fail_blob("model", &blob),
             Ok(answer) if answer.trim().is_empty() || leaks_with(&answer, &rules.lines, rules.decimals) => FALLBACK.to_string(),
-            Ok(answer) => answer,
+            Ok(answer) => {
+                // Only a reply the model wrote and the guard kept carries evidence.
+                proof = host.model.evidence();
+                answer
+            }
         }
     };
     spend(&mut session, &text, &reply);
-    finish_chat(&session, host, &reply, &hash)
+    finish_chat(&session, host, &reply, &hash, proof)
 }
 
 fn bill<M, S, C, R, B>(value: &Value, host: &mut Host<M, S, C, R, B>) -> String
@@ -214,7 +227,7 @@ where
         Hit::One(line) => approve(host, &blob, &mut session, &rules, &draft, &line, &text, rule, &hash),
         Hit::None | Hit::Many => {
             spend(&mut session, &text, REFUSAL);
-            finish_chat(&session, host, REFUSAL, &hash)
+            finish_chat(&session, host, REFUSAL, &hash, None)
         }
     }
 }
@@ -237,8 +250,12 @@ where
     B: Budget,
 {
     let prompt = user_prompt_with(&rules.lines, &session.transcript, text);
+    let mut proof = None;
     let reply = match host.model.complete(&rules.system, &prompt) {
-        Ok(answer) if !answer.trim().is_empty() && !leaks_with(&answer, &rules.lines, rules.decimals) => answer,
+        Ok(answer) if !answer.trim().is_empty() && !leaks_with(&answer, &rules.lines, rules.decimals) => {
+            proof = host.model.evidence();
+            answer
+        }
         _ => APPROVED.to_string(),
     };
     let amount = match rule {
@@ -277,7 +294,7 @@ where
         Ok(sealed) => sealed,
         Err(error) => return fail_blob(error, blob),
     };
-    let response = json!({
+    let mut response = json!({
         "ok": true,
         "blob": sealed,
         "reply": reply,
@@ -294,9 +311,12 @@ where
             "guard_version": hex::encode(body.guard_version),
         },
         "signature": hex::encode(signature),
-    })
-    .to_string();
-    keep_and_record(host, session, hash, response)
+    });
+    // The reply is inside the signed conversation hash, so its evidence belongs next to the verdict.
+    if let Some(proof) = proof {
+        response["proof"] = proof;
+    }
+    keep_and_record(host, session, hash, response.to_string())
 }
 
 fn reveal<M, S, C, R, B>(value: &Value, host: &mut Host<M, S, C, R, B>) -> String
@@ -403,15 +423,24 @@ fn budget_key(session: &Session) -> String {
     format!("{}|{}|{}", session.vault_id, session.round, session.player_id)
 }
 
-fn finish_chat<M, S, C, R, B>(session: &Session, host: &mut Host<M, S, C, R, B>, reply: &str, hash: &[u8; 32]) -> String
+fn finish_chat<M, S, C, R, B>(
+    session: &Session,
+    host: &mut Host<M, S, C, R, B>,
+    reply: &str,
+    hash: &[u8; 32],
+    proof: Option<Value>,
+) -> String
 where
     R: Random,
     B: Budget,
 {
     match seal(session, &host.seed, host.random.nonce()) {
         Ok(blob) => {
-            let response = json!({"ok": true, "blob": blob, "reply": reply, "used": session.used}).to_string();
-            keep_and_record(host, session, hash, response)
+            let mut response = json!({"ok": true, "blob": blob, "reply": reply, "used": session.used});
+            if let Some(proof) = proof {
+                response["proof"] = proof;
+            }
+            keep_and_record(host, session, hash, response.to_string())
         }
         Err(error) => fail(error),
     }

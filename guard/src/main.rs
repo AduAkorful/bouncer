@@ -21,6 +21,8 @@ mod entry {
     use crate::OUTLAYER_MANIFEST;
 
     const COMPLETIONS: &str = "https://cloud-api.near.ai/v1/chat/completions";
+    const SIGNATURES: &str = "https://cloud-api.near.ai/v1/signature";
+    const REPORT: &str = "https://cloud-api.near.ai/v1/attestation/report";
 
     pub fn run() {
         let _manifest = &OUTLAYER_MANIFEST;
@@ -34,7 +36,7 @@ mod entry {
         };
         let mut host = Host {
             seed,
-            model: Cloud,
+            model: Cloud::default(),
             signer: ProjectKey,
             chain: VaultDoor,
             random: OsRandom,
@@ -64,12 +66,20 @@ mod entry {
         format!(r#"{{"ok":false,"error":"{error}"}}"#)
     }
 
-    struct Cloud;
+    /// The exact bytes of the last completion, kept so its signature can be tied to them.
+    #[derive(Default)]
+    struct Cloud {
+        last: Option<(Vec<u8>, Vec<u8>)>,
+    }
 
     impl Model for Cloud {
         fn complete(&mut self, system: &str, user: &str) -> Result<String, ()> {
+            self.last = None;
             match complete_cloud(system, user, None) {
-                Ok(text) => Ok(text),
+                Ok((text, request, response)) => {
+                    self.last = Some((request, response));
+                    Ok(text)
+                }
                 Err(stage) => {
                     eprintln!("{}", stage.label());
                     Err(())
@@ -77,11 +87,49 @@ mod entry {
             }
         }
         fn complete_draft(&mut self, system: &str, user: &str) -> Result<String, guard::model_diagnostic::ModelFailure> {
-            complete_cloud(system, user, Some(std::time::Duration::from_secs(50)))
+            complete_cloud(system, user, Some(std::time::Duration::from_secs(50))).map(|(text, _, _)| text)
+        }
+        fn evidence(&mut self) -> Option<serde_json::Value> {
+            let (request, response) = self.last.take()?;
+            let key = std::env::var("NEAR_AI_KEY").ok().filter(|k| !k.is_empty())?;
+            let id = serde_json::from_slice::<serde_json::Value>(&response).ok()?.get("id")?.as_str()?.to_string();
+            // The signature can lag the completion by a moment, so one more try is made.
+            for _ in 0..2 {
+                let url = format!("{SIGNATURES}/{id}?model={MODEL_ID}&signing_algo=ecdsa");
+                let sent = wasi_http_client::Client::new()
+                    .get(&url)
+                    .header("Authorization", format!("Bearer {key}"))
+                    .header("Accept-Encoding", "identity")
+                    .send();
+                let Ok(reply) = sent else { continue };
+                if !(200..300).contains(&reply.status()) { continue }
+                let Ok(bytes) = reply.body() else { continue };
+                if let Some(proof) = guard::proof::reply_proof(MODEL_ID, &request, &response, &bytes) {
+                    return Some(proof);
+                }
+            }
+            None
+        }
+        fn preflight(&mut self) -> Option<serde_json::Value> {
+            let mut raw = [0u8; 32];
+            getrandom::getrandom(&mut raw).ok()?;
+            let nonce = hex::encode(raw);
+            let url = format!("{REPORT}?signing_algo=ecdsa&nonce={nonce}&model={MODEL_ID}&provider=near");
+            let reply = wasi_http_client::Client::new()
+                .get(&url)
+                .header("Accept", "application/json")
+                .header("Accept-Encoding", "identity")
+                .header("x-no-aliasing", "true")
+                .send()
+                .ok()?;
+            if !(200..300).contains(&reply.status()) { return None }
+            let bytes = reply.body().ok()?;
+            guard::proof::preflight_proof(MODEL_ID, &nonce, &bytes)
         }
     }
 
-    fn complete_cloud(system: &str, user: &str, connect_timeout: Option<std::time::Duration>) -> Result<String, guard::model_diagnostic::ModelFailure> {
+    /// Returns the reply text with the exact request and response bytes, for the evidence that follows.
+    fn complete_cloud(system: &str, user: &str, connect_timeout: Option<std::time::Duration>) -> Result<(String, Vec<u8>, Vec<u8>), guard::model_diagnostic::ModelFailure> {
         use guard::model_diagnostic::{completion_content, ModelFailure as F};
         let key = std::env::var("NEAR_AI_KEY").map_err(|_| F::Key)?;
         if key.is_empty() { return Err(F::Key); }
@@ -96,6 +144,8 @@ mod entry {
             .post(COMPLETIONS)
             .header("Content-Type", "application/json")
             .header("Authorization", format!("Bearer {key}"))
+            .header("Accept-Encoding", "identity")
+            .header("x-no-aliasing", "true")
             .body(&payload);
         let request = match connect_timeout {
             Some(timeout) => request.connect_timeout(timeout),
@@ -106,7 +156,8 @@ mod entry {
             })?;
         if !(200..300).contains(&response.status()) { return Err(F::Http); }
         let bytes = response.body().map_err(|_| F::Body)?;
-        completion_content(&bytes, &key)
+        let text = completion_content(&bytes, &key)?;
+        Ok((text, payload, bytes))
     }
 
     struct ProjectKey;

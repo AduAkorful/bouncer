@@ -1,4 +1,5 @@
 mod abuse;
+mod proof;
 mod retry;
 mod spec;
 
@@ -42,6 +43,9 @@ pub(crate) struct Script {
     pub(crate) calls: usize,
     pub(crate) last_user: String,
     pub(crate) last_system: String,
+    /// What the stand-in reports as evidence for the last completion and as the raid's preflight.
+    pub(crate) proof: Option<Value>,
+    pub(crate) preflight: Option<Value>,
 }
 
 impl Model for Script {
@@ -50,6 +54,12 @@ impl Model for Script {
         self.last_system = system.to_string();
         self.last_user = user.to_string();
         self.replies.pop().unwrap_or(Ok("Evening.".into()))
+    }
+    fn evidence(&mut self) -> Option<Value> {
+        self.proof.clone()
+    }
+    fn preflight(&mut self) -> Option<Value> {
+        self.preflight.clone()
     }
 }
 
@@ -101,7 +111,7 @@ impl Budget for Mem {
 pub(crate) fn host(replies: Vec<Result<String, ()>>, view: Result<DoorView, ()>) -> Host<Script, Key, Door, Nonces, Mem> {
     Host {
         seed: [9u8; 32],
-        model: Script { replies, calls: 0, last_user: String::new(), last_system: String::new() },
+        model: Script { replies, calls: 0, last_user: String::new(), last_system: String::new(), proof: None, preflight: None },
         signer: Key::new([4u8; 32]),
         chain: Door { view },
         random: Nonces(0),
@@ -142,7 +152,7 @@ pub(crate) fn json(text: &str) -> Value {
     serde_json::from_str(text).unwrap()
 }
 
-fn open(host: &mut Host<Script, Key, Door, Nonces, Mem>, venue: &str, rule: &str) -> String {
+pub(crate) fn open(host: &mut Host<Script, Key, Door, Nonces, Mem>, venue: &str, rule: &str) -> String {
     let out = handle(
         &format!(
             r#"{{"op":"open","vault_id":"velvet-1","round":1,"player_id":"ada","raid_id":"raid-1","claim_pk":"{}","venue":"{venue}","rule":"{rule}"}}"#,
@@ -153,14 +163,14 @@ fn open(host: &mut Host<Script, Key, Door, Nonces, Mem>, venue: &str, rule: &str
     json(&out)["blob"].as_str().unwrap().to_string()
 }
 
-fn say(host: &mut Host<Script, Key, Door, Nonces, Mem>, blob: &str, text: &str) -> Value {
+pub(crate) fn say(host: &mut Host<Script, Key, Door, Nonces, Mem>, blob: &str, text: &str) -> Value {
     json(&handle(
         &serde_json::json!({"op":"say","vault_id":"velvet-1","round":1,"player_id":"ada","blob":blob,"text":text}).to_string(),
         host,
     ))
 }
 
-fn bill(
+pub(crate) fn bill(
     host: &mut Host<Script, Key, Door, Nonces, Mem>,
     blob: &str,
     payee: &str,
