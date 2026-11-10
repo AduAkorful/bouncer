@@ -40,12 +40,6 @@ export default function ProfilePage() {
           <Link href="/sponsors" className="chalk-focus inline-flex min-h-11 items-center text-sm text-chalk/80 underline decoration-white/20">
             Sponsor a door
           </Link>
-          <Link href="/fame" className="chalk-focus inline-flex min-h-11 items-center text-sm text-chalk/80 underline decoration-white/20">
-            Hall of fame
-          </Link>
-          <Link href="/home" className="chalk-focus inline-flex min-h-11 items-center text-sm text-chalk/80 underline decoration-white/20">
-            The door
-          </Link>
         </div>
       </div>
     </main>

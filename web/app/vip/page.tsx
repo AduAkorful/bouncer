@@ -1,6 +1,5 @@
 import { SiteNav } from "@/components/SiteNav";
 import { screen } from "@/lib/screen";
-import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { DoorList } from "@/components/DoorList";
@@ -31,9 +30,6 @@ export default function VipPage() {
         <VipDoors contractId={labels.env.contractId} rpcUrl={labels.env.rpcUrl} fallbackUrl={labels.env.rpcFallbackUrl} />
       </Suspense>
       <div className="mx-auto max-w-5xl px-4">
-        <Link href="/home" className="chalk-focus mt-6 inline-flex min-h-11 items-center text-sm text-chalk/80 underline decoration-white/20">
-          The door
-        </Link>
       </div>
     </main>
   );

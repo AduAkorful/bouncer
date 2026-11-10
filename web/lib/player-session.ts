@@ -8,7 +8,7 @@ import { deriveSecrets, type DeviceSecrets } from "./device-pass.ts";
 import { unlockHeld } from "./player-hold.ts";
 
 export type PlayerSession = {
-  player: { name: string; renameUsed: boolean; streak: number; nights: number; created: string };
+  player: { name: string; renameUsed: boolean; streak: number; nights: number; created: string; raidedToday?: boolean };
   place: number | null;
   line: string | null;
   nights: { vaultId: string; round: string; state: "opened" | "in"; day: string }[];
