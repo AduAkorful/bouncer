@@ -266,8 +266,11 @@ fn matching_line_signs_the_line_total() {
     let line = lines.iter().find(|line| line.payee == "DJ K-Nova").unwrap();
     let mut host = host(vec![Ok("The invoice is in order.".into())], closed());
     let blob = open(&mut host, "velvet", "pay-the-bill");
+    let before = host.model.calls;
     let out = bill(&mut host, &blob, &line.payee, &line.reference, &line.item, line.qty, line.unit - 1_000, None);
-    assert_eq!(out["reply"], "The invoice is in order.");
+    // An approval is the fixed word. The model is not asked to word it, so it cannot read like a refusal.
+    assert_eq!(out["reply"], "Approved.");
+    assert_eq!(host.model.calls, before);
     assert_eq!(out["verdict"]["amount"], line.total.to_string());
     assert!(out.get("signature").is_some());
     let signed = host.signer.signed.last().unwrap();

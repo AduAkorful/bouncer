@@ -60,7 +60,7 @@ fn a_reply_the_guard_replaced_carries_no_evidence() {
 }
 
 #[test]
-fn a_refusal_carries_no_evidence_and_an_approval_does() {
+fn neither_a_refusal_nor_an_approval_carries_model_evidence() {
     let lines = generate(&[9u8; 32], "velvet-1", 1, "ada", Venue::Velvet);
     let line = lines.iter().find(|l| l.payee == "DJ K-Nova").unwrap();
     let mut h = host(vec![Ok("Go on in.".into())], closed());
@@ -72,8 +72,8 @@ fn a_refusal_carries_no_evidence_and_an_approval_does() {
 
     let blob = refused["blob"].as_str().unwrap().to_string();
     let approved = bill(&mut h, &blob, &line.payee, &line.reference, &line.item, line.qty, line.unit, Some("pay-the-bill"));
-    assert_eq!(approved["reply"], "Go on in.");
-    assert_eq!(approved["proof"]["signing_address"], "0xabc");
+    assert_eq!(approved["reply"], "Approved.");
+    assert!(approved.get("proof").is_none());
     assert!(approved["signature"].is_string());
 }
 

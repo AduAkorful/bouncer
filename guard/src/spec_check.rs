@@ -55,7 +55,7 @@ pub fn check(spec: &Spec, spec_hash: &[u8; 32], cap: u128) -> Report {
     for hint in &spec.hints {
         let whole = hint.contains("{payee}") && hint.contains("{reference}") && hint.contains("{amount}");
         if whole {
-            warnings.push(format!("The hint \"{hint}\" hands players the whole bill. Use {{ref_head}}, {{amount_near}} or {{item}} to give a clue instead."));
+            failures.insert(format!("The hint \"{hint}\" hands players the whole bill. Use {{ref_head}}, {{amount_near}} or {{item}} to give a clue instead."));
         }
     }
 

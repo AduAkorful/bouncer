@@ -249,15 +249,10 @@ where
     R: Random,
     B: Budget,
 {
-    let prompt = user_prompt_with(&rules.lines, &session.transcript, text);
-    let mut proof = None;
-    let reply = match host.model.complete(&rules.system, &prompt) {
-        Ok(answer) if !answer.trim().is_empty() && !leaks_with(&answer, &rules.lines, rules.decimals) => {
-            proof = host.model.evidence();
-            answer
-        }
-        _ => APPROVED.to_string(),
-    };
+    // The verdict is the guard's rules, not the model's. The model is not asked to word an approval: it is not told
+    // the bill passed, and its reply read like a refusal beside a signed win (QA R22-19, R23).
+    let proof = None;
+    let reply = APPROVED.to_string();
     let amount = match rule {
         Rule::PayTheBill => line.total,
         Rule::SplitTheDay => 0,

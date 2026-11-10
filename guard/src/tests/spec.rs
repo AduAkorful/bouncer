@@ -518,12 +518,12 @@ fn a_list_of_rumours_gives_players_different_clues_and_the_same_one_on_every_ope
 }
 
 #[test]
-fn a_hint_that_hands_over_the_whole_bill_is_a_warning() {
+fn a_hint_that_hands_over_the_whole_bill_fails_the_fairness_test() {
     let mut spec = example();
     spec["hint"] = json!("Booking {reference}, refund {amount}, payee {payee}.");
     let out = check(&spec, "500000000");
-    assert_eq!(out["pass"], true, "{out}");
-    assert!(out["warnings"].as_array().unwrap().iter().any(|w| w.as_str().unwrap().contains("whole bill")), "{out}");
+    assert_eq!(out["pass"], false, "{out}");
+    assert!(out["failures"].as_array().unwrap().iter().any(|w| w.as_str().unwrap().contains("whole bill")), "{out}");
     let mut list = example();
     list["hint"] = json!(["Only {payee}.", "Around {amount_near}."]);
     assert!(check(&list, "500000000")["warnings"].as_array().unwrap().is_empty());
