@@ -14,7 +14,7 @@ export function readApiBase(value: string | undefined): string | null {
 /** Signed headers are a function, so a retry signs again: the server refuses a signature it has already seen. */
 export type ApiHeaders = Record<string, string> | (() => Record<string, string>);
 
-export async function postJson(base: string | null, fetchImpl: typeof fetch, path: string, body: unknown, headers: ApiHeaders = {}): Promise<ApiResult> {
+export async function postJson(base: string | null, fetchImpl: typeof fetch, path: string, body: unknown, headers: ApiHeaders = {}, retry = true): Promise<ApiResult> {
   if (!base) return { ok: false, error: "no server" };
   const attempt = async (): Promise<{ result: ApiResult; retry: boolean }> => {
     let response: Response;
@@ -32,12 +32,17 @@ export async function postJson(base: string | null, fetchImpl: typeof fetch, pat
     return { result: { ok: true, status: response.status, body: parsed }, retry: false };
   };
   const first = await attempt();
-  if (!first.retry) return first.result;
+  if (!first.retry || !retry) return first.result;
   return (await attempt()).result;
 }
 
 export function apiPost(path: string, body: unknown, headers: ApiHeaders = {}): Promise<ApiResult> {
   return postJson(readApiBase(process.env.NEXT_PUBLIC_API_URL), fetch, path, body, headers);
+}
+
+/** A call that must not run twice by accident, such as making an account. The caller checks what happened instead. */
+export function apiPostOnce(path: string, body: unknown): Promise<ApiResult> {
+  return postJson(readApiBase(process.env.NEXT_PUBLIC_API_URL), fetch, path, body, {}, false);
 }
 
 /** A read from the server. `timeoutMs` turns a hung read into a plain failure the page can offer to retry. */

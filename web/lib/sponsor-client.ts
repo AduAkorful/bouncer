@@ -3,7 +3,7 @@
 /** What the sponsor page does in the browser: read chain, sign as the sponsor, send. Nothing here keeps a key. */
 
 import { Account, actions, KeyPair, type KeyPairString } from "near-api-js";
-import { apiPost } from "./api.ts";
+import { apiPost, apiPostOnce } from "./api.ts";
 import { buildAuthHeader } from "./sponsor-auth.ts";
 import { type Rpc } from "./chain.ts";
 import { deriveSecrets } from "./device-pass.ts";
@@ -40,16 +40,28 @@ export async function connectSponsor(input: { rpcUrl: string; networkId: string;
     const check = await accessOnAccount(input.rpcUrl, named, secrets.accountPublicKey);
     if (check !== "full") return { ok: false, error: accessMessage(check) };
   } else {
-    accountId = await existingPasskeyAccount(input.rpcUrl, secrets.accountPublicKey);
+    const found = await existingPasskeyAccount(input.rpcUrl, secrets.accountPublicKey);
+    // A lookup that could not finish is not "no account": offering to make one here would make a second.
+    if (found === "unknown") return { ok: false, error: LOOKUP_FAILED };
+    accountId = found === "none" ? null : found;
   }
   if (!accountId && !input.create && !input.makeAccount) {
     return { ok: false, error: "No testnet account uses this passkey yet.", noAccount: true };
   }
   if (!accountId) {
-    const created = await apiPost("/passkey/create-account", { publicKey: secrets.accountPublicKey });
+    const created = await apiPostOnce("/passkey/create-account", { publicKey: secrets.accountPublicKey });
     const body = (created.ok ? created.body : null) as { ok?: boolean; accountId?: string } | null;
-    if (!body?.ok || typeof body.accountId !== "string") return { ok: false, error: "The passkey account was not created." };
-    accountId = body.accountId;
+    if (body?.ok && typeof body.accountId === "string") {
+      accountId = body.accountId;
+    } else {
+      // The account may have been made even though the answer was lost. Look before saying it was not.
+      const after = await existingPasskeyAccount(input.rpcUrl, secrets.accountPublicKey);
+      if (after === "unknown" || after === "none") {
+        const limited = created.ok && created.status === 429;
+        return { ok: false, error: limited ? "Too many accounts were made from here today. Try again tomorrow." : CREATE_FAILED };
+      }
+      accountId = after;
+    }
   }
   if (!accountId) return { ok: false, error: "The passkey account was not created." };
   const account = new Account(accountId, input.rpcUrl, secrets.accountSecret as KeyPairString);
@@ -178,9 +190,15 @@ export async function chainNowNs(rpcUrl: string): Promise<bigint | null> {
  * A returning sponsor on a cleared browser already has an account. Looking it up first keeps the
  * relay's daily creation allowance for new accounts.
  */
-async function existingPasskeyAccount(rpcUrl: string, publicKey: string): Promise<string | null> {
+async function existingPasskeyAccount(rpcUrl: string, publicKey: string): Promise<string | "none" | "unknown"> {
   const looked = await apiPost("/passkey/account", { publicKey });
   const body = (looked.ok ? looked.body : null) as { ok?: boolean; accountId?: string } | null;
-  if (!body?.ok || typeof body.accountId !== "string") return null;
-  return (await accessOnAccount(rpcUrl, body.accountId, publicKey)) === "full" ? body.accountId : null;
+  if (!looked.ok || looked.status !== 200 || !body?.ok || typeof body.accountId !== "string") return "unknown";
+  const check = await accessOnAccount(rpcUrl, body.accountId, publicKey);
+  if (check === "full") return body.accountId;
+  // Only the chain saying the account does not exist means there is none.
+  return check === "absent" ? "none" : "unknown";
 }
+
+const LOOKUP_FAILED = "Your account could not be checked right now. Try again in a minute.";
+const CREATE_FAILED = "The passkey account was not made. Wait a minute and try again; the same passkey keeps the same account.";

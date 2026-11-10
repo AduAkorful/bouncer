@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { CloseTime } from "@/components/Countdown";
+import { doorShut } from "@/lib/door";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiPost } from "@/lib/api";
 import { readHold } from "@/lib/player-hold";
 import { buildCard, cardLook, MAX_NAME, MAX_PITCH, MAX_SIGN, type Card } from "@/lib/card";
-import { ACCRA_SETTING, defaultStreet, SETTING_FIELDS, STREET_VIEW } from "@/lib/street-setting";
+import { ACCRA_SETTING, defaultStreet, pieceDrawn, PLACES, randomSetting, SETTING_FIELDS, STREET_VIEW } from "@/lib/street-setting";
 import { DoorScene } from "@/components/DoorScene";
 import { SpecForm } from "@/components/sponsor/SpecForm";
 import { httpRpc } from "@/lib/chain";
@@ -249,6 +251,8 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
       const capUnits = toBaseUnits(capText, decimals);
       if (capUnits === null || capUnits <= 0n) return "Enter a cap above zero.";
       if (spec.hint !== undefined && !ackHint) return "Confirm the hint first.";
+      // The sample ships in this page's code, so anyone could read its payees. A door sealed with them is free money.
+      if (usesSamplePayee(spec)) return "The sample bills are public. Replace their payees with your own before sealing.";
       const sealed = await apiPost("/sponsor/seal", { vault_id: vaultId, spec, cap: capUnits.toString(), ack_hint: ackHint }, () => sponsor.authHeaders("/sponsor/seal"));
       const body = (sealed.ok ? sealed.body : null) as { ok?: boolean; spec_ct?: string; spec_hash?: string; detail?: string } | null;
       if (!body?.ok || typeof body.spec_ct !== "string" || typeof body.spec_hash !== "string") return sponsorDetail(body, "The story could not be sealed.");
@@ -322,7 +326,7 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
   const box = "rounded-2xl border border-white/10 bg-night-2 p-5";
   const label = "block font-mono text-[11px] uppercase tracking-[0.2em] text-chalk/70";
   const input = "mt-1 w-full rounded-lg border border-white/15 bg-night px-3 py-2 text-sm text-chalk";
-  const button = "chalk-focus mt-4 inline-flex min-h-11 items-center rounded-2xl bg-chalk px-5 font-sign text-ink disabled:opacity-40";
+  const button = "chalk-focus mt-4 inline-flex min-h-11 items-center justify-center rounded-2xl bg-chalk px-5 py-2 text-center leading-tight font-sign text-ink disabled:opacity-40";
 
   // Another sponsor's vault is shown as status only. Its fund, seal, keeper, and open controls are not drawn.
   const mine = Boolean(vault && sponsor && vault.sponsor === sponsor.accountId);
@@ -461,12 +465,20 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
                       </div>
                     ))}
                   </div>
-                  <h3 className="mt-4 font-sign text-base">Setting</h3>
-                  <p className="mt-1 text-xs text-chalk/70">Each piece is a choice. They can mix. A door saved before this stays the Accra street.</p>
+                  <div className="mt-4 flex items-center justify-between gap-3">
+                    <h3 className="font-sign text-base">Setting</h3>
+                    <button type="button" className="chalk-focus min-h-11 rounded-full border border-white/20 px-4 text-sm" onClick={() => setCard({ ...card, setting: randomSetting() })}>
+                      Surprise me
+                    </button>
+                  </div>
+                  <p className="mt-1 text-xs text-chalk/70">Each piece is a choice. They can mix. A door saved before Place existed takes its place from words in its pitch, such as beach or rooftop.</p>
                   <div className="mt-3 grid grid-cols-2 gap-3">
                     {SETTING_FIELDS.map((field) => (
                       <div key={field.key}>
-                        <label className={label} htmlFor={`setting-${field.key}`}>{field.label}</label>
+                        <label className={label} htmlFor={`setting-${field.key}`}>
+                          {field.label}
+                          {pieceDrawn(field.key, PLACES[card.setting.place] ?? "street") ? null : <span className="ml-1 text-chalk/50">(not at this place)</span>}
+                        </label>
                         <select
                           id={`setting-${field.key}`}
                           className={input}
@@ -485,7 +497,7 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
                       Every piece is on its default, so this door will look like every other default door. Pick a Place and a few pieces so players can tell it apart.
                     </p>
                   ) : null}
-                  <p className="mt-2 text-xs text-chalk/60">The picture follows these picks, not the pitch text. A rooftop or a beach is set with Place.</p>
+                  <p className="mt-2 text-xs text-chalk/60">The picture follows these picks. Away from a street front, the place brings its own ride, shop and bar; those picks are kept for when you switch back.</p>
                 </div>
               </div>
             </section>
@@ -547,16 +559,18 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
                 </>
               ) : !mine ? (
                 <p className="mt-3 text-sm">
-                  Round {vault.round} · {vault.open ? "open" : "shut"}. This vault belongs to another sponsor, so it is shown read-only.{" "}
+                  Round {vault.round} · {doorShut(vault, Date.now()) ? "closed" : "open"}. This vault belongs to another sponsor, so it is shown read-only.{" "}
                   <Link className="underline decoration-white/30" href={`/v/${vaultId}`}>See the door</Link>
                 </p>
               ) : (
                 <p className="mt-3 text-sm">
-                  Round {vault.round} · pot {fromBaseUnits(BigInt(vault.pot) + BigInt(vault.dayPot), decimals)} {symbol} · {vault.open ? "open" : "shut"}
+                  Round {vault.round} · pot {fromBaseUnits(BigInt(vault.pot) + BigInt(vault.dayPot), decimals)} {symbol} · {doorShut(vault, Date.now()) ? "closed" : "open"}
                   {vault.specHash ? " · story sealed" : ""}
+                  {!doorShut(vault, Date.now()) ? <CloseTime endsAtNs={vault.closesAt} prefix=" · closes at" className="text-chalk/70" /> : null}
+                  {vault.open && !vault.keeper ? <span className="mt-1 block text-xs text-chalk/60">The keeper is off, so this door will not open again after tonight unless you open it here.</span> : null}
                 </p>
               )}
-              {!vault && !report?.pass ? <p className="mt-2 text-xs text-chalk/60">Pass the test first.</p> : null}
+              {!vault && !report?.pass && validVaultId(vaultId) ? <p className="mt-2 text-xs text-chalk/60">Pass the test first.</p> : null}
               {vault && mine && step === "seal" ? (
                 <>
                   {hasHint ? (
@@ -602,10 +616,13 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
                     {vault.keeper ? "On" : "Off"}
                   </button>
                 </div>
-                {!vault.open ? (
-                  <button className={button} disabled={busy} onClick={() => void launch()}>
-                    {vault.specLocked ? "Start tonight" : "Open the first round"}
-                  </button>
+                {doorShut(vault, Date.now()) ? (
+                  <>
+                    <button className={button} disabled={busy || BigInt(vault.pot) + BigInt(vault.dayPot) === 0n} onClick={() => void launch()}>
+                      {vault.specLocked ? "Start tonight" : "Open the first round"}
+                    </button>
+                    {BigInt(vault.pot) + BigInt(vault.dayPot) === 0n ? <p className="mt-2 text-xs text-chalk/60">Fund the vault first. A round with no pot would pay nobody.</p> : null}
+                  </>
                 ) : (
                   <p className="mt-4 text-sm">
                     The door is open.{" "}
@@ -626,6 +643,13 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
       </div>
     </main>
   );
+}
+
+function usesSamplePayee(spec: unknown): boolean {
+  const lines = (spec as { lines?: unknown })?.lines;
+  if (!Array.isArray(lines)) return false;
+  const sample = new Set(SAMPLE_SPEC.lines.map((line) => line.payee.toLowerCase()));
+  return lines.some((line) => typeof (line as { payee?: unknown })?.payee === "string" && sample.has(((line as { payee: string }).payee).trim().toLowerCase()));
 }
 
 /** A fresh account can take a few seconds to appear on the node, so a missing balance is read again twice. */

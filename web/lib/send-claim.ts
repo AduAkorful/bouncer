@@ -1,5 +1,5 @@
 import { Account, actions, KeyPair, PublicKey, type KeyPairString } from "near-api-js";
-import { apiPost } from "./api";
+import { apiPost, apiPostOnce } from "./api";
 import { claimMessage } from "./claim";
 import { deriveSecrets } from "./device-pass";
 import { unlockHeld } from "./player-hold";
@@ -7,6 +7,7 @@ import { accessMessage, accessOnAccount, testnetAccountId } from "./imported-acc
 import { reasonOf } from "./vault-errors";
 
 const CLAIM_GAS = 300_000_000_000_000n;
+const SPONSOR_ACCOUNT = "This passkey's account sponsors this door, and a door's sponsor cannot be paid from it. Nothing was sent.";
 
 export async function sendClaim(input: {
   vaultId: string;
@@ -16,6 +17,8 @@ export async function sendClaim(input: {
   rpcUrl: string;
   networkId: string;
   accountId?: string | null;
+  /** Accounts the vault will not pay, such as the door's sponsor. Checked before anything is sent. */
+  refuse?: string[];
 }): Promise<{ ok: true; transactionHash: string; accountId: string } | { ok: false; error: string }> {
   if (input.networkId !== "testnet") return { ok: false, error: "The passkey network is not testnet." };
   if (!/^[0-9]+$/.test(input.round) || !Number.isSafeInteger(Number(input.round))) return { ok: false, error: "round" };
@@ -25,8 +28,11 @@ export async function sendClaim(input: {
   if ("error" in secrets) return { ok: false, error: secrets.error };
   if (secrets.raidId !== input.raidId) return { ok: false, error: "This device's passkey does not match this raid." };
   try {
-    const accountId = named ?? (await relayAccount(secrets.accountPublicKey));
+    if (named && input.refuse?.includes(named)) return { ok: false, error: SPONSOR_ACCOUNT };
+    // The passkey's own account is the same one it sponsors with, so check it before making or using it.
+    const accountId = named ?? (await relayAccount(input.rpcUrl, secrets.accountPublicKey));
     if (!accountId) return { ok: false, error: "The passkey account was not created." };
+    if (input.refuse?.includes(accountId)) return { ok: false, error: SPONSOR_ACCOUNT };
     if (named) {
       const check = await accessOnAccount(input.rpcUrl, named, secrets.accountPublicKey);
       if (check !== "full") return { ok: false, error: accessMessage(check) };
@@ -62,8 +68,12 @@ export async function sendClaim(input: {
   }
 }
 
-async function relayAccount(publicKey: string): Promise<string | null> {
-  const created = await apiPost("/passkey/create-account", { publicKey });
+async function relayAccount(rpcUrl: string, publicKey: string): Promise<string | null> {
+  // An account this passkey already has is used as it is; only a new passkey makes one.
+  const looked = await apiPost("/passkey/account", { publicKey });
+  const known = (looked.ok && looked.status === 200 ? looked.body : null) as { ok?: boolean; accountId?: string } | null;
+  if (known?.ok && typeof known.accountId === "string" && (await accessOnAccount(rpcUrl, known.accountId, publicKey)) === "full") return known.accountId;
+  const created = await apiPostOnce("/passkey/create-account", { publicKey });
   const account = (created.ok ? created.body : null) as { ok?: boolean; accountId?: string } | null;
   if (!account?.ok || typeof account.accountId !== "string") return null;
   return account.accountId;
