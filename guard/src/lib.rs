@@ -3,6 +3,7 @@
 
 mod api;
 mod chat;
+mod clues;
 mod door_view;
 mod draft;
 mod host;

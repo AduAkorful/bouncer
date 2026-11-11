@@ -4,6 +4,8 @@
 
 use serde_json::{Map, Value};
 
+use crate::clues::{Clues, MAX_PEOPLE, MAX_PERSON, MIN_PEOPLE};
+
 pub const MAX_LINES: usize = 12;
 pub const MAX_CHIPS: usize = 6;
 pub const MAX_SPEC_BYTES: usize = 8192;
@@ -54,6 +56,8 @@ pub struct Spec {
     pub chips: Vec<Chip>,
     /// Street rumours. A player hears one of them, chosen from that player's own ledger. Empty means none.
     pub hints: Vec<String>,
+    /// Plan 85: the bill in pieces across the street. A door uses clues or hints, not both.
+    pub clues: Option<Clues>,
 }
 
 impl Spec {
@@ -69,7 +73,7 @@ pub fn parse(text: &str) -> Result<Spec, String> {
     }
     let value: Value = serde_json::from_str(text).map_err(|_| "The spec is not valid JSON.".to_string())?;
     let root = value.as_object().ok_or("The spec must be an object.")?;
-    only(root, &["v", "salt", "decimals", "guard", "lines", "chips", "hint"], "spec")?;
+    only(root, &["v", "salt", "decimals", "guard", "lines", "chips", "hint", "clues"], "spec")?;
     if root.get("v").and_then(|v| v.as_u64()) != Some(1) {
         return Err("The spec version must be 1.".into());
     }
@@ -128,11 +132,44 @@ pub fn parse(text: &str) -> Result<Spec, String> {
             out
         }
     };
-    let used = voice.len() + hints.iter().map(|h| h.len()).sum::<usize>() + chips.iter().map(|c| c.ask.len() + c.reply.len()).sum::<usize>();
-    if used > MAX_TEXT_BYTES {
-        return Err(format!("The voice, hint, and chips are larger than {MAX_TEXT_BYTES} bytes together."));
+    let clues = match root.get("clues") {
+        None => None,
+        Some(raw) => Some(parse_clues(raw, &chips)?),
+    };
+    if clues.is_some() && !hints.is_empty() {
+        return Err("A door uses clues or hints, not both.".into());
     }
-    Ok(Spec { decimals, voice, lines, chips, hints })
+    let clue_bytes = clues.as_ref().map_or(0, |c| c.ask.len() + c.people.iter().map(|p| p.len()).sum::<usize>());
+    let used = voice.len() + clue_bytes + hints.iter().map(|h| h.len()).sum::<usize>() + chips.iter().map(|c| c.ask.len() + c.reply.len()).sum::<usize>();
+    if used > MAX_TEXT_BYTES {
+        return Err(format!("The voice, hint, clues, and chips are larger than {MAX_TEXT_BYTES} bytes together."));
+    }
+    Ok(Spec { decimals, voice, lines, chips, hints, clues })
+}
+
+fn parse_clues(raw: &Value, chips: &[Chip]) -> Result<Clues, String> {
+    let map = raw.as_object().ok_or("Clues must be an object.")?;
+    only(map, &["people", "ask"], "clues")?;
+    let ask = text_field(map, "ask", MAX_ASK)?;
+    if chips.iter().any(|chip| chip.ask.trim() == ask.trim()) {
+        return Err("The clue question is already a chip. Ask something else.".into());
+    }
+    let raw_people = map.get("people").and_then(|v| v.as_array()).ok_or("Clues need a list of people.")?;
+    if raw_people.len() < MIN_PEOPLE || raw_people.len() > MAX_PEOPLE {
+        return Err(format!("Clues need {MIN_PEOPLE} to {MAX_PEOPLE} people."));
+    }
+    let mut people: Vec<String> = Vec::new();
+    for item in raw_people {
+        let name = item.as_str().ok_or("A person in the clues is a name.")?.trim().to_string();
+        if name.is_empty() || name.len() > MAX_PERSON || name.chars().any(|c| c.is_control()) {
+            return Err(format!("A person's name is 1 to {MAX_PERSON} characters."));
+        }
+        if people.iter().any(|p| p.eq_ignore_ascii_case(&name)) {
+            return Err("Two people in the clues have the same name.".into());
+        }
+        people.push(name);
+    }
+    Ok(Clues { people, ask: ask.trim().to_string() })
 }
 
 fn parse_line(raw: &Value, n: usize, decimals: u8) -> Result<LineSpec, String> {

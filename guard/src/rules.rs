@@ -46,13 +46,19 @@ pub fn builtin(host_seed: &[u8; 32], session: &Session, venue: Venue) -> Rules {
 }
 
 pub fn custom(seed: &[u8; 32], spec: &Spec, spec_hash: &[u8; 32], vault_id: &str, round: u64, player_id: &str) -> Rules {
+    let lines = generate_spec(spec, seed, spec_hash, vault_id, round, player_id);
+    let mut chips = spec.chips.clone();
+    // The clue question's answer comes from this player's own ledger, never from the model.
+    if let Some(chip) = spec.clues.as_ref().and_then(|clues| crate::clues::chip(clues, &lines, spec.decimals)) {
+        chips.push(chip);
+    }
     Rules {
-        lines: generate_spec(spec, seed, spec_hash, vault_id, round, player_id),
+        lines,
         decimals: spec.decimals,
         system: custom_system(&spec.voice),
         tolerance: tolerance(spec.decimals),
         guard_version: spec_guard_version(&GENERATOR, spec_hash),
-        chips: Some(spec.chips.clone()),
+        chips: Some(chips),
     }
 }
 

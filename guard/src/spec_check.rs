@@ -46,10 +46,21 @@ pub fn check(spec: &Spec, spec_hash: &[u8; 32], cap: u128) -> Report {
             }
         }
     }
-    if !spec.lines.iter().any(|line| line.paid) {
+    if spec.clues.is_some() {
+        // Plan 85: paid lines are where the look-alike pieces come from, so the player has to tell lines apart.
+        if !spec.lines.iter().any(|line| line.paid) {
+            failures.insert("Clues need at least one paid line, so the street mixes in pieces that do not belong to the unpaid bill.".to_string());
+        }
+        let mut items = BTreeSet::new();
+        for line in &spec.lines {
+            if !items.insert(norm(&line.item)) {
+                failures.insert(format!("Two lines are both \"{}\". With clues, each line needs its own item, because pieces name the item.", line.item));
+            }
+        }
+    } else if !spec.lines.iter().any(|line| line.paid) {
         warnings.push("No line is already paid, so a guesser could win by luck. Add a paid line as a trap.".to_string());
     }
-    if spec.hints.is_empty() {
+    if spec.hints.is_empty() && spec.clues.is_none() {
         warnings.push("There is no hint, so players hear no payable bill on the street.".to_string());
     }
     for hint in &spec.hints {
@@ -63,6 +74,9 @@ pub fn check(spec: &Spec, spec_hash: &[u8; 32], cap: u128) -> Report {
         for round in 1..=ROUNDS {
             let lines = generate_spec(spec, &TEST_SEED, spec_hash, "check", round, &format!("sample-{player}"));
             check_ledger(spec, &lines, cap, tol, &mut failures);
+            if let Some(clues) = &spec.clues {
+                check_clues(clues, &lines, &mut failures);
+            }
             for chip in &spec.chips {
                 if leaks_with(&chip.reply, &lines, spec.decimals) {
                     failures.insert(format!("The chip reply \"{}\" repeats a ledger payee, reference, or amount.", chip.reply));
@@ -135,4 +149,19 @@ pub fn guess_space(line: &LineSpec) -> u128 {
         unit.max(qty)
     };
     totals.saturating_mul(reference_space(&line.reference))
+}
+
+/// Plan 85, for one sampled ledger: the pieces add up to the unpaid bill, and nobody on the street holds all of it.
+fn check_clues(clues: &crate::clues::Clues, lines: &[Line], failures: &mut BTreeSet<String>) {
+    let Some(line) = crate::clues::target(lines) else {
+        failures.insert("Some players would have no unpaid line with a reference of at least 2 characters, so their clues would be empty.".to_string());
+        return;
+    };
+    let (first, last) = crate::clues::halves(&line.reference);
+    for person in crate::clues::queue(clues, lines) {
+        let said: String = person["lines"].as_array().into_iter().flatten().filter_map(|l| l["text"].as_str()).collect::<Vec<_>>().join(" ");
+        if said.contains(&format!("starts {first}.")) && said.contains(&format!("ended {last}.")) {
+            failures.insert("One person in the street would hold both halves of a reference. Add another person to the clues.".to_string());
+        }
+    }
 }

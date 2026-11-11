@@ -535,3 +535,124 @@ fn seven_hints_are_refused() {
     spec["hint"] = json!(["a", "b", "c", "d", "e", "f", "g"]);
     assert!(spec_err(spec).contains("1 to 6"));
 }
+
+// Plan 85: a door whose street gives each player their own bill in pieces.
+
+fn clue_example() -> Value {
+    let mut spec = example();
+    spec.as_object_mut().unwrap().remove("hint");
+    spec["clues"] = json!({"people": ["Bar back", "Cab driver", "Coat check"], "ask": "What's the going rate tonight?"});
+    spec
+}
+
+fn clue_lines(spec: &Value, player: &str) -> Vec<crate::ledger::Line> {
+    let text = serde_json::to_string(spec).unwrap();
+    let parsed = parse(&text).unwrap();
+    generate_spec(&parsed, &[9u8; 32], &sha(&text), "velvet-1", 1, player)
+}
+
+/// What a careful player can put together from the street and one clue question.
+fn solve(street: &Value, rate: &str) -> Value {
+    let said: Vec<String> = street["queue"].as_array().unwrap().iter().flat_map(|p| p["lines"].as_array().unwrap().iter().map(|l| l["text"].as_str().unwrap().to_string())).collect();
+    let owed = said.iter().find(|t| t.contains(" and still hasn't been paid")).unwrap();
+    let (payee, rest) = owed.split_once(" brought the ").unwrap();
+    let item = rest.split(" and still").next().unwrap();
+    let first = said.iter().find_map(|t| t.strip_prefix(&format!("The {payee} invoice number starts ")).map(|r| r.trim_end_matches('.').to_string())).unwrap();
+    let last = said.iter().find_map(|t| t.strip_prefix(&format!("The {item} invoice ended ")).map(|r| r.split('.').next().unwrap().to_string())).unwrap();
+    let qty = said.iter().find_map(|t| t.strip_suffix(&format!(" × {item} on tonight's order.")).map(str::to_string)).unwrap();
+    let unit = rate.split(" goes for ").nth(1).unwrap().split(' ').next().unwrap();
+    let unit_base = (unit.replace('.', "").parse::<u128>().unwrap() * 10u128.pow(4)).to_string();
+    json!({"payee": payee, "reference": format!("{first}{last}"), "item": item, "qty": qty, "unit": unit_base})
+}
+
+#[test]
+fn clues_are_refused_with_hints_too_few_people_a_repeated_name_or_a_chip_question() {
+    let mut both = clue_example();
+    both["hint"] = json!("I heard {payee} is owed.");
+    assert!(spec_err(both).contains("clues or hints"));
+    let mut one = clue_example();
+    one["clues"]["people"] = json!(["Bar back"]);
+    assert!(spec_err(one).contains("2 to 6 people"));
+    let mut twice = clue_example();
+    twice["clues"]["people"] = json!(["Bar back", "bar back"]);
+    assert!(spec_err(twice).contains("same name"));
+    let mut chip = clue_example();
+    chip["clues"]["ask"] = json!("Who is on the list?");
+    assert!(spec_err(chip).contains("already a chip"));
+}
+
+#[test]
+fn the_street_and_one_question_rebuild_this_players_bill_and_it_is_approved() {
+    let mut h = host(vec![], closed());
+    let spec = clue_example();
+    let ct = seal(&mut h, &spec);
+    let out = open_custom(&mut h, &ct);
+    let street = &out["street"];
+    assert!(street["asks"].as_array().unwrap().iter().any(|a| a == "What's the going rate tonight?"));
+    let blob = out["blob"].as_str().unwrap().to_string();
+    let asked = say(&mut h, &blob, Some(&ct), "What's the going rate tonight?");
+    assert_eq!(asked["ok"], true, "{asked}");
+    assert_eq!(asked["used"], 1);
+    let draft = solve(street, asked["reply"].as_str().unwrap());
+    let mut body = json!({"op": "bill", "vault_id": "velvet-1", "round": 1, "player_id": "ada", "blob": asked["blob"], "spec_ct": ct});
+    for (k, v) in draft.as_object().unwrap() {
+        body[k] = v.clone();
+    }
+    let billed = send(&mut h, body);
+    assert!(billed["verdict"].is_object(), "{billed}");
+}
+
+#[test]
+fn one_players_pieces_do_not_make_another_players_bill() {
+    let spec = clue_example();
+    let ada = clue_lines(&spec, "ada");
+    let bob = clue_lines(&spec, "bob");
+    let target = crate::clues::target(&ada).unwrap();
+    let draft = crate::ledger::Draft { payee: target.payee.clone(), reference: target.reference.clone(), item: target.item.clone(), qty: target.qty, unit: target.unit };
+    assert!(matches!(match_bill_with(&draft, &ada, crate::ledger::tolerance(6)), crate::ledger::Hit::One(_)));
+    assert!(!matches!(match_bill_with(&draft, &bob, crate::ledger::tolerance(6)), crate::ledger::Hit::One(_)));
+}
+
+#[test]
+fn nobody_on_a_clue_street_holds_the_whole_bill_and_paid_lines_and_a_stale_number_are_mixed_in() {
+    let spec = clue_example();
+    let parsed = parse(&serde_json::to_string(&spec).unwrap()).unwrap();
+    let clues = parsed.clues.as_ref().unwrap();
+    for player in ["ada", "bob", "cy", "dee"] {
+        let lines = clue_lines(&spec, player);
+        let target = crate::clues::target(&lines).unwrap();
+        let money = crate::ledger::money_d(target.unit, 6);
+        let queue = crate::clues::queue(clues, &lines);
+        let all = serde_json::to_string(&queue).unwrap();
+        assert!(!all.contains(&target.reference), "the full reference is never said");
+        assert!(!all.contains(&money), "the price is only in the clue answer");
+        assert!(all.contains("got paid this week"));
+        if crate::clues::stale(&target.reference).is_some() {
+            assert!(all.contains("new invoices this week"));
+        }
+        let (first, last) = crate::clues::halves(&target.reference);
+        for person in queue {
+            let said = person.to_string();
+            assert!(!(said.contains(&format!("starts {first}.")) && said.contains(&format!("ended {last}."))));
+        }
+    }
+}
+
+#[test]
+fn the_fairness_test_wants_a_paid_line_and_distinct_items_on_a_clue_door() {
+    assert_eq!(check(&clue_example(), "500000000")["pass"], true);
+    let mut no_paid = clue_example();
+    no_paid["lines"][2]["paid"] = json!(false);
+    no_paid["lines"][2]["reference"] = json!("TA-{d4}");
+    assert!(failed(&check(&no_paid, "500000000"), "at least one paid line"));
+    let mut same = clue_example();
+    same["lines"][1]["item"] = json!("Saturday set");
+    assert!(failed(&check(&same, "500000000"), "its own item"));
+}
+
+#[test]
+fn both_halves_of_a_reference_carry_digits() {
+    assert_eq!(crate::clues::halves("HIC-2806"), ("HIC-28".to_string(), "06".to_string()));
+    assert_eq!(crate::clues::halves("VLV-B-123"), ("VLV-B-1".to_string(), "23".to_string()));
+    assert_eq!(crate::clues::halves("ABCD"), ("AB".to_string(), "CD".to_string()));
+}

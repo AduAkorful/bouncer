@@ -90,6 +90,13 @@ fn queue(venue: Venue, payable: Option<&Line>) -> Vec<Value> {
 /// first unpaid line that has a reference. A spec with no hint gives the payees only.
 pub fn street_custom(spec: &crate::spec::Spec, lines: &[Line]) -> Value {
     let payees: Vec<&str> = lines.iter().map(|line| line.payee.as_str()).collect();
+    // The questions the guard answers without the model. A player cannot guess their exact words, so they are
+    // offered on screen. Asking one still costs a message.
+    let mut asks: Vec<&str> = spec.chips.iter().map(|chip| chip.ask.as_str()).collect();
+    if let Some(clues) = &spec.clues {
+        asks.push(clues.ask.as_str());
+        return json!({"payees": payees, "poster": [], "queue": crate::clues::queue(clues, lines), "asks": asks});
+    }
     let heard = (!spec.hints.is_empty()).then_some(()).and_then(|()| {
         let line = lines.iter().find(|line| !line.paid && !line.reference.is_empty())?;
         // The rumour comes from this player's own line, so it differs between players and is the same on every reload.
@@ -114,5 +121,5 @@ pub fn street_custom(spec: &crate::spec::Spec, lines: &[Line]) -> Value {
         Some(heard) => vec![json!({"who": "Someone in the queue", "lines": [heard]})],
         None => Vec::new(),
     };
-    json!({"payees": payees, "poster": [], "queue": queue})
+    json!({"payees": payees, "poster": [], "queue": queue, "asks": asks})
 }
