@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* A phone on its side: too short for the stacked poster, so it takes the desktop's side-by-side layout. */
+@custom-variant short (@media (orientation: landscape) and (max-height: 540px));
+
 @source "../app";
 @source "../components";
 @source "../lib";
@@ -81,6 +84,29 @@ body {
   outline-offset: 2px;
 }
 
+/* Keyboard ring on the door controls. */
+.chalk-focus:focus-visible {
+  outline: 2px solid var(--chalk);
+  outline-offset: 2px;
+}
+
+.night-scroll {
+  scrollbar-color: #221b2d #0d0a12;
+}
+
+.night-scroll::-webkit-scrollbar {
+  height: 8px;
+}
+
+.night-scroll::-webkit-scrollbar-track {
+  background: #0d0a12;
+}
+
+.night-scroll::-webkit-scrollbar-thumb {
+  background: #221b2d;
+  border-radius: 999px;
+}
+
 .tnum {
   font-variant-numeric: tabular-nums;
 }
@@ -104,6 +130,25 @@ body {
   text-shadow:
     0 0 6px rgb(207 163 73 / 0.8),
     0 0 20px rgb(207 163 73 / 0.4);
+}
+
+@keyframes think {
+  0%,
+  100% {
+    opacity: 0.2;
+    transform: translateY(0);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(-0.55em);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .think-dot {
+    animation: none;
+    opacity: 0.8;
+  }
 }
 
 @keyframes fadeIn {

@@ -95,7 +95,8 @@ export function rigTo(scope: Element | null | undefined, name: PoseName, duratio
     ...target,
     duration,
     ease,
-    overwrite: false,
+    // A scribble on the same hand must not keep running after the pose has moved on.
+    overwrite: "auto",
     onUpdate() {
       if (!swapped && this.progress() > 0.33) {
         swapped = true;

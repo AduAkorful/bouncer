@@ -1,8 +1,12 @@
 import type { ReactNode } from "react";
+import { CROWDS, crowdLook, type Crowd } from "@/lib/crowds";
+import { CartStall, Passer, Ride, Seller, Sky } from "@/components/StreetMore";
+import { StreetPlate, PlaceBack, PlaceFront, PlaceLight, PlaceRide, PlaceSide, PlaceStall, placeWallText } from "@/components/PlaceBackdrop";
 import { SAM, NEONS, type Look, type Neon } from "@/lib/look";
 import { Bouncer } from "./Bouncer";
 import { Goer, type GoerLook } from "./Goer";
-import { CITIES, type CityId } from "@/lib/cities";
+import { type CityId } from "@/lib/cities";
+import { citySetting, posterLines, shopCopy, streetPieces, type StreetSetting } from "@/lib/street-setting";
 import { BlackCab, KebabVan, NextDoor, NightBus, Okada, PosterWall, Rain, RoseSeller, SuyaStand, Taxi, VipWindow, WaterSeller } from "./Street";
 
 interface Props {
@@ -12,10 +16,14 @@ interface Props {
   /** Rope down, doors open and the bouncer stepped aside: someone got in. */
   open?: boolean;
   queue?: boolean;
-  /** Little speech marks over the queue: they'll talk if you tap them. */
+  /** Enable street inspection affordances. */
   gossip?: boolean;
-  /** Which city's street surrounds the door */
+  /** Queue slots that have lines to overhear. */
+  speakingSlots?: readonly boolean[];
+  /** Which city's street surrounds the door, when no setting is passed. */
   city?: CityId;
+  /** The sponsor's mix of street pieces. Omitted streets stay Accra, or the city above. */
+  setting?: StreetSetting;
   /** Extra SVG drawn behind the bouncer (on the wall) and in front of everything (street props). */
   back?: ReactNode;
   front?: ReactNode;
@@ -24,6 +32,16 @@ interface Props {
   viewBox?: string;
   className?: string;
   label?: string;
+  /** The next-door shop and the poster wall. Off when the frame would clip them. */
+  neighbors?: boolean;
+  /** Tube colour for this door. The default neon stays when this is omitted. */
+  ink?: { stroke: string; fill: string };
+  /** The sign is inside a link that already names the door. */
+  decorative?: boolean;
+  /** Cover the frame and crop the edges. The door pages keep the whole street in view. */
+  fit?: "meet" | "cover";
+  /** The green-dress figure at the lamp. The door page moves her clear of the pot board. */
+  lampFigureX?: number;
 }
 
 // The queue. The front four talk if you tap them (index → queueGossip); the rest are the crowd behind.
@@ -43,11 +61,54 @@ const CROWD: { x: number; s: number; look: GoerLook; dark: number }[] = [
   { x: 46, s: 0.74, dark: 0.4, look: { skin: "#c99a72", top: "#efe8da", bottom: "#3b4a8f", hair: "braids", hairColor: "#2a1a10", outfit: "tee", pose: "dance" } },
 ];
 
+/**
+ * The queue behind the front four changes with the place: a short line at a basement stair, people spread out
+ * on the sand, a looser group on a roof. Each crowd also stands in its own order, not only in other clothes.
+ */
+function crowdFor(place: string, crowd: Crowd): typeof CROWD {
+  let rows = crowd.original ? CROWD : crowd.order.map((from, i) => ({ ...CROWD[from], x: CROWD[i].x }));
+  if (place === "basement" || place === "lounge") return rows.slice(2).map((row, i) => ({ ...row, x: -10 + i * 20, s: row.s * 0.97 }));
+  if (place === "beach" || place === "garden") rows = rows.map((row, i) => ({ ...row, x: -96 + i * 30, look: { ...row.look, pose: i % 2 ? "dance" : row.look.pose } }));
+  if (place === "rooftop" || place === "warehouse") rows = rows.filter((_, i) => i !== 1).map((row, i) => ({ ...row, x: [-70, -40, -4, 20, 46][i], look: { ...row.look, pose: i === 2 ? "selfie" : row.look.pose } }));
+  return rows;
+}
+
+/** Places with a bar where the street has a food stall, and places with a roof over the queue. */
+const BAR_PLACES = new Set<string>(["rooftop", "basement", "garden", "warehouse", "lounge"]);
+const INDOORS = new Set<string>(["basement", "lounge"]);
+/** Places where the sky shows, so stars and fireworks have somewhere to be. */
+const OPEN_AIR = new Set<string>(["beach", "rooftop", "garden", "harbour"]);
+
+function passerFor(passer: string) {
+  if (passer === "okada") return <Okada />;
+  if (passer === "bus") return <NightBus />;
+  if (passer === "bike" || passer === "tram" || passer === "skater") return <Passer kind={passer} />;
+  return null;
+}
+
+/** A short queue keeps the three nearest the door; a packed one fills the gaps with people standing behind. */
+function sizeQueue(rows: typeof CROWD, size: string): typeof CROWD {
+  if (size === "short") return rows.slice(-3);
+  if (size !== "packed" || rows.length < 2) return rows;
+  const behind = rows.slice(1).map((row, i) => ({ ...rows[(i + 3) % rows.length], x: (rows[i].x + row.x) / 2, s: row.s * 0.9, dark: Math.min(0.75, row.dark + 0.15) }));
+  return [...behind, ...rows];
+}
+
+const BRICKS: Record<Crowd["brick"], [string, string, string]> = {
+  block: ["#1a1422", "#1e1727", "#1d1626"],
+  stock: ["#2a251d", "#352e22", "#2f2920"],
+  red: ["#2a1716", "#341c1a", "#2f1918"],
+  render: ["#1d1a22", "#211e27", "#201c26"],
+};
+
 const BULBS = [
   ...Array.from({ length: 9 }, (_, i) => [150 + i * 12.5, 66] as const),
   ...Array.from({ length: 11 }, (_, i) => [146.5, 79 + i * 13] as const),
   ...Array.from({ length: 11 }, (_, i) => [253.5, 79 + i * 13] as const),
 ];
+
+const SIGN_ROOM = 150;
+const SIGN_EM = 0.69;
 
 /**
  * The door at night: brick wall, neon sign, a frame of bulbs, two doors with the party showing through the
@@ -61,26 +122,60 @@ export function DoorScene({
   open = false,
   queue = true,
   gossip = false,
+  speakingSlots,
   city = "accra",
+  setting,
   back,
   front,
   p = "s",
   viewBox = "60 -90 280 350",
   className = "",
   label = "A bouncer at the door of the venue",
+  neighbors = true,
+  ink,
+  decorative = false,
+  lampFigureX = 318,
+  fit = "meet",
 }: Props) {
-  const n = NEONS.find((x) => x.value === neon) ?? NEONS[0];
-  const kit = CITIES[city];
-  const london = city === "london";
-  const fs = sign.length > 12 ? 14 : sign.length > 10 ? 17 : 22;
+  const n = ink ?? NEONS.find((x) => x.value === neon) ?? NEONS[0];
+  const street = setting ?? citySetting(city);
+  const pieces = streetPieces(street);
+  const crowdKind = CROWDS.find((entry) => entry.id === pieces.crowd) ?? CROWDS[0];
+  // The four who talk keep their poses, which the play screen points at; the crowd behind takes the crowd's.
+  const dress = (look: GoerLook, index: number) => crowdLook(crowdKind, look, index, index >= 6);
+  const shop = shopCopy(street);
+  const baseSlips = posterLines(street, sign);
+  const slips = { ...baseSlips, wall: placeWallText(pieces.place, baseSlips.wall) };
+  const onStreet = pieces.place === "street";
+  const crowd = sizeQueue(crowdFor(pieces.place, crowdKind), pieces.queue);
+  const speaks = (slot: number) => speakingSlots?.[slot] ?? false;
+  // Bungee Inline runs about 0.69 em a letter (QA measured 165–171 units for 18 letters at 14).
+  // The frame is 162 wide; 150 leaves room for the tube. Long signs shrink, and textLength holds the last few.
+  const fs = Math.min(sign.length > 12 ? 14 : sign.length > 10 ? 17 : 22, SIGN_ROOM / (Math.max(1, sign.length) * SIGN_EM));
+  const signFit = sign.length * fs * SIGN_EM > SIGN_ROOM ? { textLength: SIGN_ROOM, lengthAdjust: "spacingAndGlyphs" as const } : {};
   const leaf = (hinge: number) => (open ? `translate(${hinge} 0) scale(0.14 1) translate(${-hinge} 0)` : undefined);
   return (
-    <svg viewBox={viewBox} preserveAspectRatio="xMidYMax meet" className={className} role="img" aria-label={label}>
+    <svg
+      viewBox={viewBox}
+      preserveAspectRatio={fit === "cover" ? "xMidYMid slice" : "xMidYMax meet"}
+      className={className}
+      data-stall={pieces.stall}
+      data-ride={pieces.ride}
+      data-passer={pieces.passer}
+      data-seller={pieces.seller}
+      data-shop={pieces.shop}
+      data-weather={pieces.weather}
+      data-posters={pieces.posters}
+      role={decorative ? "presentation" : "img"}
+      aria-label={decorative ? undefined : label}
+      aria-hidden={decorative ? true : undefined}
+    >
       <defs>
         <pattern id={`${p}-brick`} width="24" height="12" patternUnits="userSpaceOnUse">
-          <rect width="24" height="12" fill="#1a1422" />
-          <rect x="1" y="1" width="10.4" height="4.4" fill="#1e1727" />
-          <rect x="13" y="7" width="10.4" height="4.4" fill="#1d1626" />
+          {/* The wall follows the crowd's city: painted block, yellow stock brick, red brick, or render */}
+          <rect width="24" height="12" fill={BRICKS[crowdKind.brick][0]} />
+          <rect x="1" y="1" width="10.4" height="4.4" fill={BRICKS[crowdKind.brick][1]} />
+          <rect x="13" y="7" width="10.4" height="4.4" fill={BRICKS[crowdKind.brick][2]} />
           <path d="M0,6 H24 M0,0 H24 M12,0 V6 M0,0 V6 M6,6 V12 M18,6 V12" stroke="#0d0a12" strokeWidth="1" />
         </pattern>
         <linearGradient id={`${p}-wallShade`} x1="0" y1="0" x2="0" y2="1">
@@ -157,15 +252,6 @@ export function DoorScene({
           <stop offset="0" stopColor="#fff6d8" stopOpacity="0.35" />
           <stop offset="1" stopColor="#fff6d8" stopOpacity="0" />
         </linearGradient>
-        <filter id={`${p}-glow`} x="-30%" y="-80%" width="160%" height="260%">
-          <feGaussianBlur stdDeviation="5" />
-        </filter>
-        <filter id={`${p}-soft`} x="-20%" y="-50%" width="140%" height="200%">
-          <feGaussianBlur stdDeviation="1.1" />
-        </filter>
-        <filter id={`${p}-blur`} x="-20%" y="-20%" width="140%" height="140%">
-          <feGaussianBlur stdDeviation="2.4" />
-        </filter>
         <clipPath id={`${p}-phL`}>
           <circle cx="178" cy="86" r="7" />
         </clipPath>
@@ -173,6 +259,8 @@ export function DoorScene({
           <circle cx="222" cy="86" r="7" />
         </clipPath>
       </defs>
+      {/* The scene is one picture with one label. Its painted words are not read out one by one. */}
+      <g aria-hidden="true">
 
       {/* The wall */}
       <rect x="-1000" y="-1000" width="2400" height="1222" fill={`url(#${p}-brick)`} />
@@ -196,8 +284,11 @@ export function DoorScene({
         <rect x="70" y="-1000" width="1.2" height="1222" fill={n.stroke} opacity="0.12" />
       </g>
 
-      <NextDoor x={372} p={p} ad={kit.ad} kiosk={kit.kiosk} hints={gossip} />
-      <PosterWall x={-30} hints={gossip} />
+      <PlaceBack place={pieces.place} p={p} />
+
+      {neighbors ? (onStreet ? <NextDoor x={372} p={p} ad={shop.ad} kiosk={shop.kiosk} shutter={shop.shutter} hints={gossip} tone={shop.tone} /> : <PlaceSide place={pieces.place} p={p} />) : null}
+      {onStreet && crowdKind.plate ? <StreetPlate {...crowdKind.plate} /> : null}
+      {neighbors ? <PosterWall x={-30} hints={gossip} slips={slips} /> : null}
 
       {/* Colour thrown on the brick by the sign */}
       <ellipse cx="200" cy="44" rx="190" ry="120" fill={`url(#${p}-wash)`} style={{ mixBlendMode: "screen" }} />
@@ -216,30 +307,28 @@ export function DoorScene({
           <circle key={`${cx}${cy}`} cx={cx} cy={cy} r="1.2" fill="#3a3145" />
         ))}
       </g>
-      <g id="sign">
-        <g filter={`url(#${p}-glow)`} opacity="0.9">
-          <rect x="119" y="22" width="162" height="34" rx="5" fill="none" stroke={n.stroke} strokeWidth="3" />
-          <text x="200" y="48" textAnchor="middle" fontFamily="var(--font-bungee-inline)" fontSize={fs} fill={n.stroke}>
-            {sign}
-          </text>
-        </g>
-        <rect x="119" y="22" width="162" height="34" rx="5" fill="none" stroke={n.stroke} strokeWidth="1.8" filter={`url(#${p}-soft)`} />
-        <rect x="119" y="22" width="162" height="34" rx="5" fill="none" stroke="#fff" strokeOpacity="0.85" strokeWidth="0.6" />
-        <text x="200" y="48" textAnchor="middle" fontFamily="var(--font-bungee-inline)" fontSize={fs} fill={n.fill} filter={`url(#${p}-soft)`}>
+      <g data-part="sign">
+        <rect x="119" y="22" width="162" height="34" rx="5" fill="none" stroke={n.stroke} strokeWidth="7" strokeOpacity="0.28" />
+        <text x="200" y="48" textAnchor="middle" fontFamily="var(--font-bungee-inline)" fontSize={fs} {...signFit} fill={n.stroke} opacity="0.35">
           {sign}
         </text>
-        <text x="200" y="48" textAnchor="middle" fontFamily="var(--font-bungee-inline)" fontSize={fs} fill="#fff" opacity="0.55">
+        <rect x="119" y="22" width="162" height="34" rx="5" fill="none" stroke={n.stroke} strokeWidth="1.8" />
+        <rect x="119" y="22" width="162" height="34" rx="5" fill="none" stroke="#fff" strokeOpacity="0.85" strokeWidth="0.6" />
+        <text x="200" y="48" textAnchor="middle" fontFamily="var(--font-bungee-inline)" fontSize={fs} {...signFit} fill={n.fill}>
+          {sign}
+        </text>
+        <text x="200" y="48" textAnchor="middle" fontFamily="var(--font-bungee-inline)" fontSize={fs} {...signFit} fill="#fff" opacity="0.55">
           {sign}
         </text>
       </g>
 
       {/* Door frame and bulbs */}
       <rect x="141" y="61" width="118" height="161" rx="3" fill="#120d19" />
-      <rect id="door-glow" x="120" y="40" width="160" height="190" fill={`url(#${p}-doorGlow)`} />
+      <rect data-part="door-glow" x="120" y="40" width="160" height="190" fill={`url(#${p}-doorGlow)`} />
       <rect x="152" y="72" width="96" height="150" fill="#07050a" />
-      <rect id="door-light" x="152" y="72" width="96" height="150" fill={`url(#${p}-inside)`} opacity={open ? 0.85 : 0} />
-      <g id="door-leaves">
-        <g id="door-leaf-l" transform={leaf(152)}>
+      <rect data-part="door-light" x="152" y="72" width="96" height="150" fill={`url(#${p}-inside)`} opacity={open ? 0.85 : 0} />
+      <g data-part="door-leaves">
+        <g data-part="door-leaf-l" transform={leaf(152)}>
           <rect x="152" y="72" width="48" height="150" fill="#16101f" />
           <rect x="157" y="124" width="38" height="44" rx="1.5" fill="none" stroke="#231a2e" strokeWidth="1.5" />
           <rect x="157" y="174" width="38" height="40" rx="1.5" fill="none" stroke="#231a2e" strokeWidth="1.5" />
@@ -250,7 +339,7 @@ export function DoorScene({
           </g>
           <rect x="196" y="132" width="2" height="26" rx="1" fill="#6e6875" />
         </g>
-        <g id="door-leaf-r" transform={leaf(248)}>
+        <g data-part="door-leaf-r" transform={leaf(248)}>
           <rect x="200" y="72" width="48" height="150" fill="#140e1c" />
           <rect x="205" y="124" width="38" height="44" rx="1.5" fill="none" stroke="#211829" strokeWidth="1.5" />
           <rect x="205" y="174" width="38" height="40" rx="1.5" fill="none" stroke="#211829" strokeWidth="1.5" />
@@ -270,7 +359,7 @@ export function DoorScene({
           <ellipse key={cx} className="wisp" data-dir={cx < 200 ? -1 : 1} cx={cx} cy={219} rx={10 + (i % 2) * 4} ry="3" opacity="0" />
         ))}
       </g>
-      <g id="bulbs">
+      <g data-part="bulbs">
         {BULBS.map(([cx, cy], i) => (
           <g key={i} className="bulb">
             <circle cx={cx} cy={cy} r="5.5" fill={`url(#${p}-bulb)`} />
@@ -279,15 +368,16 @@ export function DoorScene({
         ))}
       </g>
 
-      {/* Street lamp */}
+      {/* Street lamp, or the place's own light */}
+      {onStreet ? (
       <g aria-hidden>
         <path d="M352,222 V40 Q352,26 336,26 H326" stroke="#0d0a12" strokeWidth="4" fill="none" />
         <path d="M352,222 V40 Q352,26 336,26 H326" stroke={n.stroke} strokeOpacity="0.15" strokeWidth="1" fill="none" transform="translate(-1.6 0)" />
         <path d="M312,26 h20 l-3,8 h-14 Z" fill="#1d1727" />
         <rect x="315" y="33" width="14" height="2.5" rx="1" fill="#fff1c8" />
-        <path id="lamp-cone" d="M315,35 L286,222 L362,222 L329,35 Z" fill={`url(#${p}-cone)`} />
+        <path data-part="lamp-cone" d="M315,35 L286,222 L362,222 L329,35 Z" fill={`url(#${p}-cone)`} />
         <ellipse cx="322" cy="224" rx="44" ry="7" fill={`url(#${p}-pool)`} />
-        <g id="dust" fill="#ffe2a0">
+        <g data-part="dust" fill="#ffe2a0">
           {[
             [316, 70, 0.9],
             [326, 96, 0.7],
@@ -301,6 +391,9 @@ export function DoorScene({
           ))}
         </g>
       </g>
+      ) : (
+        <PlaceLight place={pieces.place} />
+      )}
 
       {back}
 
@@ -309,9 +402,9 @@ export function DoorScene({
       <line x1="-1000" x2="1400" y1="222.5" y2="222.5" stroke="#2c2338" strokeWidth="1.5" />
       <line x1="-1000" x2="1400" y1="252" y2="252" stroke="#05040a" strokeWidth="2" />
       <line x1="-1000" x2="1400" y1="253.5" y2="253.5" stroke="#2c2338" strokeWidth="0.8" opacity="0.6" />
-      <g filter={`url(#${p}-blur)`} aria-hidden>
+      <g aria-hidden>
         <rect x="120" y="223" width="160" height="38" fill={`url(#${p}-reflect)`} opacity="0.85" />
-        <rect id="door-reflect" x="154" y="223" width="92" height="30" fill={`url(#${p}-reflectUv)`} opacity={open ? 1 : 0.6} />
+        <rect data-part="door-reflect" x="154" y="223" width="92" height="30" fill={`url(#${p}-reflectUv)`} opacity={open ? 1 : 0.6} />
         <rect x="312" y="223" width="20" height="34" fill="#ffe2a0" opacity="0.3" />
         {BULBS.filter(([, cy]) => cy > 185).map(([cx, cy], i) => (
           <circle key={i} cx={cx} cy={446 - cy} r="2" fill="#ffe9b0" opacity="0.35" />
@@ -322,38 +415,53 @@ export function DoorScene({
       <ellipse cx="150" cy="238" rx="30" ry="3.5" fill="none" stroke="#fff" strokeOpacity="0.06" />
       <ellipse className="puddle-ring" cx="150" cy="238" rx="6" ry="0.8" fill="none" stroke={n.stroke} strokeWidth="0.6" opacity="0" />
       <ellipse className="puddle-ring" cx="262" cy="244" rx="5" ry="0.7" fill="none" stroke={n.stroke} strokeWidth="0.6" opacity="0" />
-      <ellipse id="door-pool" cx="200" cy="225" rx="74" ry="9" fill={`url(#${p}-uvPool)`} opacity={open ? 1 : 0.5} style={{ mixBlendMode: "screen" }} />
+      <ellipse data-part="door-pool" cx="200" cy="225" rx="74" ry="9" fill={`url(#${p}-uvPool)`} opacity={open ? 1 : 0.5} style={{ mixBlendMode: "screen" }} />
+      <PlaceFront place={pieces.place} />
 
       {queue && (
-        <g id="queue">
-          {london ? <KebabVan x={-176} p={p} gossip={gossip} index={4} /> : <SuyaStand x={-170} p={p} rim={n.stroke} gossip={gossip} index={4} />}
-          {CROWD.map((c, i) => (
-            <Goer key={i} x={c.x} y={216} s={c.s} look={c.look} rim={n.stroke} dark={c.dark} />
+        <g data-part="queue">
+          {BAR_PLACES.has(pieces.place) ? (
+            <PlaceStall place={pieces.place} rim={n.stroke} speaks={speaks(4)} index={4} />
+          ) : pieces.stall === "kebab" ? (
+            <KebabVan x={-176} p={p} gossip={gossip} speaks={speaks(4)} index={4} />
+          ) : pieces.stall === "suya" ? (
+            <SuyaStand x={-170} p={p} rim={n.stroke} gossip={gossip} speaks={speaks(4)} index={4} />
+          ) : (
+            <CartStall kind={pieces.stall} x={-170} rim={n.stroke} gossip={gossip} speaks={speaks(4)} index={4} />
+          )}
+          {crowd.map((c, i) => (
+            <Goer key={i} x={c.x} y={216} s={c.s} look={dress(c.look, i)} rim={n.stroke} dark={c.dark} />
           ))}
-          <Goer x={66} s={0.78} look={P.yellow} rim={n.stroke} dark={0.22} index={0} gossip={gossip} />
-          <Goer x={90} s={0.78} look={P.puff} rim={n.stroke} dark={0.2} index={1} gossip={gossip} />
-          <Goer x={114} s={0.8} look={P.cap} rim={n.stroke} dark={0.18} index={2} gossip={gossip} />
-          {london ? <RoseSeller x={-96} rim={n.stroke} gossip={gossip} index={6} /> : <WaterSeller x={-96} rim={n.stroke} gossip={gossip} index={6} />}
-          {/* Leaving: a couple heading home, and a guy waiting by the taxi */}
-          <g className="stroll">
-            <Goer x={420} s={0.74} look={{ skin: "#4a2e1f", top: "#2a2234", bottom: "#17141c", hair: "low", hairColor: "#1c120c", outfit: "jacket", pose: "still", accent: "#e9b52a", broad: true }} rim={n.stroke} dark={0.3} flip />
-            <Goer x={440} s={0.72} look={{ skin: "#8a5a3c", top: "#efe8da", bottom: "#17141c", hair: "puff", hairColor: "#2a1a10", outfit: "dress", pose: "hold" }} rim={n.stroke} dark={0.3} flip />
+          <Goer x={66} s={0.78} look={dress(P.yellow, 6)} rim={n.stroke} dark={0.22} index={0} gossip={speaks(0)} />
+          <Goer x={90} s={0.78} look={dress(P.puff, 7)} rim={n.stroke} dark={0.2} index={1} gossip={speaks(1)} />
+          <Goer x={114} s={0.8} look={dress(P.cap, 8)} rim={n.stroke} dark={0.18} index={2} gossip={speaks(2)} />
+          {pieces.seller === "roses" ? (
+            <RoseSeller x={-96} rim={n.stroke} gossip={speaks(6)} index={6} />
+          ) : pieces.seller === "water" ? (
+            <WaterSeller x={-96} rim={n.stroke} gossip={speaks(6)} index={6} />
+          ) : (
+            <Seller kind={pieces.seller} x={-96} rim={n.stroke} gossip={speaks(6)} index={6} />
+          )}
+          {/* Visitors by the shutter, clear of the kiosk's service window. */}
+          <g className="street-pair">
+            <Goer x={560} s={0.74} look={{ skin: "#4a2e1f", top: "#2a2234", bottom: "#17141c", hair: "low", hairColor: "#1c120c", outfit: "jacket", pose: "still", accent: "#e9b52a", broad: true }} rim={n.stroke} dark={0.3} flip />
+            <Goer x={584} s={0.72} look={{ skin: "#8a5a3c", top: "#efe8da", bottom: "#17141c", hair: "puff", hairColor: "#2a1a10", outfit: "dress", pose: "hold" }} rim={n.stroke} dark={0.3} flip />
           </g>
           <Goer x={612} s={0.76} look={{ skin: "#3b2417", top: "#3b4a8f", bottom: "#2a2234", hair: "locs", hairColor: "#1c120c", outfit: "hoodie", pose: "phone" }} rim="#ffe2a0" dark={0.35} flip />
-          <Goer x={318} s={0.76} look={P.braids} rim={n.stroke} dark={0.2} index={3} gossip={gossip} flip />
+          <Goer x={lampFigureX} s={0.76} look={dress(P.braids, 9)} rim={n.stroke} dark={0.2} index={3} gossip={speaks(3)} flip />
         </g>
       )}
 
       <Bouncer look={look} x={open ? 290 : 200} y={226} scale={0.8} p={p} pose={open ? "aside" : "idle"} rim={n.stroke} />
 
       {/* The sign's colour falls on the bouncer */}
-      <ellipse id="neon-spill" cx="200" cy="100" rx="110" ry="85" fill={`url(#${p}-spill)`} style={{ mixBlendMode: "screen" }} pointerEvents="none" />
+      <ellipse data-part="neon-spill" cx="200" cy="100" rx="110" ry="85" fill={`url(#${p}-spill)`} style={{ mixBlendMode: "screen" }} pointerEvents="none" />
 
-      <g id="rope-closed" opacity={open ? 0 : 1}>
+      <g data-part="rope-closed" opacity={open ? 0 : 1}>
         <path d="M128,182 C170,214 230,214 272,182" stroke={`url(#${p}-velvet)`} strokeWidth="6.5" fill="none" strokeLinecap="round" />
         <path d="M134,186 C172,210 228,210 266,186" stroke="#ff9aab" strokeOpacity="0.35" strokeWidth="1.2" fill="none" />
       </g>
-      <g id="rope-open" opacity={open ? 1 : 0}>
+      <g data-part="rope-open" opacity={open ? 1 : 0}>
         <path d="M128,182 C130,206 136,220 160,222 C180,223 190,221 200,222" stroke={`url(#${p}-velvet)`} strokeWidth="6.5" fill="none" strokeLinecap="round" />
       </g>
       <g>
@@ -369,18 +477,32 @@ export function DoorScene({
       </g>
 
       <rect x="-1000" y="160" width="2400" height="100" fill={`url(#${p}-haze)`} pointerEvents="none" />
-      <g id="near">
-        {queue && (london ? <BlackCab x={520} rim={n.stroke} gossip={gossip} index={5} /> : <Taxi x={520} rim={n.stroke} gossip={gossip} index={5} />)}
-        {london ? <NightBus /> : <Okada />}
+      <g data-part="near">
+        {queue &&
+          (!onStreet ? (
+            <PlaceRide place={pieces.place} rim={n.stroke} speaks={speaks(5)} index={5} />
+          ) : pieces.ride === "cab" ? (
+            <BlackCab x={520} rim={n.stroke} gossip={gossip} speaks={speaks(5)} index={5} />
+          ) : pieces.ride === "taxi" ? (
+            <Taxi x={520} p={p} rim={n.stroke} gossip={gossip} speaks={speaks(5)} index={5} />
+          ) : (
+            <Ride kind={pieces.ride} x={520} rim={n.stroke} gossip={gossip} speaks={speaks(5)} index={5} />
+          ))}
+        {/* Traffic only passes on the street */}
+        {onStreet && !decorative ? passerFor(pieces.passer) : null}
       </g>
       {front}
-      {kit.rain && <Rain />}
+      {pieces.weather === "rain" && !INDOORS.has(pieces.place) && <Rain />}
+      {pieces.weather === "snow" && !INDOORS.has(pieces.place) && <Sky kind="snow" />}
+      {pieces.weather === "fog" && <Sky kind="fog" />}
+      {(pieces.weather === "fireworks" || pieces.weather === "stars") && OPEN_AIR.has(pieces.place) && <Sky kind={pieces.weather} />}
 
       {/* A passing car's headlights, swept across now and then */}
-      <g id="headlights" opacity="0" style={{ mixBlendMode: "screen" }} pointerEvents="none">
+      <g data-part="headlights" opacity="0" style={{ mixBlendMode: "screen" }} pointerEvents="none">
         <path d="M-60,250 L40,110 L120,110 L20,250 Z" fill={`url(#${p}-beam)`} />
       </g>
       <rect x="-1000" y="-1000" width="2400" height="1600" fill={`url(#${p}-vignette)`} pointerEvents="none" />
+      </g>
     </svg>
   );
 }

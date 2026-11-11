@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { pastReceipts, poster, venue, type NoteSource } from "@/lib/demo/raider";
+
+export type NoteSource = "Heard" | "Receipt" | "Poster" | "Found";
 
 export interface Note {
   id: string;
@@ -18,12 +19,16 @@ type Tab = "Notes" | "Receipts" | "Payees" | "Poster" | "Inside";
  */
 export function Desk({
   notes,
+  payees,
+  poster,
   inside,
   onPin,
   onMark,
   onClose,
 }: {
   notes: Note[];
+  payees: string[];
+  poster: string[];
   /** The office is open: show what's been found inside */
   inside: boolean;
   onPin: (n: Note) => void;
@@ -104,55 +109,33 @@ export function Desk({
             </ul>
           ))}
 
-        {tab === "Receipts" && (
-          <div className="space-y-3">
-            <p className="text-muted">Earlier rounds, revealed at their resets. Tap a line to pin it.</p>
-            {pastReceipts.map((r) => (
-              <div key={r.round} className="rounded-xl border border-rule p-3 font-mono text-[12px] leading-relaxed">
-                <div className="mb-1 text-muted">Round {r.round}</div>
-                {r.lines.map((l) => {
-                  const id = `r${r.round}-${l}`;
-                  return (
-                    <button
-                      key={l}
-                      onClick={() => onPin({ id, text: `Round ${r.round}: ${l}`, source: "Receipt" })}
-                      className={`block w-full rounded px-1 py-0.5 text-left transition hover:bg-on-paper/5 ${pinned.has(id) ? "text-uv" : ""}`}
-                    >
-                      {pinned.has(id) ? "📌 " : ""}
-                      {l}
-                    </button>
-                  );
-                })}
-              </div>
-            ))}
-          </div>
-        )}
+        {tab === "Receipts" && <p className="text-sm text-on-paper/70">Last night opens after the door shuts. Nothing from tonight is filed here yet.</p>}
 
-        {tab === "Payees" && (
-          <ul className="space-y-2">
-            {venue.payees.map((p) => (
-              <li key={p.name} className="rounded-xl border border-rule p-3">
-                <div className="font-semibold">{p.name}</div>
-                <div className="text-muted">{p.role}</div>
-              </li>
-            ))}
-          </ul>
-        )}
+        {tab === "Payees" &&
+          (payees.length === 0 ? (
+            <p className="text-sm text-on-paper/70">No payees are posted.</p>
+          ) : (
+            <ul className="space-y-2">
+              {payees.map((name) => (
+                <li key={name} className="rounded-xl border border-rule px-3 py-2 font-mono text-[13px]">
+                  {name}
+                </li>
+              ))}
+            </ul>
+          ))}
 
-        {tab === "Poster" && (
-          <button
-            onClick={() => onPin({ id: "poster", text: "Poster: Sat · K-Nova · headline 23:00–02:00", source: "Poster" })}
-            className="mx-auto block w-full max-w-[260px] rotate-[-2deg] bg-night p-5 text-center text-chalk shadow-xl"
-          >
-            <div className="font-sign-inline text-3xl neon-uv">{poster.title}</div>
-            {poster.lines.map((l) => (
-              <div key={l} className="mt-2 font-sign text-sm">
-                {l}
-              </div>
-            ))}
-            <div className="mt-4 font-mono text-[10px] text-chalk/50">{pinned.has("poster") ? "📌 Pinned" : "Tap to pin"}</div>
-          </button>
-        )}
+        {tab === "Poster" &&
+          (poster.length === 0 ? (
+            <p className="text-sm text-on-paper/70">No poster is posted.</p>
+          ) : (
+            <ul className="space-y-2">
+              {poster.map((line) => (
+                <li key={line} className="font-sign text-2xl leading-none">
+                  {line}
+                </li>
+              ))}
+            </ul>
+          ))}
       </div>
     </div>
   );

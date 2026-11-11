@@ -35,6 +35,32 @@ export const SAM: Look = {
   extra: "none",
 };
 
+export const COACH: Look = {
+  name: "Coach Mensah",
+  catchphrase: "Saturday's books. Then we talk.",
+  build: "stocky",
+  skin: 3,
+  head: "cap",
+  headColor: "#1a120c",
+  eyewear: "none",
+  outfit: "hivis",
+  earpiece: false,
+  extra: "lanyard",
+};
+
+export const YAW: Look = {
+  name: "Yaw",
+  catchphrase: "Passed votes only.",
+  build: "wiry",
+  skin: 2,
+  head: "lowcut",
+  headColor: "#1c120c",
+  eyewear: "readers",
+  outfit: "bomber",
+  earpiece: false,
+  extra: "none",
+};
+
 export const PAT: Look = {
   name: "Auntie Pat",
   catchphrase: "I read every line, my dear.",

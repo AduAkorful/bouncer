@@ -1,4 +1,5 @@
 // The street around the door: what's going on either side of the queue. Classes are hooks for lib/idle.ts.
+import type { PosterSlips } from "@/lib/street-setting";
 import { Goer, type GoerLook } from "./Goer";
 
 /** A small "i" on things you can tap to learn about. */
@@ -19,10 +20,13 @@ const EATER: GoerLook = { skin: "#6b4430", top: "#3b4a8f", bottom: "#2a2234", ha
 const WATER: GoerLook = { skin: "#3b2417", top: "#b3243a", bottom: "#2a2234", hair: "bald", hairColor: "#1c120c", outfit: "tee", pose: "basin", accent: "#efe8da" };
 
 /** Suya stand: a cart, a grill of glowing coals, smoke, one bare bulb, the vendor and a customer. */
-export function SuyaStand({ x, p, rim, gossip, index }: { x: number; p: string; rim: string; gossip: boolean; index: number }) {
+export function SuyaStand({ x, p, rim, gossip, speaks, index }: { x: number; p: string; rim: string; gossip: boolean; speaks: boolean; index: number }) {
   return (
     <g transform={`translate(${x} 0)`}>
       <defs>
+        <clipPath id={`${p}-vendor-upper`}>
+          <rect x="-40" y="70" width="80" height="102" />
+        </clipPath>
         <radialGradient id={`${p}-coal`} cx="0.5" cy="0.5" r="0.5">
           <stop offset="0" stopColor="#ff9a4a" stopOpacity="0.85" />
           <stop offset="1" stopColor="#ff6a2a" stopOpacity="0" />
@@ -39,7 +43,9 @@ export function SuyaStand({ x, p, rim, gossip, index }: { x: number; p: string; 
       <circle className="bulb-warm" cx="0" cy="125" r="3.2" fill="#fff1c8" />
       <ellipse cx="0" cy="225" rx="64" ry="7" fill="#ffb060" opacity="0.14" />
 
-      <Goer x={4} y={208} s={0.8} look={VENDOR} rim="#ffb060" dark={0.15} index={index} gossip={gossip} />
+      <g clipPath={`url(#${p}-vendor-upper)`}>
+        <Goer x={4} y={208} s={0.8} look={VENDOR} rim="#ffb060" dark={0.15} index={index} gossip={speaks} />
+      </g>
 
       {/* Cart */}
       <g data-learn="food" style={gossip ? { cursor: "pointer" } : undefined}>
@@ -88,58 +94,60 @@ export function WaterSeller({ x, rim, gossip, index }: { x: number; rim: string;
 }
 
 /** Posters pasted on the club wall. The lineup poster can be read and pinned. */
-export function PosterWall({ x, hints }: { x: number; hints: boolean }) {
+export function PosterWall({ x, hints, slips }: { x: number; hints: boolean; slips: PosterSlips }) {
   return (
     <g transform={`translate(${x} 0)`}>
       <g transform="rotate(-4 -40 92)">
         <rect x="-58" y="70" width="32" height="44" fill="#4a2f8f" />
         <text x="-42" y="86" textAnchor="middle" fontFamily="var(--font-bungee)" fontSize="5.5" fill="#efe8da">
-          AFRO
+          {slips.purple[0]}
         </text>
         <text x="-42" y="94" textAnchor="middle" fontFamily="var(--font-bungee)" fontSize="5.5" fill="#efe8da">
-          BEATS
+          {slips.purple[1]}
         </text>
         <text x="-42" y="106" textAnchor="middle" fontFamily="var(--font-jetbrains)" fontSize="3.6" fill="#cbb8ff">
-          EVERY SAT
+          {slips.purple[2]}
         </text>
       </g>
       <g data-clue="poster" style={hints ? { cursor: "pointer" } : undefined}>
-        <g transform="rotate(2 0 86)">
-          <rect x="-18" y="60" width="36" height="52" fill="#efe8da" />
-          <rect x="-18" y="60" width="36" height="12" fill="#17141c" />
-          <text x="0" y="68.5" textAnchor="middle" fontFamily="var(--font-bungee)" fontSize="5" fill="#cbb8ff">
-            THE VELVET
+        <g transform="rotate(2 0 90)">
+          <rect x="-19" y="58" width="38" height="62" fill="#efe8da" />
+          <rect x="-19" y="58" width="38" height="11" fill="#17141c" />
+          {posterSignLines(slips.sign).map((part, i, all) => (
+            <text key={i} x="0" y={all.length === 1 ? 66 : 63 + i * 4.6} textAnchor="middle" {...fitPoster(part, all.length === 1 ? slips.signSize : 3.6)} fontFamily="var(--font-bungee)" fill="#cbb8ff">
+              {part}
+            </text>
+          ))}
+          <text x="0" y="78" textAnchor="middle" {...fitPoster(slips.cream[0], 3.2)} fontFamily="var(--font-bungee)" fill="#17141c">
+            {slips.cream[0]}
           </text>
-          <text x="0" y="80" textAnchor="middle" fontFamily="var(--font-bungee)" fontSize="4" fill="#17141c">
-            FRI · LADIES
+          <text x="0" y="89" textAnchor="middle" {...fitPoster(slips.cream[1], 5)} fontFamily="var(--font-bungee)" fill="#b3243a">
+            {slips.cream[1]}
           </text>
-          <text x="0" y="90" textAnchor="middle" fontFamily="var(--font-bungee)" fontSize="6" fill="#b3243a">
-            SAT
+          <text x="0" y="99" textAnchor="middle" {...fitPoster(slips.cream[2], 4.2)} fontFamily="var(--font-bungee)" fill="#17141c">
+            {slips.cream[2]}
           </text>
-          <text x="0" y="98" textAnchor="middle" fontFamily="var(--font-bungee)" fontSize="5.5" fill="#17141c">
-            K-NOVA
-          </text>
-          <text x="0" y="106" textAnchor="middle" fontFamily="var(--font-jetbrains)" fontSize="3.4" fill="#17141c">
-            23:00 – 02:00
+          <text x="0" y="110" textAnchor="middle" {...fitPoster(slips.cream[3], 3.2, 0.6)} fontFamily="var(--font-jetbrains)" fill="#17141c">
+            {slips.cream[3]}
           </text>
         </g>
         {hints && (
-          <g className="clue-ring" style={{ transformOrigin: "0px 86px" }}>
-            <circle cx="0" cy="86" r="14" fill="none" stroke="#efe8da" strokeWidth="1.4" />
+          <g className="clue-ring" style={{ transformOrigin: "0px 89px" }}>
+            <circle cx="0" cy="89" r="16" fill="none" stroke="#efe8da" strokeWidth="1.4" />
           </g>
         )}
       </g>
       <g transform="rotate(-2 40 92)">
         <path d="M24,74 h30 v30 l-6,4 l-5,-3 l-6,5 l-5,-4 l-8,3 Z" fill="#b3243a" />
         <text x="39" y="88" textAnchor="middle" fontFamily="var(--font-bungee)" fontSize="5" fill="#efe8da">
-          LADIES
+          {slips.flag[0]}
         </text>
         <text x="39" y="96" textAnchor="middle" fontFamily="var(--font-bungee)" fontSize="5" fill="#efe8da">
-          NIGHT
+          {slips.flag[1]}
         </text>
       </g>
       <text x="-6" y="138" textAnchor="middle" fontFamily="var(--font-bungee-inline)" fontSize="16" fill="none" stroke="#8f6bff" strokeWidth="0.8" opacity="0.35" transform="rotate(-6 -6 132)">
-        OSU 4 LIFE
+        {slips.wall}
       </text>
     </g>
   );
@@ -181,7 +189,7 @@ export function VipWindow({ x, y, p, id }: { x: number; y: number; p: string; id
 /** Next door: a concrete block with a shuttered shop and a top-up kiosk under a flickering tube. */
 const KEEPER: GoerLook = { skin: "#6b4430", top: "#8f6bff", bottom: "#1d1727", hair: "bun", hairColor: "#1c120c", outfit: "tee", pose: "phone" };
 
-export function NextDoor({ x, p, ad, kiosk, hints }: { x: number; p: string; ad: [string, string, string]; kiosk: string; hints: boolean }) {
+export function NextDoor({ x, p, ad, kiosk, shutter, hints, tone = "#e9b52a" }: { x: number; p: string; ad: [string, string, string]; kiosk: string; shutter: string; hints: boolean; tone?: string }) {
   return (
     <g transform={`translate(${x} 0)`}>
       <defs>
@@ -189,6 +197,9 @@ export function NextDoor({ x, p, ad, kiosk, hints }: { x: number; p: string; ad:
           <stop offset="0" stopColor="#ffe2a0" stopOpacity="0.14" />
           <stop offset="1" stopColor="#ffe2a0" stopOpacity="0" />
         </radialGradient>
+        <clipPath id={`${p}-kiosk-opening`}>
+          <rect x="152" y="158" width="66" height="48" />
+        </clipPath>
       </defs>
       <rect x="0" y="-400" width="500" height="622" fill="#1f1b26" />
       {/* Damp patches on old plaster */}
@@ -201,7 +212,7 @@ export function NextDoor({ x, p, ad, kiosk, hints }: { x: number; p: string; ad:
       {/* A hand-painted wall ad, the way chop bars advertise */}
       <g transform="translate(150 40) rotate(-1)" data-learn="ad" style={hints ? { cursor: "pointer" } : undefined}>
         <rect x="-4" y="-4" width="170" height="54" fill="#d9c7a0" opacity="0.12" />
-        <text x="0" y="16" fontFamily="var(--font-bungee)" fontSize="14" fill="#e9b52a" opacity="0.75">
+        <text x="0" y="16" fontFamily="var(--font-bungee)" fontSize="14" fill={tone} opacity="0.75">
           {ad[0]}
         </text>
         <text x="0" y="34" fontFamily="var(--font-bungee)" fontSize="11" fill="#b3243a" opacity="0.75">
@@ -229,7 +240,7 @@ export function NextDoor({ x, p, ad, kiosk, hints }: { x: number; p: string; ad:
         <line key={i} x1="30" x2="120" y1={143 + i * 5} y2={143 + i * 5} stroke="#1c1a22" strokeWidth="1.2" />
       ))}
       <text x="75" y="186" textAnchor="middle" fontFamily="var(--font-bungee-inline)" fontSize="13" fill="none" stroke="#5dffb0" strokeWidth="0.6" opacity="0.3" transform="rotate(-8 75 182)">
-        KOJO
+        {shutter}
       </text>
       <rect x="24" y="132" width="102" height="8" fill="#121016" />
       </g>
@@ -237,7 +248,6 @@ export function NextDoor({ x, p, ad, kiosk, hints }: { x: number; p: string; ad:
       <g transform="translate(-120 0)" data-learn="kiosk" style={hints ? { cursor: "pointer" } : undefined}>
       <rect x="150" y="150" width="70" height="72" fill="#16131b" />
       <rect x="152" y="162" width="66" height="44" fill="#1f2a30" />
-      <Goer x={200} y={232} s={0.62} look={KEEPER} rim="#dff4ff" dark={0.2} />
       <rect className="tube" x="156" y="154" width="58" height="3" rx="1.5" fill="#dff4ff" />
       <rect className="tube" x="152" y="157" width="66" height="50" fill="#dff4ff" opacity="0.1" />
       <g>
@@ -246,6 +256,9 @@ export function NextDoor({ x, p, ad, kiosk, hints }: { x: number; p: string; ad:
             <rect key={`${r}${c}`} x={156 + c * 10} y={166 + r * 12} width="7" height="8" rx="1" fill={["#cfa349", "#b3243a", "#3b4a8f", "#2c6e49", "#efe8da", "#8f6bff"][(r + c) % 6]} opacity="0.75" />
           )),
         )}
+      </g>
+      <g data-kiosk-attendant clipPath={`url(#${p}-kiosk-opening)`}>
+        <Goer x={200} y={232} s={0.62} look={KEEPER} rim="#dff4ff" dark={0.2} />
       </g>
       <rect x="146" y="206" width="78" height="6" fill="#2a2234" />
       <rect x="146" y="128" width="78" height="18" fill="#efe8da" />
@@ -265,10 +278,15 @@ export function NextDoor({ x, p, ad, kiosk, hints }: { x: number; p: string; ad:
   );
 }
 
-/** An Accra taxi at the kerb, engine running, driver's elbow out of the window. */
-export function Taxi({ x, rim, gossip, index }: { x: number; rim: string; gossip: boolean; index: number }) {
+/** An Accra taxi at the kerb, engine running, driver's elbow resting at the window. */
+export function Taxi({ x, p, rim, gossip, speaks, index }: { x: number; p: string; rim: string; gossip: boolean; speaks: boolean; index: number }) {
   return (
     <g transform={`translate(${x} 0)`}>
+      <defs>
+        <clipPath id={`${p}-driver-window`}>
+          <path d="M-56,214 Q-48,200 -30,199 L-4,199 L-4,214 Z" />
+        </clipPath>
+      </defs>
       <ellipse cx="0" cy="256" rx="84" ry="5" fill="#000" opacity="0.6" />
       {/* Headlight beam reaching left along the kerb */}
       <path d="M-78,236 L-200,214 L-200,262 Z" fill="#fff6d8" opacity="0.08" />
@@ -294,13 +312,14 @@ export function Taxi({ x, rim, gossip, index }: { x: number; rim: string; gossip
       </g>
       <LearnBadge x={40} y={228} show={gossip} />
       {/* Driver */}
-      <g data-person={index} style={gossip ? { cursor: "pointer" } : undefined}>
-        <circle cx="-22" cy="204" r="6.5" fill="#3b2417" />
-        <path d="M-28,214 Q-28,209 -22,208 Q-16,209 -16,214 Z" fill="#efe8da" />
-        <path d="M-34,214 L-40,210 L-42,214 Z" fill="#3b2417" />
-        <rect x="-44" y="210" width="16" height="5" rx="2.5" fill="#efe8da" />
-        {gossip && <rect x="-46" y="190" width="34" height="26" fill="transparent" />}
-        {gossip && (
+      <g data-person={index} style={speaks ? { cursor: "pointer" } : undefined}>
+        <g data-taxi-driver clipPath={`url(#${p}-driver-window)`}>
+          <circle cx="-22" cy="205" r="5.5" fill="#3b2417" />
+          <path d="M-29,216 Q-29,210 -22,209 Q-15,210 -15,216 Z" fill="#efe8da" />
+          <path d="M-24,212 L-35,212" stroke="#3b2417" strokeWidth="3" strokeLinecap="round" />
+        </g>
+        {speaks && <rect x="-46" y="190" width="34" height="26" fill="transparent" />}
+        {speaks && (
           <g className="gossip-hint" transform="translate(-22 180)">
             <path d="M-8,-6 h16 a3,3 0 0 1 3,3 v6 a3,3 0 0 1 -3,3 h-9 l-4,4 v-4 h-3 a3,3 0 0 1 -3,-3 v-6 a3,3 0 0 1 3,-3 Z" fill="#efe8da" />
             <g fill="#17141c">
@@ -323,7 +342,7 @@ export function Taxi({ x, rim, gossip, index }: { x: number; rim: string; gossip
 /** An okada (motorbike taxi) that crosses the front of the scene now and then. */
 export function Okada() {
   return (
-    <g id="okada" className="passer" data-learn="passer" data-sound="moto" transform="translate(-600 0)">
+    <g data-part="okada" className="passer" data-learn="passer" data-sound="moto" transform="translate(-600 0)">
       <path d="M-30,250 L-140,236 L-140,262 Z" fill="#fff6d8" opacity="0.12" />
       <circle cx="-22" cy="254" r="9" fill="#0b0810" stroke="#3a3145" strokeWidth="2" />
       <circle cx="22" cy="254" r="9" fill="#0b0810" stroke="#3a3145" strokeWidth="2" />
@@ -344,7 +363,7 @@ const KEBAB_MAN: GoerLook = { skin: "#c99a72", top: "#efe8da", bottom: "#1d1727"
 const ROSES: GoerLook = { skin: "#a8754f", top: "#2a2234", bottom: "#1d1727", hair: "bun", hairColor: "#2a1a10", outfit: "jacket", pose: "hold", accent: "#b3243a" };
 
 /** A kebab van: serving hatch, lit menu, the doner turning, steam, someone at the hatch. */
-export function KebabVan({ x, p, gossip, index }: { x: number; p: string; gossip: boolean; index: number }) {
+export function KebabVan({ x, p, gossip, speaks, index }: { x: number; p: string; gossip: boolean; speaks: boolean; index: number }) {
   return (
     <g transform={`translate(${x} 0)`}>
       <defs>
@@ -371,10 +390,10 @@ export function KebabVan({ x, p, gossip, index }: { x: number; p: string; gossip
           CHIPS · OPEN LATE
         </text>
         <text x="-6" y="136" textAnchor="middle" fontFamily="var(--font-bungee)" fontSize="8" fill="#b3243a">
-          DALSTON GRILL
+          LATE GRILL
         </text>
       </g>
-      <Goer x={6} y={232} s={0.62} look={KEBAB_MAN} rim="#fff1c8" dark={0.05} index={index} gossip={gossip} />
+      <Goer x={6} y={232} s={0.62} look={KEBAB_MAN} rim="#fff1c8" dark={0.05} index={index} gossip={speaks} />
       {/* counter and lower body in front of him */}
       <rect x="-62" y="186" width="94" height="7" fill="#c9c3cf" />
       <path d="M-70,193 L72,193 L72,212 L-70,212 Z" fill="#e8e4dc" />
@@ -410,7 +429,7 @@ export function RoseSeller({ x, rim, gossip, index }: { x: number; rim: string; 
 }
 
 /** A black cab at the kerb, its TAXI light on. */
-export function BlackCab({ x, rim, gossip, index }: { x: number; rim: string; gossip: boolean; index: number }) {
+export function BlackCab({ x, rim, gossip, speaks, index }: { x: number; rim: string; gossip: boolean; speaks: boolean; index: number }) {
   return (
     <g transform={`translate(${x} 0)`}>
       <ellipse cx="0" cy="256" rx="80" ry="5" fill="#000" opacity="0.6" />
@@ -433,12 +452,12 @@ export function BlackCab({ x, rim, gossip, index }: { x: number; rim: string; go
         <circle cx="48" cy="249" r="4.5" fill="#9c9483" />
       </g>
       <LearnBadge x={40} y={226} show={gossip} />
-      <g data-person={index} style={gossip ? { cursor: "pointer" } : undefined}>
+      <g data-person={index} style={speaks ? { cursor: "pointer" } : undefined}>
         <circle cx="-20" cy="203" r="6.5" fill="#c99a72" />
         <path d="M-26,199 Q-20,192 -14,199 Z" fill="#2a2234" />
         <path d="M-27,214 Q-27,209 -20,208 Q-13,209 -13,214 Z" fill="#3b4a8f" />
-        {gossip && <rect x="-44" y="190" width="34" height="26" fill="transparent" />}
-        {gossip && (
+        {speaks && <rect x="-44" y="190" width="34" height="26" fill="transparent" />}
+        {speaks && (
           <g className="gossip-hint" transform="translate(-20 178)">
             <path d="M-8,-6 h16 a3,3 0 0 1 3,3 v6 a3,3 0 0 1 -3,3 h-9 l-4,4 v-4 h-3 a3,3 0 0 1 -3,-3 v-6 a3,3 0 0 1 3,-3 Z" fill="#efe8da" />
             <g fill="#17141c">
@@ -461,7 +480,7 @@ export function BlackCab({ x, rim, gossip, index }: { x: number; rim: string; go
 /** The night bus: red double-decker, upstairs lit, crossing the front of the scene. */
 export function NightBus() {
   return (
-    <g id="okada" className="passer" data-learn="passer" data-sound="bus" transform="translate(-600 0)">
+    <g data-part="okada" className="passer" data-learn="passer" data-sound="bus" transform="translate(-600 0)">
       <path d="M-100,246 L-220,226 L-220,262 Z" fill="#fff6d8" opacity="0.12" />
       <rect x="-100" y="150" width="200" height="104" rx="8" fill="#c8202f" />
       <rect x="-94" y="158" width="188" height="30" rx="3" fill="#2a1a20" />
@@ -502,4 +521,32 @@ export function Rain() {
       })}
     </g>
   );
+}
+
+/**
+ * The cream poster is 38 units wide. A line shrinks to fit about 34 of them (Bungee is about 0.69 em per
+ * letter), and a long one is also held to that width, so it never runs past the paper.
+ */
+function fitPoster(text: string, size: number, em = 0.74): { fontSize: number } {
+  // Shrinking the font is enough. Squeezing glyphs with textLength spread tiny letters apart ("P ECKHA M", QA R21).
+  const room = 34;
+  return { fontSize: Math.min(size, room / Math.max(1, text.length * em)) };
+}
+
+/** A long sign takes two lines on the poster's header band, split at the space nearest the middle. */
+function posterSignLines(sign: string): string[] {
+  const text = sign.trim();
+  if (text.length <= 11 || !text.includes(" ")) return [text];
+  const words = text.split(/\s+/);
+  let best = [text, ""];
+  let gap = Infinity;
+  for (let i = 1; i < words.length; i++) {
+    const a = words.slice(0, i).join(" ");
+    const b = words.slice(i).join(" ");
+    if (Math.abs(a.length - b.length) < gap) {
+      gap = Math.abs(a.length - b.length);
+      best = [a, b];
+    }
+  }
+  return best;
 }

@@ -8,10 +8,10 @@ export function shade(hex: string, k: number) {
 }
 
 const CLOTH = {
-  suit: { lit: "#3a3050", base: "#1c1626", dark: "#0c0912", sleeve: "#2c2339", cuff: "#efe8da" },
-  kente: { lit: "#3a3050", base: "#1c1626", dark: "#0c0912", sleeve: "#2c2339", cuff: "#efe8da" },
-  bomber: { lit: "#3a4d43", base: "#1f2a25", dark: "#0f1612", sleeve: "#2c3b33", cuff: "#121915" },
-  hivis: { lit: "#34303e", base: "#1a1722", dark: "#0c0a10", sleeve: "#2a2533", cuff: "#2a2533" },
+  suit: { lit: "#3a3050", base: "#1c1626", dark: "#0c0912", sleeve: "#382d4d", cuff: "#efe8da" },
+  kente: { lit: "#3a3050", base: "#1c1626", dark: "#0c0912", sleeve: "#382d4d", cuff: "#efe8da" },
+  bomber: { lit: "#3a4d43", base: "#1f2a25", dark: "#0f1612", sleeve: "#385043", cuff: "#121915" },
+  hivis: { lit: "#34303e", base: "#1a1722", dark: "#0c0a10", sleeve: "#383144", cuff: "#4a4358" },
   irongate: { lit: "#666b78", base: "#3a3d46", dark: "#1f2126", sleeve: "#50545f", cuff: "#efe8da" },
 } as const;
 
@@ -90,7 +90,7 @@ export function Bouncer({ look, x, y, scale = 1, p, pose = "idle", rim = "#b9a2f
   };
 
   return (
-    <g id="bouncer" data-rig data-build={look.build} data-pose={pose} transform={`translate(${x} ${y}) scale(${scale})`}>
+    <g data-part="bouncer" data-rig data-build={look.build} data-pose={pose} transform={`translate(${x} ${y}) scale(${scale})`}>
       <defs>
         <linearGradient id={`${p}-skin`} x1="0" y1="0" x2="1" y2="1">
           <stop offset="0" stopColor={shade(base, 1.22)} />
@@ -213,6 +213,17 @@ export function Bouncer({ look, x, y, scale = 1, p, pose = "idle", rim = "#b9a2f
       <g data-part="board" transform={g.board}>{holds === "ledger" ? <Ledger /> : <Clipboard />}</g>
       {foreFront("L", g.armL, poseOf(pose).lShape)}
       {foreFront("R", g.armR, poseOf(pose).rShape)}
+      {/* The wrist stays in front of the board even when the hand grips its edge, so the hand meets a visible sleeve. */}
+      <g strokeLinecap="butt">
+        {([["L", g.armL], ["R", g.armR]] as const).map(([side, a]) => {
+          const [cx1, cy1, cx2, cy2] = cuffPoints(a);
+          return <line key={side} data-part={`cuff${side}`} x1={cx1} y1={cy1} x2={cx2} y2={cy2} stroke="#06040a" strokeWidth={d.fw - 1} />;
+        })}
+        {([["L", g.armL], ["R", g.armR]] as const).map(([side, a]) => {
+          const [cx1, cy1, cx2, cy2] = cuffPoints(a);
+          return <line key={`c${side}`} data-part={`cuff${side}`} x1={cx1} y1={cy1} x2={cx2} y2={cy2} stroke={cloth.cuff} strokeWidth={d.fw - 3} />;
+        })}
+      </g>
 
       <g data-part="handL" transform={g.handL}>
         <Hands skin={skin} base={base} initial={poseOf(pose).lShape} />
@@ -273,9 +284,9 @@ function Hands({ skin, base, initial }: { skin: string; base: string; initial: s
     <>
       {/* Gripping the board's edge: back of the hand outside, four fingers curled over the front */}
       <g data-shape="grip" style={show("grip")}>
-        <rect x="-1.5" y="-7.5" width="9" height="15" rx="4.5" fill={dark} />
-        {[-5.4, -1.8, 1.8, 5.4].map((yy) => (
-          <rect key={yy} x="-5.5" y={yy - 1.9} width="8" height="3.8" rx="1.9" fill={skin} stroke={line} strokeWidth="0.5" />
+        <rect x="0.6" y="-6" width="8" height="12" rx="4" fill={dark} />
+        {[-4.2, -1.4, 1.4, 4.2].map((yy) => (
+          <rect key={yy} x="-1.4" y={yy - 1.4} width="5" height="2.8" rx="1.4" fill={skin} stroke={line} strokeWidth="0.5" />
         ))}
       </g>
       {/* A fist with a pen */}
@@ -341,10 +352,10 @@ function HeadBack({ look }: { look: Look }) {
   if (look.head !== "braids") return null;
   return (
     <g stroke={look.headColor} strokeWidth="3.4" strokeLinecap="round" fill="none">
-      <path d="M-15,-2 Q-20,14 -18,32" />
-      <path d="M-11,0 Q-14,16 -12,34" />
-      <path d="M15,-2 Q20,14 18,32" />
-      <path d="M11,0 Q14,16 12,34" />
+      <path d="M-15,-24 Q-23,-2 -18,32" />
+      <path d="M-11,-26 Q-18,-2 -12,34" />
+      <path d="M15,-24 Q23,-2 18,32" />
+      <path d="M11,-26 Q18,-2 12,34" />
     </g>
   );
 }
@@ -362,7 +373,7 @@ function HeadTop({ look, base, rim }: { look: Look; base: string; rim: string })
     case "lowcut":
       return <path d="M-17,-12 Q-18,-35 0,-35 Q18,-35 17,-12 Q12,-22 0,-23 Q-12,-22 -17,-12 Z" fill={c} opacity="0.95" />;
     case "afro":
-      return <path d="M-17,-11 Q-16,-31 0,-31 Q16,-31 17,-11 Q10,-20 0,-21 Q-10,-20 -17,-11 Z" fill={c} />;
+      return <path d="M-18,-10 Q-20,-37 0,-37 Q20,-37 18,-10 Q10,-20 0,-21 Q-10,-20 -18,-10 Z" fill={c} />;
     case "braids":
       return (
         <g>
@@ -378,7 +389,9 @@ function HeadTop({ look, base, rim }: { look: Look; base: string; rim: string })
       return (
         <g>
           <path d="M-19,-9 Q-23,-37 0,-41 Q25,-39 20,-9 Q10,-18 0,-17 Q-10,-18 -19,-9 Z" fill={c} />
-          <path d="M8,-39 Q24,-48 26,-30 Q19,-35 12,-31 Z" fill={shade(c, 0.72)} />
+          {/* The knot sits on the crown, the same cloth a shade darker, with a fold so it reads as tied */}
+          <path d="M6,-38 Q19,-46 21,-33 Q16,-36 10,-33 Z" fill={shade(c, 0.88)} />
+          <path d="M9,-37 Q15,-40 18,-35" stroke={shade(c, 0.7)} strokeWidth="0.8" fill="none" />
           <path d="M-19,-9 Q-23,-37 0,-41" stroke={rim} strokeOpacity="0.45" strokeWidth="1.2" fill="none" />
           <g fill="#efe8da" opacity="0.6">
             {[

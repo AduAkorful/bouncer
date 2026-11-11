@@ -32,9 +32,17 @@ function Swing({ x, y, cls, children }: { x: number; y: number; cls: string; chi
   );
 }
 
-/** Everything in one fill when `mono` is set: used for the rim-light copy and the shadow wash. */
-function Body({ l, mono }: { l: GoerLook; mono?: string }) {
-  const c = (x: string) => mono ?? x;
+/** Everything in one fill when `mono` is set for the rim-light copy. */
+function Body({ l, mono, dark = 0 }: { l: GoerLook; mono?: string; dark?: number }) {
+  // Night light changes colour, not coverage: walls must never show through a person.
+  const c = (hex: string) => {
+    if (mono) return mono;
+    const amount = Math.max(0, Math.min(1, dark)) * 0.55;
+    const channels = [1, 3, 5].map((start, i) =>
+      Math.round(parseInt(hex.slice(start, start + 2), 16) * (1 - amount) + [13, 10, 18][i] * amount),
+    );
+    return `rgb(${channels.join(",")})`;
+  };
   const w = l.broad ? 16 : 13;
   const arm = { stroke: c(l.top), strokeWidth: l.broad ? 6 : 5, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, fill: "none" };
   const hand = (x: number, y: number) => <circle cx={x} cy={y} r="2.6" fill={c(l.skin)} />;
@@ -221,7 +229,7 @@ function Hairdo({ l, c }: { l: GoerLook; c: (x: string) => string }) {
 
 /**
  * A person on the street, in colour but in night light: a copy in the light's colour sits nudged towards the
- * light so a rim traces that edge, then the person, then a wash of shadow that's deeper the further back they stand.
+ * light so a rim traces that edge, then the opaque person with darker fills further back in the scene.
  */
 export function Goer({
   x,
@@ -241,7 +249,7 @@ export function Goer({
   look: GoerLook;
   rim: string;
   flip?: boolean;
-  /** Shadow wash, 0–1 */
+  /** Opaque night shading, 0–1 */
   dark?: number;
   /** Tap target id for gossip */
   index?: number;
@@ -257,10 +265,7 @@ export function Goer({
         <g transform="translate(1.6 -1.2)" opacity="0.85">
           <Body l={look} mono={rim} />
         </g>
-        <Body l={look} />
-        <g opacity={dark}>
-          <Body l={look} mono="#0a0612" />
-        </g>
+        <Body l={look} dark={dark} />
         <g opacity={Math.max(0.55, 1 - dark * 0.7)}>
           <Features l={look} />
         </g>

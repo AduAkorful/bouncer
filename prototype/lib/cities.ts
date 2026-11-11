@@ -1,6 +1,5 @@
-// City kits: the same door, the same rules, a different street around it. Seasons are cities, and venue
-// builders pick one. Gameplay never depends on knowing a local word; local things explain themselves on tap.
-import type { Gossip } from "./demo/raider";
+// City kits: the same door, a different street around it.
+type Gossip = { who: string; lines: { text: string; gloss?: string; note: string }[] };
 
 export type CityId = "accra" | "london";
 
