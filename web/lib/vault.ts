@@ -36,6 +36,10 @@ export type CrackView = {
   unlockAt: string;
   expiresAt: string;
   status: string;
+  /** The rest of the signed verdict, kept by the vault. Null only when an older view leaves them out. */
+  billHash: string | null;
+  conversationHash: string | null;
+  guardVersion: string | null;
 };
 
 export function viewRequest(contractId: string, method: string, args: Record<string, unknown>) {
@@ -211,7 +215,10 @@ export function parseCrack(value: unknown): { ok: true; crack: CrackView | null 
   if (!playerId || claimPk === undefined || claimPk === null || !amount || !recordedAt || !unlockAt || !expiresAt || !status) {
     return { ok: false, error: "crack" };
   }
-  return { ok: true, crack: { playerId, claimPk, amount, recordedAt, unlockAt, expiresAt, status } };
+  const billHash = hash(row.bill_hash) ?? null;
+  const conversationHash = hash(row.conversation_hash) ?? null;
+  const guardVersion = hash(row.guard_version) ?? null;
+  return { ok: true, crack: { playerId, claimPk, amount, recordedAt, unlockAt, expiresAt, status, billHash, conversationHash, guardVersion } };
 }
 
 export function parseOwner(value: unknown): { ok: true; owner: string } | { ok: false; error: string } {

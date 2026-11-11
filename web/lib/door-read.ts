@@ -29,10 +29,11 @@ export function isVaultId(vaultId: string): boolean {
   return SAFE_ID.test(vaultId);
 }
 
-export function doorPaths(vaultId?: string): { door: string; play: string; reveal: string; claim: string } {
+export function doorPaths(vaultId?: string): { door: string; play: string; reveal: string; claim: string; wins: string } {
   if (vaultId && isVaultId(vaultId)) {
     const base = `/v/${encodeURIComponent(vaultId)}`;
-    return { door: base, play: `${base}/play`, reveal: `${base}/reveal`, claim: `${base}/claim` };
+    return { door: base, play: `${base}/play`, reveal: `${base}/reveal`, claim: `${base}/claim`, wins: `${base}/wins` };
   }
-  return { door: "/home", play: "/play", reveal: "/reveal", claim: "/claim" };
+  // The wins page belongs to one vault; with no id it falls back to the front door.
+  return { door: "/home", play: "/play", reveal: "/reveal", claim: "/claim", wins: "/home" };
 }

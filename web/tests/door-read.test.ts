@@ -39,7 +39,7 @@ test("a disconnected door does not offer a retry", () => {
 test("an unsafe id is not echoed or placed in a path", () => {
   assert.equal(unreadDoor("vault", "qa coast <05>").label, null);
   assert.equal(unreadDoor("id", "bad/id").label, null);
-  assert.deepEqual(doorPaths("bad id!"), { door: "/home", play: "/play", reveal: "/reveal", claim: "/claim" });
+  assert.deepEqual(doorPaths("bad id!"), { door: "/home", play: "/play", reveal: "/reveal", claim: "/claim", wins: "/home" });
 });
 
 test("a sponsored door keeps its own pages", () => {
@@ -48,6 +48,7 @@ test("a sponsored door keeps its own pages", () => {
     play: "/v/qa-coast-05/play",
     reveal: "/v/qa-coast-05/reveal",
     claim: "/v/qa-coast-05/claim",
+    wins: "/v/qa-coast-05/wins",
   });
-  assert.deepEqual(doorPaths(), { door: "/home", play: "/play", reveal: "/reveal", claim: "/claim" });
+  assert.deepEqual(doorPaths(), { door: "/home", play: "/play", reveal: "/reveal", claim: "/claim", wins: "/home" });
 });
