@@ -97,7 +97,6 @@ export default function HowItWorksPage() {
             <Term t="What if I never claim?">After 7 days the win goes back into the door&apos;s pot.</Term>
             <Term t="Can a sponsor win their own door?">No. The server refuses their raid and the vault refuses to pay them.</Term>
             <Term t="Can I make a door?">Yes. <Link href="/frames/sponsors" className="underline decoration-white/30">Sponsor a door</Link> explains how.</Term>
-            <Term t="Where is the code?"><a href="https://github.com/AduAkorful/bouncer" className="underline decoration-white/30">github.com/AduAkorful/bouncer</a></Term>
           </dl>
         </Section>
 
