@@ -173,7 +173,8 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
   const builtCard = chain ? buildCard(card, chain.limits.maxCard) : null;
   const hasHint = (() => {
     try {
-      return (JSON.parse(specText) as { hint?: unknown }).hint !== undefined;
+      const parsed = JSON.parse(specText) as { hint?: unknown; clues?: unknown };
+      return parsed.hint !== undefined || parsed.clues !== undefined;
     } catch {
       return false;
     }
@@ -242,7 +243,7 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
       if (!builtCard?.ok) return builtCard?.error ?? "The card could not be checked.";
       const capUnits = toBaseUnits(capText, decimals);
       if (capUnits === null || capUnits <= 0n) return "Enter a cap above zero.";
-      if (spec.hint !== undefined && !ackHint) return "Confirm the hint first.";
+      if ((spec.hint !== undefined || spec.clues !== undefined) && !ackHint) return "Confirm the street clues first.";
       // The sample ships in this page's code, so anyone could read its payees. A door sealed with them is free money.
       if (usesSamplePayee(spec)) return "The sample bills are public. Replace their payees with your own before sealing.";
       const sealed = await apiPost("/sponsor/seal", { vault_id: vaultId, spec, cap: capUnits.toString(), ack_hint: ackHint }, () => sponsor.authHeaders("/sponsor/seal"));
@@ -399,7 +400,7 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
               <h2 className="font-sign text-lg">2 · Your story</h2>
               <label className={label} htmlFor="story">Describe the place and who it owes</label>
               <textarea id="story" className={input} rows={3} maxLength={2000} value={story} onChange={(e) => setStory(e.target.value)} />
-              <p className="mt-2 text-xs text-chalk/70">Draft uses your <a className="underline" href="#cap">cap per crack</a> and includes an editable street hint.</p>
+              <p className="mt-2 text-xs text-chalk/70">Draft uses your <a className="underline" href="#cap">cap per crack</a> and includes street clues you can edit.</p>
               <button className={button} disabled={busy || story.trim().length === 0} onClick={() => void draft()}>
                 Draft it
               </button>
@@ -569,7 +570,7 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
                   {hasHint ? (
                     <label className="mt-4 flex items-start gap-3 text-sm">
                       <input type="checkbox" className="mt-1" checked={ackHint} onChange={(e) => setAckHint(e.target.checked)} />
-                      <span>The hints give players clues about a bill that will be paid. I want that.</span>
+                      <span>The street gives each player clues to a bill that will be paid. I want that.</span>
                     </label>
                   ) : null}
                   {builtCard?.ok === false && <p id="seal-card-error" className="mt-2 text-xs text-chalk/80">{builtCard.error}</p>}

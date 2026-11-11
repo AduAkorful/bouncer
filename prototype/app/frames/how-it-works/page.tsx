@@ -90,6 +90,8 @@ export default function HowItWorksPage() {
         <Section n={9} title="Questions">
           <dl className="space-y-3 text-sm">
             <Term t="Is this real money?">No. tUSDC is a testnet token with no cash value.</Term>
+            <Term t="Is everything people on the street say true?">Not all of it helps you. Some of it is about bills that are already paid, and some numbers are out of date. The pieces that fit together into one unpaid bill are the ones to use.</Term>
+            <Term t="Can I copy someone else's winning bill?">No. Each player's ledger is drawn for them alone, from a secret seed and their own raid, so a bill that wins for one player is wrong for everyone else.</Term>
             <Term t="Why does the guard only say “Not approved.”?">Saying which part was wrong would hand you the answer one field at a time. Finding it from the street and the conversation is the game.</Term>
             <Term t="Why didn't my conversation follow me to my phone?">The chat stays on the device that wrote it. Your message count, your squares, the street hints and a win do follow your passkey.</Term>
             <Term t="What if I never claim?">After 7 days the win goes back into the door&apos;s pot.</Term>

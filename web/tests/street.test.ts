@@ -15,3 +15,9 @@ test("a street with no overheard line is dropped", () => {
   assert.equal(readStreet({ payees: ["DJ K-Nova"], poster: [], queue: [] }), null);
   assert.equal(readStreet(null), null);
 });
+
+test("a door's own questions come through for the raid to offer, and bad ones are dropped", () => {
+  const base = { payees: ["Shinjuku Ice Works"], poster: [], queue: [{ who: "Bar back", lines: [{ text: "t", note: "n" }] }] };
+  assert.deepEqual(readStreet({ ...base, asks: ["What's the going rate tonight?", 3, ""] })?.asks, ["What's the going rate tonight?"]);
+  assert.equal(readStreet(base)?.asks, undefined);
+});

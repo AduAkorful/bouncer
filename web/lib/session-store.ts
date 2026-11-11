@@ -14,6 +14,8 @@ export type StoredStreet = {
   payees: string[];
   poster: string[];
   queue: { who: string; lines: { text: string; note: string }[] }[];
+  /** Questions a sponsor's door answers itself. Each still costs a message. */
+  asks?: string[];
 };
 
 export type StoredRaid = {

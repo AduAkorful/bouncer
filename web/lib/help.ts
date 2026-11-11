@@ -48,6 +48,10 @@ export function helpPanels(values: HelpValues = {}): HelpPanel[] {
       lines: [
         // Raid.tsx: street taps and the Desk do not spend a message.
         "People on the street are free to listen to. The ones marked on the street have something to say.",
+        // guard clues.rs and street.rs: pieces of paid lines and an out-of-date reference are mixed in.
+        "What they say are pieces, not answers. Some pieces belong to bills that are already paid, and some numbers are out of date. Work out which bill is still owed and which numbers are current before you write it.",
+        // guard spec_ledger.rs: the ledger is drawn per player, so a bill that works for one player fails for another.
+        "Your bills are yours alone. Everyone in the queue has a different ledger, so another player's winning bill will not work for you.",
         "The Desk keeps what you heard, and the names this door deals with. It is free too.",
       ],
     },
@@ -57,6 +61,8 @@ export function helpPanels(values: HelpValues = {}): HelpPanel[] {
       lines: [
         // Raid.tsx messageBudget; guard Budget counts each say and bill.
         `You get ${messages(values.budget)} a raid. Each thing you say to the guard costs one. Handing over a bill costs one too.`,
+        // guard clues.rs chip: on some doors the guard answers one question with a piece the street does not have.
+        "On some doors the guard answers one of the suggested questions with a piece you won't hear on the street. Asking it costs a message like anything else.",
       ],
     },
     {

@@ -72,10 +72,12 @@ export default function HowItWorksPage() {
           <P>After a win, the claim page shows four checks. Each one ticks only when the page compared two things itself.</P>
           <dl className="mt-3 space-y-3 text-sm">
             <Term t="Signed by the vault's guard key">Your browser checks the verdict&apos;s signature against the guard key stored on the vault.</Term>
-            <Term t="Made by the published guard code">OutLayer&apos;s attestation names the guard code that ran, and the page compares it with the guard version this site pins.</Term>
+            <Term t="Made by the published guard code">Your browser reads OutLayer&apos;s attestation straight from OutLayer. It names the guard code that ran, and the page compares that with the guard version built into this site. The Intel TDX quote inside it is checked with <code>outlayer-verify</code>, not in the browser.</Term>
             <Term t="This answer is the one attested">The answer the site received is hashed and compared with the output hash in that attestation.</Term>
             <Term t="Reply written by an attested model">The model&apos;s signature on its reply is compared with the signer in the attestation report taken for your raid.</Term>
           </dl>
+          {/* web/lib/win-check.ts, components/wins/WinsBoard.tsx. */}
+          <P>Anyone can check a win without playing. Each door&apos;s Wins page lists every win the vault has recorded. Checking one reads the chain from your browser: the vault&apos;s record of the win, the call that wrote it, that the signed verdict in that call equals the record, and that the guard&apos;s key signed it. The page does not use our server.</P>
         </Section>
 
         <Section n={6} title="What we store">
@@ -98,6 +100,8 @@ export default function HowItWorksPage() {
         <Section n={9} title="Questions">
           <dl className="space-y-3 text-sm">
             <Term t="Is this real money?">No. tUSDC is a testnet token with no cash value.</Term>
+            <Term t="Is everything people on the street say true?">Not all of it helps you. Some of it is about bills that are already paid, and some numbers are out of date. The pieces that fit together into one unpaid bill are the ones to use.</Term>
+            <Term t="Can I copy someone else's winning bill?">No. Each player's ledger is drawn for them alone, from a secret seed and their own raid, so a bill that wins for one player is wrong for everyone else.</Term>
             <Term t="Why does the guard only say “Not approved.”?">Saying which part was wrong would hand you the answer one field at a time. Finding it from the street and the conversation is the game.</Term>
             <Term t="Why didn't my conversation follow me to my phone?">The chat stays on the device that wrote it. Your message count, your squares, the street hints and a win do follow your passkey.</Term>
             <Term t="What if I never claim?">After 7 days the win goes back into the door&apos;s pot.</Term>

@@ -20,5 +20,6 @@ export function readStreet(value: unknown): StoredStreet | null {
     return [{ who: row.who, lines }];
   });
   if (payees.length === 0 || queue.length === 0) return null;
-  return { payees, poster, queue };
+  const asks = Array.isArray(record.asks) ? record.asks.filter((item): item is string => typeof item === "string" && item.length > 0 && item.length <= 200).slice(0, 8) : [];
+  return asks.length ? { payees, poster, queue, asks } : { payees, poster, queue };
 }

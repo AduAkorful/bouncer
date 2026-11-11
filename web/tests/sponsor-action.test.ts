@@ -36,3 +36,7 @@ test("malformed server details cannot become a broken React notice", () => {
   }
   assert.equal(sponsorDetail({ detail: "The spec is too large." }, "Try again."), "The spec is too large.");
 });
+
+test("a sample-payee refusal says why", () => {
+  assert.match(sponsorDetail({ ok: false, error: "sample" }, "The test did not run. Try again."), /sample payees/);
+});
