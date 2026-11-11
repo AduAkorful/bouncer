@@ -82,7 +82,7 @@ function Paid({ token, atomic, sign, guard, vaultId, storageName, doorHref, reve
       </svg>
       {shown && read.ok ? (
         <p className="paid-rest mt-3 font-sign text-4xl text-brass">
-          <span className="paid-count tabular-nums">{shown}</span> <span className="text-lg">{read.symbol}</span>
+          <span className="paid-count tabular-nums">{shown}</span> <span className="font-mono text-lg">{read.symbol}</span>
         </p>
       ) : null}
       <p className="paid-rest mt-2 text-sm text-chalk/80">{guard ? `${guard} let you in, and the vault paid.` : "You got in, and the vault paid."} It is in your account now.</p>

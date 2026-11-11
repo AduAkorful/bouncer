@@ -45,3 +45,18 @@ export function Countdown({ className = "", endsAtNs }: { className?: string; en
   }, [endsAtNs]);
   return <span className={`font-mono tnum ${className}`}>{left ?? "--:--:--"}</span>;
 }
+
+/** True once `endsAtNs` has passed, re-checked every second so a page can swap its label without a reload. */
+export function useReached(endsAtNs?: string | null): boolean {
+  const [reached, setReached] = useState(false);
+  useEffect(() => {
+    if (!endsAtNs || !/^[0-9]+$/.test(endsAtNs)) return;
+    const ms = Number(BigInt(endsAtNs) / 1_000_000n);
+    if (!Number.isSafeInteger(ms)) return;
+    const check = () => setReached(Date.now() >= ms);
+    check();
+    const t = setInterval(check, 1000);
+    return () => clearInterval(t);
+  }, [endsAtNs]);
+  return reached;
+}

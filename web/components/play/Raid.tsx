@@ -13,13 +13,14 @@ import { TokenAmount } from "@/components/TokenAmount";
 
 import gsap from "gsap";
 import { Suspense, use, useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "react";
-import { Countdown } from "@/components/Countdown";
+import { Countdown, useReached } from "@/components/Countdown";
 import { DemoBadge, Money } from "@/components/bits";
 import { DoorScene } from "@/components/DoorScene";
 import { SceneLife } from "@/components/SceneLife";
 import { StreetBar } from "@/components/home/StreetBar";
 import { StreetScroll } from "@/components/home/StreetScroll";
 import { BillBuilder, forgetBillDraft } from "@/components/play/BillBuilder";
+import { useDialogFocus } from "@/lib/use-dialog-focus";
 import { Desk, type Note } from "@/components/play/Desk";
 import { HelpButton } from "@/components/help/HelpButton";
 import { Tip } from "@/components/help/Tip";
@@ -168,6 +169,9 @@ export default function PlayFrame({
     }
     setSheetState(next);
   }, []);
+  const closeSheet = useCallback(() => setSheet(null), [setSheet]);
+  const sheetPanel = useRef<HTMLDivElement>(null);
+  useDialogFocus(sheetPanel, sheet !== null, closeSheet);
   useEffect(() => {
     // A reload keeps the marked entry with no sheet open. Unmark it so the next close does not go back a page.
     const state = window.history.state as { bouncerSheet?: boolean } | null;
@@ -184,6 +188,7 @@ export default function PlayFrame({
   const [draft, setDraft] = useState("");
   const [sound, setSoundOn] = useState(false);
   const [tokenLabel, setTokenLabel] = useState<TokenRead | null>(null);
+  const tokenSymbol = tokenLabel?.ok ? tokenLabel.symbol : "";
   useEffect(() => {
     const waited = window.setTimeout(() => setStreetWaited(true), 10_000);
     return () => window.clearTimeout(waited);
@@ -696,7 +701,7 @@ export default function PlayFrame({
     setBusy(true);
     setNotice(null);
     setRefused(false);
-    setYou(`BILL: ${b.payee} · ${b.reference} · ${b.item} · ${b.qty} × ${b.unit}`);
+    setYou(billEcho(b, tokenSymbol));
     spend(() => {
       say(`${doorName} reads your bill…`);
       readPose(1.7);
@@ -720,7 +725,7 @@ export default function PlayFrame({
         item: b.item,
         qty,
         unit,
-      }, true, `BILL: ${b.payee} · ${b.reference} · ${b.item} · ${b.qty} × ${b.unit}`);
+      }, true, billEcho(b, tokenSymbol));
     });
   }
 
@@ -1001,8 +1006,8 @@ export default function PlayFrame({
             <span aria-hidden="true">?</span>
             <span className="sr-only">How to play</span>
           </HelpButton>
-          <button onClick={toggleSound} data-sound-toggle aria-label={sound ? "Street sound on" : "Street sound off"} className="relative shrink-0 whitespace-nowrap rounded-full bg-night-3 px-2 py-1 font-mono text-[11px] after:absolute after:-inset-x-1 after:-inset-y-2.5 after:content-[''] sm:px-2.5 sm:text-xs" aria-pressed={sound}>
-            {sound ? "♪ sound on" : "♪ sound off"}
+          <button onClick={toggleSound} data-sound-toggle aria-label={sound ? "Street sound on" : "Street sound off"} className="-my-2 inline-flex min-h-11 shrink-0 items-center whitespace-nowrap" aria-pressed={sound}>
+            <span className="rounded-full bg-night-3 px-2 py-1 font-mono text-[11px] sm:px-2.5 sm:text-xs">{sound ? "♪ sound on" : "♪ sound off"}</span>
           </button>
         </div>
       </header>
@@ -1069,10 +1074,14 @@ export default function PlayFrame({
           {refused && !busy && <RefusedStamp className="shrink-0" />}
           {busy && stage !== "held" && <GuardWait />}
         </div>
+        {/* The line types out letter by letter, so a screen reader hears it once, whole, when it has arrived. */}
+        <p aria-live="polite" className="sr-only">
+          {!busy && line !== "…" && typed >= line.length ? `${speaker.name}: ${line}${refused && !/not approved/i.test(line) ? " Not approved." : ""}` : ""}
+        </p>
         {you && <div className="mt-1 truncate font-mono text-[11px] text-chalk/45">You: {you}</div>}
         {notice && <p role="status" className="mt-2 text-xs text-chalk/80">{notice}</p>}
         {transcriptError && <p role="status" className="mt-2 text-xs text-chalk/70">Conversation could not be saved or loaded on this device.</p>}
-        {transcript.length > 0 && <details className="mt-2 text-xs text-chalk/70"><summary className="cursor-pointer">Conversation on this device</summary><ol className="mt-2 max-h-40 space-y-2 overflow-y-auto">{transcript.map((turn, i) => <li key={i}><p>You: {turn.player}</p><p>Guard: {turn.guard}</p></li>)}</ol></details>}
+        {transcript.length > 0 && <details className="mt-2 text-xs text-chalk/70"><summary className="cursor-pointer">Conversation on this device</summary><ol tabIndex={0} aria-label="Conversation on this device" className="mt-2 max-h-40 space-y-2 overflow-y-auto">{transcript.map((turn, i) => <li key={i}><p>You: {turn.player}</p><p>Guard: {turn.guard}</p></li>)}</ol></details>}
 
         {stage === "play" &&
           (saying ? (
@@ -1087,7 +1096,9 @@ export default function PlayFrame({
                 <input
                   autoFocus
                   value={draft}
-                  maxLength={200}
+                  maxLength={SAY_MAX}
+                  aria-label={`Say something to ${doorName}`}
+                  aria-describedby="say-count"
                   onChange={(e) => setDraft(e.target.value)}
                   onKeyDown={() => sfx.key()}
                   placeholder={`Say something to ${doorName}…`}
@@ -1098,14 +1109,19 @@ export default function PlayFrame({
                 </button>
               </div>
               <div className="flex gap-2 overflow-x-auto pb-1">
-                {(venueId === "custom" ? SUGGEST_ANY_DOOR : SUGGEST).map((q) => (
+                {(venueId === "custom" ? (session?.street?.asks?.length ? session.street.asks : SUGGEST_ANY_DOOR) : SUGGEST).map((q) => (
                   <button key={q} type="button" onClick={() => setDraft(q)} className="shrink-0 rounded-full border border-chalk/25 px-3 py-1.5 text-[13px] text-chalk/80">
                     {q}
                   </button>
                 ))}
               </div>
               <div className="flex items-center justify-between text-[11px] text-chalk/45">
-                <span>Each message costs 1 of your {messageBudget}. Listening and the desk are free.</span>
+                <span>
+                  Each message costs 1 of your {messageBudget}. Listening and the desk are free.{" "}
+                  <span id="say-count" className={draft.length >= SAY_MAX ? "text-chalk/80" : ""}>
+                    {draft.length >= SAY_MAX - 40 ? `${draft.length} of ${SAY_MAX} characters.` : ""}
+                  </span>
+                </span>
                 <button type="button" onClick={() => setSaying(false)} className="underline">
                   Back
                 </button>
@@ -1156,16 +1172,23 @@ export default function PlayFrame({
       )}
 
       {sheet && (
-        <div className="absolute inset-0 z-40 flex flex-col justify-end bg-black/60" onClick={() => setSheet(null)}>
-          <div className="max-h-[88%] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="absolute inset-0 z-40 flex flex-col justify-end bg-black/60" onClick={closeSheet}>
+          <div
+            ref={sheetPanel}
+            role="dialog"
+            aria-modal="true"
+            aria-label={sheet === "bill" ? "Write a bill" : "Investigation desk"}
+            tabIndex={-1}
+            className="max-h-[88%] overflow-y-auto outline-none"
+            onClick={(e) => e.stopPropagation()}
+          >
             {sheet === "bill" && tip === "bill" ? (
               <Tip text={tipText("bill")} onDone={(all) => doneTip("bill", all)} className="mx-4 mb-2" />
             ) : null}
             {sheet === "bill" ? (
               <BillBuilder
                 payees={session?.street?.payees ?? []}
-                payout="chosen when you claim"
-                currency={tokenLabel?.ok ? tokenLabel.symbol : ""}
+                currency={tokenSymbol}
                 venue={signText}
                 left={left}
                 onSubmit={handOver}
@@ -1327,6 +1350,7 @@ function EndScreen({
   const standing = useStanding();
   // The win was just recorded, so the lock opens about one lock length from now. The claim page reads the exact time.
   const [unlockAtNs] = useState(() => (BigInt(Date.now()) * 1_000_000n + BigInt(/^[0-9]+$/.test(lockNs) ? lockNs : "0")).toString());
+  const unlocked = useReached(unlockAtNs);
   const filled = grid.length ? grid : Array<Decision>(budget).fill("ask");
   useEffect(() => {
     // This browser keeps the night it just finished, so /share can show it again.
@@ -1335,7 +1359,7 @@ function EndScreen({
   }, [standing.streak]);
   if (end === "out") {
     return (
-      <div ref={ref} className="absolute inset-0 z-30 flex flex-col items-center justify-end overflow-y-auto bg-[linear-gradient(to_bottom,rgb(13_10_18/0.1)_0%,rgb(13_10_18/0.7)_25%,rgb(13_10_18/0.97)_45%)] px-6 pb-8 text-center">
+      <div ref={ref} className="absolute inset-0 z-30 flex flex-col items-center justify-end overflow-y-auto bg-[linear-gradient(to_bottom,rgb(13_10_18/0.1)_0%,rgb(13_10_18/0.85)_15%,rgb(13_10_18/0.99)_30%)] px-6 pb-8 text-center">
         <Suspense fallback={<TurnedAway sign={venueId} guardName={guardName} grid={grid.length ? grid : Array<Decision>(budget).fill("ask")} sq={sq} line={lastWord(null, seed)} rivals={[]} token={token} closesAt={closesAt} revealHref={revealHref} doorHref={doorHref} />}>
           <TurnedAwayWithRivals sign={venueId} guardName={guardName} grid={grid.length ? grid : Array<Decision>(budget).fill("ask")} sq={sq} seed={seed} others={others} token={token} closesAt={closesAt} revealHref={revealHref} doorHref={doorHref} />
         </Suspense>
@@ -1375,12 +1399,12 @@ function EndScreen({
         <div className="font-mono text-xs uppercase tracking-[0.25em] text-chalk/80">Your cut</div>
         {amountNote ? <p className="text-sm text-chalk/60">{amountNote}</p> : cutText ? <Money text={cutText} currency={currency} className="neon-brass text-4xl" /> : <p className="text-sm text-chalk/60">No signed amount.</p>}
         <p className="mt-1 text-sm text-chalk/70">
-          The vault has recorded it. Collect in about <Countdown endsAtNs={unlockAtNs} className="text-chalk" />.
+          {unlocked ? "The vault has recorded it, and the time lock is open." : <>The vault has recorded it. Collect in about <Countdown endsAtNs={unlockAtNs} className="text-chalk" />.</>}
         </p>
       </div>
       <div className="end-rest mt-5 flex w-full max-w-sm flex-col gap-3">
         <a href={claimHref} className="rounded-2xl bg-chalk py-4 font-sign text-lg text-ink shadow-[0_6px_0_#9c9483]">
-          Collect when the lock opens
+          {unlocked ? "Claim your cut" : "Collect when the lock opens"}
         </a>
         <div className="flex flex-wrap items-center justify-center gap-2">
           <ShareButton text={text} url={doorHref} label="Share your night" className="rounded-2xl border border-chalk/30 px-5 py-3 font-sign" />
@@ -1464,7 +1488,7 @@ function TurnedAway({ sign, guardName, grid, sq, line, rivals, token, closesAt, 
         {first ? (
           <a href={first.href} className="rounded-2xl bg-chalk py-4 font-sign text-lg text-ink shadow-[0_6px_0_#9c9483]">
             Try {first.sign}
-            {first.dayPot ? <span className="block font-mono text-xs uppercase tracking-wider">Tonight&apos;s pot · <TokenAmount token={token} atomic={first.dayPot} className="text-ink" /></span> : null}
+            {first.dayPot ? <span className="block font-mono text-xs uppercase tracking-wider">Tonight&apos;s pot · <TokenAmount token={token} atomic={first.dayPot} className="normal-case text-ink" /></span> : null}
           </a>
         ) : null}
         {more.length ? (
@@ -1522,12 +1546,22 @@ async function postGuard(body: Record<string, unknown>, auth?: string): Promise<
 }
 
 
+/** The guard reads up to this many characters of one message. */
+const SAY_MAX = 200;
+
+/** The bill as the player sees it echoed: prices with two decimals and the pot's token. */
+function billEcho(b: DraftBill, symbol: string): string {
+  const total = (Math.round(b.qty * b.unit * 100) / 100).toFixed(2);
+  return `BILL: ${b.payee} · ${b.reference} · ${b.item} · ${b.qty} × ${b.unit.toFixed(2)} = ${total}${symbol ? ` ${symbol}` : ""}`;
+}
+
 /** Guard error codes as sentences. A message the guard did not count was given back. */
 function guardNotice(error: string): string {
   if (error === "replay") return "This raid moved on in another tab or after a refresh. Reload the page to pick it up.";
   if (error === "spent") return "No messages left.";
   if (error === "sponsor") return "You sponsor this door, so you cannot raid it. Try another door.";
   if (error === "full") return "Tonight's cut has been taken. Nothing is left to win, and no message was used.";
+  if (error === "closed") return "This round has closed. No message was used.";
   if (error === "model") return "The guard did not answer. No message was used. Try again.";
   if (error === "busy" || error.startsWith("The door is busy")) return "The door is busy. No message was used. Try again in a minute.";
   return "The door did not answer. No message was used. Try again.";
