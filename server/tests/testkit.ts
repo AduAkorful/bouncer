@@ -12,7 +12,7 @@ export const SECRETS = ["payment-key-secret", "relay-private-key-secret", "keepe
 export function testEnv(over: Partial<ServerEnv> = {}): ServerEnv {
   return {
     guard: { callUrl: "https://outlayer.test/call/a/b", paymentKey: SECRETS[0], versionKey: "ab".repeat(32), maxExecutionSeconds: 120, maxMemoryMb: 128 },
-    relay: { rpcUrl: "https://rpc.test", networkId: "testnet", contractId: "vault.test", vaultId: "velvet-1", accountId: "relay.test", privateKey: SECRETS[1], verdictKey: SECRETS[3] },
+    relay: { rpcUrl: "https://rpc.test", networkId: "testnet", contractId: "vault.test", accountId: "relay.test", privateKey: SECRETS[1], verdictKey: SECRETS[3] },
     keeper: { accountId: "keeper.test", privateKey: SECRETS[2] },
     siteOrigins: ["https://site.test"],
     dailyCalls: 3,

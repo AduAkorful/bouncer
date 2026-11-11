@@ -6,7 +6,7 @@ type Clues = { people?: string[]; ask?: string };
 type Spec = { lines?: Line[]; hint?: string | string[]; clues?: Clues; guard?: { voice?: string } } & Record<string, unknown>;
 
 /** What a new clue street starts with. The sponsor renames them to fit the door. */
-const CLUE_START: Clues = { people: ["Bar back", "Cab driver", "Coat check"], ask: "What's the going rate tonight?" };
+const CLUE_START: Clues = { people: ["Bar back", "Cab driver", "Coat check", "Smoker by the door"], ask: "What's the going rate tonight?" };
 
 const field = "w-full rounded-xl border border-white/15 bg-night px-2.5 py-2 text-sm";
 const small = "block text-xs text-chalk/70";

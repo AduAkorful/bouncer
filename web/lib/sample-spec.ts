@@ -10,7 +10,7 @@ export const SAMPLE_SPEC = {
     { payee: "Tunde Adeyemi", reference: "", item: "security shifts", qty: { lo: 1, hi: 3 }, unit: { lo: "60", hi: "60" }, paid: true },
   ],
   chips: [{ ask: "Who is on the list?", reply: "The list stays with me." }],
-  clues: { people: ["Bar back", "Cab driver", "Coat check"], ask: "What's the going rate tonight?" },
+  clues: { people: ["Bar back", "Cab driver", "Coat check", "Smoker by the door"], ask: "What's the going rate tonight?" },
 };
 
 /** The guard's payee rule (guard/src/ledger.rs `norm` and `same_name`): letters and digits only, any case, and a

@@ -46,7 +46,7 @@ export async function generateSponsorDraft(key: string, story: string, decimals:
       decimals,
       salt: randomBytes(16).toString("hex"),
       // Plan 85: the street gives each player their bill in pieces. The sponsor renames the people on the form.
-      ...(cap === undefined ? {} : { hint: undefined, clues: { people: ["Bar back", "Cab driver", "Coat check"], ask: "What's the going rate tonight?" } }),
+      ...(cap === undefined ? {} : { hint: undefined, clues: { people: ["Bar back", "Cab driver", "Coat check", "Smoker by the door"], ask: "What's the going rate tonight?" } }),
     };
   } catch {
     return null;

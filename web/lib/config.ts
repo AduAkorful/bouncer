@@ -12,7 +12,6 @@ export type RelayEnv = {
   rpcUrl: string;
   networkId: string;
   contractId: string;
-  vaultId: string;
   accountId: string;
   /** Full access. Only for creating passkey accounts and relaying the claims players sign. */
   privateKey: string;
@@ -55,7 +54,6 @@ const RELAY_KEYS = [
   "NEAR_RPC_URL",
   "NEAR_NETWORK_ID",
   "VAULT_CONTRACT_ID",
-  "VAULT_ID",
   "RELAY_ACCOUNT_ID",
   "RELAY_PRIVATE_KEY",
   "RELAY_VERDICT_KEY",
@@ -107,7 +105,6 @@ export function readRelayEnv(source: EnvSource | undefined): Ready<RelayEnv> | M
       rpcUrl: read("NEAR_RPC_URL"),
       networkId: read("NEAR_NETWORK_ID"),
       contractId: read("VAULT_CONTRACT_ID"),
-      vaultId: read("VAULT_ID"),
       accountId: read("RELAY_ACCOUNT_ID"),
       privateKey: read("RELAY_PRIVATE_KEY"),
       verdictKey: read("RELAY_VERDICT_KEY"),

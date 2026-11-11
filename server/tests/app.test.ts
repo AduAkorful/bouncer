@@ -149,10 +149,10 @@ test("/verdict answers a contract refusal with 422, so the browser does not send
   assert.equal((await createApp(deps).request("/verdict", post("/verdict", verdict("anchor")))).status, 502);
 });
 
-test("/crack defaults to the env vault and takes a vault id", async () => {
+test("/crack needs a vault id and reads that vault", async () => {
   const { deps, views } = testDeps();
   const app = createApp(deps);
-  assert.equal((await app.request("/crack", post("/crack", { raid_id: "r1" }))).status, 200);
+  assert.equal((await app.request("/crack", post("/crack", { raid_id: "r1" }))).status, 400);
   assert.equal((await app.request("/crack", post("/crack", { raid_id: "r1", vault_id: "anchor" }))).status, 200);
   assert.ok(views.calls.some((c) => c.method === "get_crack" && c.args.vault_id === "anchor"));
   assert.equal((await app.request("/crack", post("/crack", { raid_id: "" }))).status, 400);

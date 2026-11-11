@@ -19,8 +19,6 @@ services:
         sync: false
       - key: VAULT_CONTRACT_ID
         sync: false
-      - key: VAULT_ID
-        sync: false
       - key: RELAY_ACCOUNT_ID
         sync: false
       - key: RELAY_PRIVATE_KEY

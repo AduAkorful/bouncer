@@ -181,7 +181,7 @@ export function createApp(deps: Deps) {
     if (!take(c, "crack", 60, MINUTE)) return slow(c);
     const body = await bodyOf(c);
     const raidId = body?.raid_id;
-    const vaultId = typeof body?.vault_id === "string" ? body.vault_id : env.relay.vaultId;
+    const vaultId = typeof body?.vault_id === "string" ? body.vault_id : "";
     if (typeof raidId !== "string" || raidId.length === 0 || !validVaultId(vaultId)) return c.json({ ok: false, error: "crack" }, 400);
     const door = await readDoor(deps.rpc, env.relay.contractId, vaultId);
     if (!door.ok) return c.json(door, 502);
