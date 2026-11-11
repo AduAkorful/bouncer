@@ -4,6 +4,7 @@
 //! message. The text is the guard's, not the sponsor's, so the fairness checks hold by construction.
 
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 
 use crate::ledger::{money_d, Line};
 use crate::spec::Chip;
@@ -34,43 +35,62 @@ pub fn halves(reference: &str) -> (String, String) {
     (chars[..cut].iter().collect(), chars[cut..].iter().collect())
 }
 
-/// An out-of-date reference for the same payee: every digit moved by five. None when it has no digits.
+/// An out-of-date reference for the same payee: the same shape with new digits. The digits come from a hash
+/// of the reference, so they are stable for a player but say nothing about the real ones; a fixed shift would
+/// hand the whole reference to anyone who noticed it. None when it has no digits.
 pub fn stale(reference: &str) -> Option<String> {
     if !reference.chars().any(|c| c.is_ascii_digit()) {
         return None;
     }
-    Some(reference.chars().map(|c| c.to_digit(10).map_or(c, |d| char::from(b'0' + ((d + 5) % 10) as u8))).collect())
+    let mut seed = 0u32;
+    loop {
+        let digest = Sha256::new().chain_update(b"bouncer.stale.v1").chain_update(seed.to_le_bytes()).chain_update(reference.as_bytes()).finalize();
+        let mut bytes = digest.iter();
+        let old: String = reference.chars().map(|c| if c.is_ascii_digit() { char::from(b'0' + bytes.next().map_or(0, |b| b % 10)) } else { c }).collect();
+        if old != reference {
+            return Some(old);
+        }
+        seed += 1;
+    }
 }
 
 /// The answer to the clue question, filled from this player's own ledger.
 pub fn chip(clues: &Clues, lines: &[Line], decimals: u8) -> Option<Chip> {
     let line = target(lines)?;
-    Some(Chip { ask: clues.ask.clone(), reply: format!("{} goes for {} a unit tonight.", line.item, money_d(line.unit, decimals)) })
+    Some(Chip { ask: clues.ask.clone(), reply: format!("The rate for {} is {} a unit tonight.", line.item, money_d(line.unit, decimals)) })
 }
 
 fn mix(line: &Line) -> usize {
     line.reference.bytes().chain(line.payee.bytes()).fold(0usize, |h, b| h.wrapping_mul(31).wrapping_add(b as usize))
 }
 
+/// What a piece says, so the queue can keep pieces that add up to the reference apart.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Kind {
+    First,
+    Stale,
+    Other,
+}
+
 /// Every piece a player can overhear, in the order they are handed to people.
-pub fn pieces(lines: &[Line]) -> Vec<String> {
+fn pieces(lines: &[Line]) -> Vec<(Kind, String)> {
     let Some(line) = target(lines) else { return Vec::new() };
     let (first, last) = halves(&line.reference);
     let mut out = vec![
-        format!("{} brought the {} and still hasn't been paid for it.", line.payee, line.item),
-        format!("The {} invoice number starts {first}.", line.payee),
-        format!("The {} invoice ended {last}. I saw it on the bar.", line.item),
-        format!("{} × {} on tonight's order.", line.qty, line.item),
-        format!("Ask the guard what {} goes for. He knows the rate.", line.item),
+        (Kind::Other, format!("{} brought the {} and still hasn't been paid for it.", line.payee, line.item)),
+        (Kind::First, format!("The {} invoice number starts {first}.", line.payee)),
+        (Kind::Other, format!("The {} invoice ended {last}. I saw it on the bar.", line.item)),
+        (Kind::Other, format!("{} × {} on tonight's order.", line.qty, line.item)),
+        (Kind::Other, format!("Ask the guard the rate for {}. The guard knows it.", line.item)),
     ];
     if let Some(old) = stale(&line.reference) {
-        out.push(format!("{}'s invoice was {old}, last I saw.", line.payee));
-        out.push(format!("{} sent out new invoices this week. New numbers on all of them.", line.payee));
+        out.push((Kind::Stale, format!("{}'s invoice was {old}, last I saw.", line.payee)));
+        out.push((Kind::Other, format!("{} sent out new invoices this week. New numbers on all of them.", line.payee)));
     }
     for paid in lines.iter().filter(|other| other.paid).take(2) {
-        out.push(format!("{} got paid this week. Showed everyone.", paid.payee));
+        out.push((Kind::Other, format!("{} got paid this week. Showed everyone.", paid.payee)));
         if paid.reference.chars().count() >= 2 {
-            out.push(format!("The {} invoice ended {}.", paid.item, halves(&paid.reference).1));
+            out.push((Kind::Other, format!("The {} invoice ended {}.", paid.item, halves(&paid.reference).1)));
         }
     }
     out
@@ -85,9 +105,16 @@ pub fn queue(clues: &Clues, lines: &[Line]) -> Vec<Value> {
         return Vec::new();
     }
     let start = target(lines).map_or(0, mix) % n;
+    let mut seats: Vec<usize> = (0..all.len()).map(|i| (start + i) % n).collect();
+    // The out-of-date reference never sits with the first half, so no one person's lines look like a whole number.
+    let first = all.iter().position(|(kind, _)| *kind == Kind::First);
+    if let (Some(first), Some(old)) = (first, all.iter().position(|(kind, _)| *kind == Kind::Stale)) {
+        if seats[old] == seats[first] {
+            seats[old] = (seats[old] + 1) % n;
+        }
+    }
     let mut held: Vec<Vec<Value>> = vec![Vec::new(); n];
-    for (i, text) in all.into_iter().enumerate() {
-        let who = (start + i) % n;
+    for ((_, text), who) in all.into_iter().zip(seats) {
         let note = format!("{text} ({})", clues.people[who]);
         held[who].push(json!({"text": text, "note": note}));
     }

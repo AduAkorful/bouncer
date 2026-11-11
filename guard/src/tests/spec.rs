@@ -560,7 +560,7 @@ fn solve(street: &Value, rate: &str) -> Value {
     let first = said.iter().find_map(|t| t.strip_prefix(&format!("The {payee} invoice number starts ")).map(|r| r.trim_end_matches('.').to_string())).unwrap();
     let last = said.iter().find_map(|t| t.strip_prefix(&format!("The {item} invoice ended ")).map(|r| r.split('.').next().unwrap().to_string())).unwrap();
     let qty = said.iter().find_map(|t| t.strip_suffix(&format!(" × {item} on tonight's order.")).map(str::to_string)).unwrap();
-    let unit = rate.split(" goes for ").nth(1).unwrap().split(' ').next().unwrap();
+    let unit = rate.split(" is ").nth(1).unwrap().split(' ').next().unwrap();
     let unit_base = (unit.replace('.', "").parse::<u128>().unwrap() * 10u128.pow(4)).to_string();
     json!({"payee": payee, "reference": format!("{first}{last}"), "item": item, "qty": qty, "unit": unit_base})
 }
@@ -676,5 +676,30 @@ fn a_paid_lines_look_alike_ending_is_not_the_second_half_of_the_bill() {
             said.contains(&format!("The Harbour Ice Co invoice number starts {first}.")) && said.contains(&format!("The ice delivery invoice ended {last}."))
         });
         assert_eq!(failures.is_empty(), !own, "only the target's own two sentences count");
+    }
+}
+
+#[test]
+fn the_out_of_date_reference_says_nothing_about_the_real_one_and_never_sits_with_the_first_half() {
+    let line = |payee: &str, reference: &str, item: &str, paid: bool| crate::ledger::Line {
+        payee: payee.into(), reference: reference.into(), item: item.into(), qty: 3, unit: 2_000_000, total: 6_000_000, paid,
+    };
+    let shifted = |r: &str| r.chars().map(|c| c.to_digit(10).map_or(c, |d| char::from(b'0' + ((d + 5) % 10) as u8))).collect::<String>();
+    for n in crate::clues::MIN_PEOPLE..=crate::clues::MAX_PEOPLE {
+        let clues = crate::clues::Clues { people: (0..n).map(|i| format!("Person {i}")).collect(), ask: "What is the rate?".into() };
+        for k in 0..40u32 {
+            let reference = format!("HIC-{:04}", (k * 7919 + 13) % 10_000);
+            let lines = vec![line("Harbour Ice Co", &reference, "ice delivery", false), line("Pier Glassware", "PG-1906", "glass hire", true)];
+            let old = crate::clues::stale(&reference).unwrap();
+            assert_ne!(old, reference);
+            assert_ne!(old, shifted(&reference), "no fixed digit shift");
+            assert_eq!(old.len(), reference.len());
+            assert!(old.starts_with("HIC-"));
+            let (first, _) = crate::clues::halves(&reference);
+            let holds = |p: &serde_json::Value, needle: &str| p["lines"].as_array().unwrap().iter().any(|l| l["text"].as_str().unwrap().contains(needle));
+            for person in crate::clues::queue(&clues, &lines) {
+                assert!(!(holds(&person, &format!("starts {first}.")) && holds(&person, &format!("was {old},"))), "{n} people, {reference}");
+            }
+        }
     }
 }
