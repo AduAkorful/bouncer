@@ -101,7 +101,17 @@ export default function PlayFrame({
   const doorLook = card ? cardLook(card) : undefined;
   const setting = card?.setting ?? ACCRA_SETTING;
   const streetKey = `${setting.stall}${setting.ride}${setting.passer}${setting.seller}${setting.shop}${setting.weather}${setting.posters}${setting.sound}`;
-  const send = (body: Record<string, unknown>) => postGuard(specCt ? { ...body, spec_ct: specCt } : body);
+  const send = (body: Record<string, unknown>, sign: () => string) => postGuard(specCt ? { ...body, spec_ct: specCt } : body, sign);
+
+  /** Signs a message or a bill with the sign-in held on this browser, fresh for each attempt. Null when it is gone. */
+  async function raidSigner(route: string): Promise<(() => string) | null> {
+    const ikm = await readHold();
+    if (!ikm) return null;
+    const secrets = await deriveSecrets(ikm, vaultId, vault.round);
+    ikm.fill(0);
+    if ("error" in secrets) return null;
+    return () => playerHeader(secrets, route);
+  }
 
   /**
    * The guard advances the sealed blob before its reply arrives. The call is stored first, so a reload can send
@@ -111,7 +121,14 @@ export default function PlayFrame({
     const waiting = { ...current, pending: { body, bill, playerText } };
     sessionRef.current = waiting;
     await saveRaid(storageName, vaultId, vault.round, waiting).catch(() => undefined);
-    const { payload, answered } = await send(body);
+    const sign = await raidSigner(`/guard/${bill ? "bill" : "say"}`);
+    if (!sign) {
+      // The call stays stored and is sent once the passkey signs in again.
+      setNotice("Sign in with your passkey again to send this. Your message is kept.");
+      setBusy(false);
+      return;
+    }
+    const { payload, answered } = await send(body, sign);
     if (!answered) {
       // The call stays stored. The next load sends it again.
       setNotice("The guard did not answer. Your message is kept and will be sent again.");
@@ -388,12 +405,12 @@ export default function PlayFrame({
     }
     setWait("opening");
     sessionRef.current = minted;
-    await openDoor(minted, playerHeader(secrets, "/guard/open"));
+    await openDoor(minted, () => playerHeader(secrets, "/guard/open"));
     setBusy(false);
   }
 
   /** `auth` proves the passkey's account and claim key to the server, which refuses the door's sponsor. */
-  async function openDoor(current: StoredRaid, auth: string) {
+  async function openDoor(current: StoredRaid, auth: () => string) {
     const round = Number(vault.round);
     if (!Number.isSafeInteger(round)) {
       setDoorError("The door did not answer.");
@@ -978,7 +995,8 @@ export default function PlayFrame({
       {/* The raid screen is a picture and a HUD, so its heading is for screen readers. */}
       <h1 className="sr-only">{signText} · round {vault.round}</h1>
       {/* HUD */}
-      <header className="z-20 flex items-center justify-between gap-2 px-3 pb-2 pt-3 sm:gap-3 sm:px-4">
+      {/* Above the ending's overlay (z-30), so the sound toggle and help stay usable once the raid is over. */}
+      <header className="relative z-40 flex items-center justify-between gap-2 px-3 pb-2 pt-3 sm:gap-3 sm:px-4">
         <a href={doorHref} className="chalk-focus inline-flex min-h-11 min-w-0 flex-col justify-center leading-none">
           <div className="font-sign text-sm">BOUNCER</div>
           <div className="truncate font-mono text-xs uppercase tracking-wider text-chalk/80 sm:tracking-[0.2em]">
@@ -1002,8 +1020,8 @@ export default function PlayFrame({
           <span className="hidden items-center gap-1 rounded-full bg-night-3 px-2 py-1 font-mono text-[11px] min-[380px]:flex">
             Round {vault.round}
           </span>
-          <HelpButton values={{ budget: messageBudget, lockNs: vault.lockNs }} className="relative grid size-7 shrink-0 place-items-center rounded-full bg-night-3 font-sign text-sm after:absolute after:-inset-2 after:content-['']">
-            <span aria-hidden="true">?</span>
+          <HelpButton values={{ budget: messageBudget, lockNs: vault.lockNs }} className="-my-2 grid size-11 shrink-0 place-items-center">
+            <span aria-hidden="true" className="grid size-7 place-items-center rounded-full bg-night-3 font-sign text-sm">?</span>
             <span className="sr-only">How to play</span>
           </HelpButton>
           <button onClick={toggleSound} data-sound-toggle aria-label={sound ? "Street sound on" : "Street sound off"} className="-my-2 inline-flex min-h-11 shrink-0 items-center whitespace-nowrap" aria-pressed={sound}>
@@ -1263,6 +1281,7 @@ export default function PlayFrame({
           budget={messageBudget}
           lockNs={vault.lockNs}
           vaultId={vaultId}
+          raidId={session?.raidId ?? null}
           storageName={storageName}
         />
       )}
@@ -1308,10 +1327,12 @@ function EndScreen({
   budget,
   lockNs,
   vaultId,
+  raidId,
   storageName,
 }: {
   lockNs: string;
   vaultId: string;
+  raidId: string | null;
   storageName: string;
   budget: number;
   revealHref: string;
@@ -1348,8 +1369,18 @@ function EndScreen({
   const sq: Record<Decision, string> = { ask: "bg-graphite", refused: "bg-rope", approved: "bg-uv", none: "bg-night-3" };
   const stamp = signature ?? "";
   const standing = useStanding();
-  // The win was just recorded, so the lock opens about one lock length from now. The claim page reads the exact time.
-  const [unlockAtNs] = useState(() => (BigInt(Date.now()) * 1_000_000n + BigInt(/^[0-9]+$/.test(lockNs) ? lockNs : "0")).toString());
+  // Until the vault answers, the lock is taken to open one lock length from now. The vault's own unlock time then
+  // replaces it, so a raid reopened later, or on another browser, counts to the same moment as the first.
+  const [unlockAtNs, setUnlockAtNs] = useState(() => (BigInt(Date.now()) * 1_000_000n + BigInt(/^[0-9]+$/.test(lockNs) ? lockNs : "0")).toString());
+  useEffect(() => {
+    if (end === "out" || !raidId) return;
+    let cancel = false;
+    void apiPost("/crack", { raid_id: raidId, vault_id: vaultId, round }).then((sent) => {
+      const unlockAt = sent.ok ? (sent.body as { crack?: { unlockAt?: unknown } | null } | null)?.crack?.unlockAt : undefined;
+      if (!cancel && typeof unlockAt === "string" && /^[0-9]+$/.test(unlockAt)) setUnlockAtNs(unlockAt);
+    });
+    return () => { cancel = true; };
+  }, [end, raidId, vaultId, round]);
   const unlocked = useReached(unlockAtNs);
   const filled = grid.length ? grid : Array<Decision>(budget).fill("ask");
   useEffect(() => {
@@ -1359,7 +1390,7 @@ function EndScreen({
   }, [standing.streak]);
   if (end === "out") {
     return (
-      <div ref={ref} className="absolute inset-0 z-30 flex flex-col items-center justify-end overflow-y-auto bg-[linear-gradient(to_bottom,rgb(13_10_18/0.1)_0%,rgb(13_10_18/0.85)_15%,rgb(13_10_18/0.99)_30%)] px-6 pb-8 text-center">
+      <div ref={ref} className="absolute inset-0 z-30 flex flex-col items-center justify-end overflow-y-auto bg-[linear-gradient(to_bottom,rgb(13_10_18/0.55)_0%,rgb(13_10_18/0.92)_12%,rgb(13_10_18/0.99)_30%)] px-6 pb-8 text-center">
         <Suspense fallback={<TurnedAway sign={venueId} guardName={guardName} grid={grid.length ? grid : Array<Decision>(budget).fill("ask")} sq={sq} line={lastWord(null, seed)} rivals={[]} token={token} closesAt={closesAt} revealHref={revealHref} doorHref={doorHref} />}>
           <TurnedAwayWithRivals sign={venueId} guardName={guardName} grid={grid.length ? grid : Array<Decision>(budget).fill("ask")} sq={sq} seed={seed} others={others} token={token} closesAt={closesAt} revealHref={revealHref} doorHref={doorHref} />
         </Suspense>
@@ -1539,8 +1570,9 @@ function Thinking() {
 }
 
 /** `answered` is false only when no reply came back, so the same call can be sent again. */
-async function postGuard(body: Record<string, unknown>, auth?: string): Promise<{ payload: Record<string, unknown>; answered: boolean }> {
-  const result = auth ? await apiPost("/guard", body, () => ({ "x-player-auth": auth })) : await apiPost("/guard", body);
+/** `sign` is called for every attempt, because the server refuses a signature it has already seen. */
+async function postGuard(body: Record<string, unknown>, sign: () => string): Promise<{ payload: Record<string, unknown>; answered: boolean }> {
+  const result = await apiPost("/guard", body, () => ({ "x-player-auth": sign() }));
   const answered = result.ok && result.status < 500 && Boolean(result.body) && typeof result.body === "object";
   return { payload: asObject(result), answered };
 }

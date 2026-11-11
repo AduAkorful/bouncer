@@ -7,7 +7,7 @@ import { readHold } from "@/lib/player-hold";
 import { loadPlayerSession } from "@/lib/player-session";
 
 /** What this browser already did at this door tonight. Nothing is drawn for a newcomer. */
-export function TonightRaid({ storageName, vaultId, round, playHref, budget }: { storageName: string; vaultId: string; round: string; playHref: string; budget?: number }) {
+export function TonightRaid({ storageName, vaultId, round, playHref, budget, onDone }: { storageName: string; vaultId: string; round: string; playHref: string; budget?: number; onDone?: (done: boolean) => void }) {
   const [row, setRow] = useState<RaidHistoryRow | null>(null);
   const [spent, setSpent] = useState(false);
 
@@ -15,11 +15,14 @@ export function TonightRaid({ storageName, vaultId, round, playHref, budget }: {
     let live = true;
     loadRaid(storageName, vaultId, round).then((found) => {
       if (!live || !found || "error" in found) return;
-      setRow(raidHistoryRow(`${vaultId}:${round}`, found));
-      setSpent(budget !== undefined && budget > 0 && Math.max(found.used ?? 0, found.outcomes?.length ?? 0) >= budget);
+      const next = raidHistoryRow(`${vaultId}:${round}`, found);
+      const used = budget !== undefined && budget > 0 && Math.max(found.used ?? 0, found.outcomes?.length ?? 0) >= budget;
+      setRow(next);
+      setSpent(used);
+      if (next) onDone?.(next.state === "in" || (used && next.state !== "held" && next.state !== "stuck"));
     }).catch(() => undefined);
     return () => { live = false; };
-  }, [storageName, vaultId, round, budget]);
+  }, [storageName, vaultId, round, budget, onDone]);
 
   if (!row || row.state === "shut") return null;
   const copy = row.state === "in"

@@ -273,7 +273,15 @@ export function Sky({ kind }: { kind: "fog" | "snow" | "fireworks" | "stars" }) 
   if (kind === "fog") {
     return (
       <g pointerEvents="none">
-        {[150, 190, 230].map((y, i) => <rect key={y} className="fog" x="-1000" y={y} width="2400" height="40" fill="#cfd6e0" opacity={0.07 + i * 0.03} />)}
+        {/* Soft-edged bands thick enough to read as fog at a glance; at 7% they went unseen (QA r25 R25-15). */}
+        <defs>
+          <linearGradient id="fog-band" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor="#cfd6e0" stopOpacity="0" />
+            <stop offset="0.5" stopColor="#cfd6e0" stopOpacity="1" />
+            <stop offset="1" stopColor="#cfd6e0" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        {[30, 75, 120].map((y, i) => <rect key={y} className="fog" x="-1000" y={y} width="2400" height="70" fill="url(#fog-band)" opacity={0.16 + i * 0.06} />)}
       </g>
     );
   }

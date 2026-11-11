@@ -191,7 +191,7 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
       setAckHint(false);
       setReport(null);
       return "Draft ready. Read it, edit it, then run the test.";
-    });
+    }, true, "draft");
   }
 
   function parsedSpec(): Record<string, unknown> | null {
@@ -206,6 +206,8 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
   }
 
   async function test() {
+    // A refusal replaces any earlier result, so a stale "Passed." never sits beside it.
+    setReport(null);
     await run(async () => {
       const spec = parsedSpec();
       const cap = toBaseUnits(capText, decimals);
@@ -217,7 +219,7 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
       setSpecText(JSON.stringify(spec, null, 2));
       setReport({ pass: body.pass === true, failures: body.failures ?? [], warnings: body.warnings ?? [] });
       return null;
-    });
+    }, true, "test");
   }
 
   async function create() {
@@ -404,6 +406,7 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
               <button className={button} disabled={busy || story.trim().length === 0} onClick={() => void draft()}>
                 Draft it
               </button>
+              {notice && noticeAt === "draft" ? <p ref={noticeRef} role="status" className="mt-2 text-sm">{notice.text}</p> : null}
               <h3 className="mt-4 text-sm text-chalk/80">The door spec. Edit the bills below, or write your own.</h3>
               <SpecForm text={specText} currency={symbol} onChange={(text) => { setSpecText(text); setReport(null); setAckHint(false); }} />
               <details className="mt-3">
@@ -411,7 +414,7 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
                 <label className="sr-only" htmlFor="spec">The door spec as JSON</label>
                 <textarea id="spec" className={`${input} font-mono text-xs`} rows={14} value={specText} onChange={(e) => { setSpecText(e.target.value); setReport(null); setAckHint(false); }} spellCheck={false} />
               </details>
-              <p className="mt-2 text-xs text-chalk/60">Amounts are in whole {symbol}. References can use {"{d2} {d3} {d4}"} and {"{n:1-99}"}.</p>
+              <p className="mt-2 text-xs text-chalk/60">Amounts are in {symbol}, to the cent (3.10). References can use {"{d2} {d3} {d4}"} and {"{n:1-99}"}.</p>
               <div className="mt-4 grid grid-cols-2 gap-3">
                 <div>
                   <label className={label} htmlFor="sign">Sign (required to seal)</label>
@@ -519,6 +522,7 @@ export function SponsorFlow({ rpcUrl, contractId, networkId, storageName, keeper
               <button className={button} disabled={busy} onClick={() => void test()}>
                 Run the test
               </button>
+              {notice && noticeAt === "test" ? <p ref={noticeRef} role="status" className="mt-2 text-sm text-rope">{notice.text}</p> : null}
               {report ? (
                 <div className="mt-4 space-y-2 text-sm" aria-live="polite">
                   <p className="font-sign">{report.pass ? "Passed." : "Not yet."}</p>

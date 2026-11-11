@@ -2,7 +2,7 @@ import Link from "next/link";
 
 /** The bar on pages away from the door, so every page has a way to the doors, the board, and the profile (QA R20 N-13). */
 export function SiteNav() {
-  const link = "chalk-focus inline-flex min-h-11 items-center px-1.5 text-[13px] text-chalk/80 hover:text-chalk sm:px-2 sm:text-sm";
+  const link = "chalk-focus inline-flex min-h-11 min-w-11 items-center justify-center px-1.5 text-[13px] text-chalk/80 hover:text-chalk sm:px-2 sm:text-sm";
   return (
     <nav aria-label="Site" className="-mx-4 -mt-8 mb-6 flex items-center justify-between gap-2 border-b border-white/10 px-4 py-1">
       <Link href="/" prefetch={false} className="chalk-focus inline-flex min-h-11 items-center font-sign text-lg tracking-wide">

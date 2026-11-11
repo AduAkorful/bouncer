@@ -91,6 +91,7 @@ export function PayoutWallet({
       return;
     }
     setHash(sent.transactionHash);
+    setNote(`Sent ${amount.trim()}${symbol ? ` ${symbol}` : ""} to ${to.trim()}.`);
     setAmount("");
   }
 

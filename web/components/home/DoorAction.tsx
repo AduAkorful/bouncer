@@ -35,6 +35,8 @@ export function DoorAction({
   budget?: number;
 }) {
   const [win, setWin] = useState<Uncollected | null>(null);
+  /** This browser's raid tonight is over: turned away, or got in. Joining again leads only to that ending. */
+  const [done, setDone] = useState(false);
   const paths = doorPaths(vaultId);
 
   useEffect(() => {
@@ -48,6 +50,7 @@ export function DoorAction({
     return () => { live = false; };
   }, [vaultId, round]);
 
+  const finished = done || win?.round === round;
   const claimHref = win ? (win.round === round ? paths.claim : `${paths.claim}?round=${win.round}`) : paths.claim;
   return (
     <>
@@ -61,7 +64,7 @@ export function DoorAction({
           {!win.ready ? <span className="mt-1 block font-mono text-xs uppercase tracking-wider">The time lock is still running</span> : null}
         </a>
       ) : null}
-      {open ? (
+      {open && !finished ? (
         <a
           id="join-queue"
           href={paths.play}
@@ -74,10 +77,10 @@ export function DoorAction({
           Join the queue
         </a>
       ) : (
-        !win && <p className="mt-5 rounded-2xl border border-white/10 py-4 text-center font-sign text-xl text-chalk/50">{full ? "Tonight's cut is taken" : "The queue is closed"}</p>
+        !win && !finished && <p className="mt-5 rounded-2xl border border-white/10 py-4 text-center font-sign text-xl text-chalk/50">{full ? "Tonight's cut is taken" : "The queue is closed"}</p>
       )}
-      {open && !win ? <QueueBar href={paths.play} targetId="join-queue" /> : null}
-      {storageName && !win ? <TonightRaid storageName={storageName} vaultId={vaultId} round={round} playHref={paths.play} budget={budget} /> : null}
+      {open && !win && !finished ? <QueueBar href={paths.play} targetId="join-queue" /> : null}
+      {storageName && !win ? <TonightRaid storageName={storageName} vaultId={vaultId} round={round} playHref={paths.play} budget={budget} onDone={setDone} /> : null}
     </>
   );
 }

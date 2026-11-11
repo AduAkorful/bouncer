@@ -38,7 +38,7 @@ const STATUS: Record<string, string> = {
 
 function when(ns: string): string {
   const ms = Number(BigInt(ns) / 1_000_000n);
-  return new Date(ms).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+  return new Date(ms).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short", timeZoneName: "short" });
 }
 
 /**
@@ -116,6 +116,10 @@ export function WinsBoard({
               Try again
             </button>
           </div>
+        )}
+        {/* A link to one win that this door does not hold says so, instead of quietly showing the list. */}
+        {load.state === "ready" && focus && !load.wins.some((win) => win.round === focus.round && win.raidId === focus.raidId) && (
+          <p className="mt-6 rounded-3xl border border-rope/40 bg-night-2 p-5 text-sm" role="status">This door has no recorded win for that link (round {focus.round}). Every win it holds is listed below.</p>
         )}
         {load.state === "ready" && load.wins.length === 0 && <p className="mt-6 text-sm text-chalk/70">No win has been recorded at this door yet.</p>}
         {load.state === "ready" && load.wins.length > 0 && (

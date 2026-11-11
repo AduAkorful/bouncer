@@ -89,15 +89,16 @@ export function HomeDoor({
       >
         Skip to the door
       </a>
-      <header className="relative z-20 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 px-4 py-3 sm:absolute sm:inset-x-0 sm:top-0 sm:flex-nowrap">
+      {/* One row only from 768px: at 640 (a 1280 screen at 200% zoom) the links and the tally do not fit. */}
+      <header className="relative z-20 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 px-4 py-3 md:absolute md:inset-x-0 md:top-0 md:flex-nowrap">
         <Link href="/" className="chalk-focus order-1 inline-flex min-h-11 items-center font-sign text-lg drop-shadow">
           BOUNCER
         </Link>
-        <div className="order-3 flex w-full items-center gap-1.5 sm:order-2 sm:ml-auto sm:w-auto sm:flex-nowrap sm:justify-end sm:gap-2">
+        <div className="order-3 flex w-full items-center gap-1.5 md:order-2 md:ml-auto md:w-auto md:flex-nowrap md:justify-end md:gap-2">
           <NetworkTag label={networkTag} className="whitespace-nowrap bg-black/40 text-chalk/80 backdrop-blur" />
           {vault && vault.crackCount > 0 ? <span className="font-mono text-xs text-chalk/80">{vault.crackCount} got in{shut ? ` in round ${vault.round}` : " tonight"}</span> : null}
         </div>
-        <div className="order-2 flex items-center gap-1.5 sm:order-3">
+        <div className="order-2 flex items-center gap-1.5 md:order-3">
           <SoundToggle />
           <Link href="/sponsors" className="chalk-focus inline-flex min-h-11 items-center whitespace-nowrap rounded-full bg-black/50 px-3 font-mono text-xs backdrop-blur">
             Sponsor
