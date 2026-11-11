@@ -368,7 +368,7 @@ test("a shut, past-close or old round answers no raid, message or bill, so its s
   const app = createApp(deps);
   for (const [vault, round] of [["shut", 1], ["late", 1], ["live", 2]] as const) {
     for (const op of ["open", "say", "bill"]) {
-      const who = playerOpen("/guard/open");
+      const who = playerOpen(`/guard/${op}`);
       const res = await app.request("/guard", post("/guard", { op, vault_id: vault, round, player_id: who.claimKey, blob: "b" }, { "x-player-auth": who.header }));
       assert.equal(res.status, 409, `${vault} ${op}`);
       assert.deepEqual(await res.json(), { ok: false, error: "closed" });

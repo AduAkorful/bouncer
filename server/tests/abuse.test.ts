@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { KeyPair } from "near-api-js";
 import { createApp } from "../src/app.ts";
-import { authHeader, openRow, testDeps } from "./testkit.ts";
+import { authHeader, openRow, playerOpen, testDeps } from "./testkit.ts";
 
 const ORIGIN = "https://site.test";
 const post = (body: unknown, headers: Record<string, string> = {}) => ({
@@ -13,7 +13,10 @@ const post = (body: unknown, headers: Record<string, string> = {}) => ({
 const NOW = Math.floor(Date.UTC(2026, 10, 5, 12, 0, 0) / 1000);
 const draft = { story: "A club.", decimals: 6 };
 const signedPost = (route: string, body: unknown, over: Parameters<typeof authHeader>[1] = {}) => post(body, { "x-sponsor-auth": authHeader(route, over) });
-const bill = (vault: string, round: number, ip = "1.1.1.1") => post({ op: "bill", vault_id: vault, round, player_id: "p", blob: "b" }, { "x-forwarded-for": ip });
+const bill = (vault: string, round: number, ip = "1.1.1.1") => {
+  const who = playerOpen("/guard/bill");
+  return post({ op: "bill", vault_id: vault, round, player_id: who.claimKey, blob: "b" }, { "x-forwarded-for": ip, "x-player-auth": who.header });
+};
 
 const openDoors = () => ({ vaults: { anchor: openRow(), "velvet-1": openRow() }, specs: {}, owner: "owner.test", calls: [] });
 
@@ -36,9 +39,33 @@ test("a refused bill spends nothing at the guard, and only bills are counted", a
   await app.request("/guard", bill("anchor", 1, "7.7.7.7"));
   assert.equal(posts.length, before);
   for (let i = 0; i < 10; i += 1) {
-    const said = await app.request("/guard", post({ op: "say", vault_id: "anchor", round: 1, player_id: `p${i}`, blob: "b" }, { "x-forwarded-for": `6.6.6.${i}` }));
+    const who = playerOpen("/guard/say");
+    const said = await app.request("/guard", post({ op: "say", vault_id: "anchor", round: 1, player_id: who.claimKey, blob: "b" }, { "x-forwarded-for": `6.6.6.${i}`, "x-player-auth": who.header }));
     assert.notEqual(said.status, 429);
   }
+});
+
+test("an unsigned message or bill reaches no guard and counts no bill", async () => {
+  const { deps, posts } = testDeps({}, openDoors());
+  const app = createApp(deps);
+  for (const op of ["say", "bill"]) {
+    assert.equal((await app.request("/guard", post({ op, vault_id: "anchor", round: 1, player_id: "0".repeat(64), blob: "00" }))).status, 401, op);
+    // Signed for another route, or by another claim key than the one named, is refused the same way.
+    const other = playerOpen("/guard/open");
+    assert.equal((await app.request("/guard", post({ op, vault_id: "anchor", round: 1, player_id: other.claimKey, blob: "00" }, { "x-player-auth": other.header }))).status, 401, op);
+    const stranger = playerOpen(`/guard/${op}`);
+    assert.equal((await app.request("/guard", post({ op, vault_id: "anchor", round: 1, player_id: "0".repeat(64), blob: "00" }, { "x-player-auth": stranger.header }))).status, 401, op);
+  }
+  assert.equal(posts.length, 0);
+  assert.deepEqual(deps.bills.snapshot(), {});
+});
+
+test("a bill for a round that is not open is refused before it is counted", async () => {
+  const { deps, posts } = testDeps({}, openDoors());
+  const app = createApp(deps);
+  assert.equal((await app.request("/guard", bill("anchor", 2))).status, 409);
+  assert.equal(posts.length, 0);
+  assert.deepEqual(deps.bills.snapshot(), {});
 });
 
 test("new identities are limited per address and not for other addresses", async () => {
@@ -127,7 +154,7 @@ test("commit is signed and counted too", async () => {
 });
 
 test("/status shows the bill counters and no secret", async () => {
-  const { deps } = testDeps();
+  const { deps } = testDeps({}, openDoors());
   const app = createApp(deps);
   await app.request("/guard", bill("anchor", 1));
   const text = await (await app.request("/status")).text();

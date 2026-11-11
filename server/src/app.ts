@@ -105,10 +105,6 @@ export function createApp(deps: Deps) {
     // New identities are free, so the volume is bounded here: opens per address, and bills per vault per
     // round across everyone. A refused call spends nothing at the guard.
     if (body.op === "open" && !take(c, "open", OPENS_PER_HOUR, HOUR)) return slow(c);
-    if (body.op === "bill") {
-      const key = `${String(body.vault_id)}|${String(body.round)}`;
-      if (!deps.bills.take(key, env.roundBills)) return c.json({ ok: false, error: BUSY }, 429);
-    }
     // A round that is shut, past its close, or not the vault's current round sells no raid and answers no
     // message, so its street hints cannot be read after close by calling this route directly. A round with
     // every crack taken sells no raid and signs no verdict. If the read fails the turn goes on, because the
@@ -117,6 +113,16 @@ export function createApp(deps: Deps) {
       const door = await readDoor(deps.rpc, env.relay.contractId, body.vault_id);
       if (door.ok && (doorShut(door.vault, deps.now()) || String(body.round) !== door.vault.round)) return c.json({ ok: false, error: "closed" }, 409);
       if (door.ok && body.op !== "say" && doorFull(door.vault)) return c.json({ ok: false, error: "full" }, 409);
+    }
+    // A message or a bill is signed by the same passkey that opened the raid, so a caller with no sign-in cannot
+    // spend a guard call or the round's bills. The bill is counted only after that, against a round that is open.
+    if (body.op === "say" || body.op === "bill") {
+      const who = playerAuth(c.req.header("x-player-auth"), `/guard/${body.op}`);
+      if (!who.ok || who.claimKey !== body.player_id) return c.json({ ok: false, error: "unauthorized" }, 401);
+    }
+    if (body.op === "bill") {
+      const key = `${String(body.vault_id)}|${String(body.round)}`;
+      if (!deps.bills.take(key, env.roundBills)) return c.json({ ok: false, error: BUSY }, 429);
     }
     // A door's sponsor wrote the ledger, so the sponsor never gets a raid. The passkey signs this call with its
     // account key and the claim key, so the account behind the claim key is the one checked, not a page's claim.
