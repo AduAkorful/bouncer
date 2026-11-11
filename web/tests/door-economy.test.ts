@@ -17,11 +17,13 @@ test("the tiles are the vault's own pot, day pot and reserved amounts", () => {
 });
 
 test("zero is shown, not hidden, and a shut round says where its pot goes", () => {
-  const e = doorEconomy(vault({ open: false, dayPot: "0", reserved: "0" }), true);
+  const e = doorEconomy(vault({ open: false, dayPot: "0", reserved: "0", opensAt: "1793491200000000000", commitment: "ab".repeat(32) }), true);
   assert.deepEqual(e.tiles.map((t) => t.atomic), ["4000000", "0", "0"]);
   assert.match(e.tiles[1].note, /over/);
   // A round past its close that the keeper has not closed yet still holds its day pot, and says it is over.
   assert.match(doorEconomy(vault({ open: true }), true).tiles[1].note, /goes back to the reserve/);
+  // A door its sponsor never opened has had no round to be over.
+  assert.match(doorEconomy(vault({ open: false }), true).tiles[1].note, /No round has opened/);
 });
 
 test("a split-the-day door has no per-crack cap and says winners split the pot", () => {

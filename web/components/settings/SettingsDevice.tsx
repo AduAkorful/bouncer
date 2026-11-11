@@ -1,5 +1,6 @@
 "use client";
 
+import { generatedAccount } from "@/lib/account-name";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useWalletAccount } from "@/components/profile/ProfileWallet";
@@ -30,6 +31,8 @@ export function SettingsDevice({ storageName }: { storageName: string }) {
           <p className="mt-2 text-sm text-chalk/70">This browser is not signed in. Your passkey signs you in from the profile, the queue, or a claim.</p>
         ) : wallet.status === "reading" ? (
           <p className="mt-2 text-sm text-chalk/70">Reading this browser.</p>
+        ) : wallet.accountId && generatedAccount(wallet.accountId) ? (
+          <p className="mt-2 text-sm text-chalk/70">Signed in on this browser. Your wallet was made for this passkey.</p>
         ) : wallet.accountId ? (
           <>
             <p className="mt-2 text-sm text-chalk/70">Signed in on this browser as</p>

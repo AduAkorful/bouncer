@@ -22,6 +22,7 @@ export function DoorAction({
   full = false,
   token,
   storageName,
+  budget,
 }: {
   vaultId: string;
   round: string;
@@ -30,6 +31,8 @@ export function DoorAction({
   full?: boolean;
   token: Promise<TokenRead>;
   storageName: string | null;
+  /** Messages a raid has. A stored raid that used them all was turned away. */
+  budget?: number;
 }) {
   const [win, setWin] = useState<Uncollected | null>(null);
   const paths = doorPaths(vaultId);
@@ -74,7 +77,7 @@ export function DoorAction({
         !win && <p className="mt-5 rounded-2xl border border-white/10 py-4 text-center font-sign text-xl text-chalk/50">{full ? "Tonight's cut is taken" : "The queue is closed"}</p>
       )}
       {open && !win ? <QueueBar href={paths.play} targetId="join-queue" /> : null}
-      {storageName && !win ? <TonightRaid storageName={storageName} vaultId={vaultId} round={round} playHref={paths.play} /> : null}
+      {storageName && !win ? <TonightRaid storageName={storageName} vaultId={vaultId} round={round} playHref={paths.play} budget={budget} /> : null}
     </>
   );
 }

@@ -7,6 +7,7 @@ import { DoorUnread } from "@/components/DoorUnread";
 import { HomeDoor } from "@/components/home/HomeDoor";
 import Raid from "@/components/play/Raid";
 import { RevealDoor } from "@/components/reveal/RevealDoor";
+import { WinsBoard } from "@/components/wins/WinsBoard";
 import type { Rpc } from "@/lib/chain";
 import { pageRpc } from "@/lib/page-rpc";
 import { readPublicEnv } from "@/lib/config";
@@ -22,7 +23,7 @@ import { LiveDoor } from "@/components/landing/LiveDoor";
 
 type Labels = NonNullable<ReturnType<typeof publicLabels>>;
 type Loaded = { ok: true; page: PageVault; labels: Labels } | { ok: false; failure: UnreadDoor };
-type Surface = "door" | "play" | "reveal" | "claim";
+type Surface = "door" | "play" | "reveal" | "claim" | "wins";
 
 function publicLabels() {
   const labels = readPublicEnv(process.env);
@@ -160,7 +161,7 @@ export async function PlayGate({ vaultId }: { vaultId?: string }) {
     return (
       <Blocked kicker={stop.kicker} title={stop.title} detail={stop.detail} href={paths.door} door={doorTitle(page.card, page.vaultId).sign}>
         {/* The winner who comes back to a taken door is told it was them, with the way to their cut. */}
-        {labels.storageName ? <div className="mx-auto max-w-lg"><TonightRaid storageName={labels.storageName} vaultId={page.vaultId} round={page.vault.round} playHref={paths.play} /></div> : null}
+        {labels.storageName ? <div className="mx-auto max-w-lg"><TonightRaid storageName={labels.storageName} vaultId={page.vaultId} round={page.vault.round} playHref={paths.play} budget={labels.messageBudget} /></div> : null}
         <Suspense fallback={<DoorListPending />}>
           <HomeIndex index={readDoorIndex(rpc, labels.contractId, Date.now())} exclude={page.vaultId} retryHref={paths.play} token={page.token} narrow />
         </Suspense>
@@ -211,6 +212,28 @@ export async function RevealGate({ vaultId, round }: { vaultId?: string; round?:
   );
 }
 
+/** Plan 82. Every win this door has recorded, each checkable in the browser from chain data alone. */
+export async function WinsGate({ vaultId, round, raid }: { vaultId: string; round?: string; raid?: string }) {
+  const loaded = await load(vaultId);
+  if (!loaded.ok) return unread("wins", vaultId, loaded.failure);
+  const { page, labels } = loaded;
+  const focus = round && raid && /^[1-9][0-9]{0,15}$/.test(round) && /^[A-Za-z0-9._-]{1,64}$/.test(raid) ? { round: Number(round), raidId: raid } : null;
+  return (
+    <WinsBoard
+      vaultId={page.vaultId}
+      sign={doorTitle(page.card, page.vaultId).sign}
+      guardPk={page.vault.guardPk}
+      contractId={labels.contractId}
+      rpcUrl={labels.rpcUrl}
+      archivalRpcUrl={labels.archivalRpcUrl}
+      networkTag={labels.networkTag}
+      token={page.token}
+      doorHref={doorPaths(page.vaultId).door}
+      focus={focus}
+    />
+  );
+}
+
 export async function ClaimGate({ vaultId, round }: { vaultId?: string; round?: string }) {
   const loaded = await load(vaultId);
   if (!loaded.ok) return unread("claim", vaultId, loaded.failure);
@@ -227,6 +250,8 @@ export async function ClaimGate({ vaultId, round }: { vaultId?: string; round?: 
       networkTag={labels.networkTag}
       round={claimRound}
       rpcUrl={labels.rpcUrl}
+      outlayerApiUrl={labels.outlayerApiUrl}
+      guardVersion={labels.guardVersion}
       contractId={labels.contractId}
       networkId={labels.networkId}
       doorHref={doorPaths(page.vaultId).door}

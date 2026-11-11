@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { doorPaths } from "@/lib/door-read";
 import type { ReactNode } from "react";
 import { CloseTime, Countdown } from "@/components/Countdown";
 import { NetworkTag } from "@/components/bits";
@@ -15,7 +16,7 @@ import { SoundToggle } from "@/components/home/SoundToggle";
 import { HelpButton } from "@/components/help/HelpButton";
 import { DoorEconomy } from "@/components/home/DoorEconomy";
 import { SceneLife } from "@/components/SceneLife";
-import { CLOSED_DOOR_NOTE, COMMITMENT_LINE, NO_COMMITMENT, commitmentFooter, doorFull, doorShut, doorTitle } from "@/lib/door";
+import { CLOSED_DOOR_NOTE, COMMITMENT_LINE, NO_COMMITMENT, commitmentFooter, doorFull, doorNeverOpened, doorShut, doorTitle } from "@/lib/door";
 import type { TokenRead } from "@/lib/page-vault";
 import type { VaultView } from "@/lib/vault";
 
@@ -35,6 +36,10 @@ const phaseCopy = {
   closed: {
     line: "Last call is over. The door is shut.",
     note: CLOSED_DOOR_NOTE,
+  },
+  never: {
+    line: "This door has not opened yet.",
+    note: "Its sponsor has not opened a first round. Other doors are listed below.",
   },
 } as const;
 
@@ -70,7 +75,8 @@ export function HomeDoor({
   const title = doorTitle(card, vaultId);
   const shut = vault ? doorShut(vault, Date.now()) : false;
   const full = vault && !shut ? doorFull(vault) : false;
-  const phase = !vault ? "closed" : shut ? "closed" : full ? "full" : vault.crackCount > 0 ? "cracked" : "open";
+  const never = Boolean(vault && doorNeverOpened(vault));
+  const phase = !vault ? "closed" : never ? "never" : shut ? "closed" : full ? "full" : vault.crackCount > 0 ? "cracked" : "open";
   // A shut door has no pot tonight, even when the chain still lists the round as open past its close.
   // A full round has nothing left to win, whatever the pot still holds for the claims.
   const atomic = vault && !shut && !full ? (phase === "cracked" || vault.open ? vault.dayPot : vault.pot) : null;
@@ -131,7 +137,7 @@ export function HomeDoor({
               </g>
             }
             front={
-              <PotBoard style={streetPieces(card?.setting ?? ACCRA_SETTING).board} title={shut ? "CLOSED" : full ? "TAKEN" : "TONIGHT\u2019S POT"}>
+              <PotBoard style={streetPieces(card?.setting ?? ACCRA_SETTING).board} title={never ? "SOON" : shut ? "CLOSED" : full ? "TAKEN" : "TONIGHT\u2019S POT"}>
                 {atomic ? <TokenPotGlyph token={token} atomic={atomic} /> : null}
               </PotBoard>
             }
@@ -154,9 +160,9 @@ export function HomeDoor({
           <div className="mt-3 flex items-end justify-between gap-3">
             <div>
               <div className="font-mono text-xs uppercase tracking-[0.2em] text-chalk/80">
-                {vault ? (phase === "cracked" ? "Tonight's pot" : phase === "full" ? "Taken tonight" : phase === "closed" ? "Closed" : "Tonight's pot") : "No vault"}
+                {vault ? (phase === "cracked" ? "Tonight's pot" : phase === "full" ? "Taken tonight" : phase === "closed" ? "Closed" : phase === "never" ? "Not opened yet" : "Tonight's pot") : "No vault"}
               </div>
-              {atomic ? <TokenAmount token={token} atomic={atomic} className="text-2xl text-brass" /> : <p className="text-sm text-chalk/60">{full ? "Nothing left to win." : shut && vault ? "No pot tonight." : "No pot is stored."}</p>}
+              {atomic ? <TokenAmount token={token} atomic={atomic} className="text-2xl text-brass" /> : <p className="text-sm text-chalk/60">{full ? "Nothing left to win." : never ? "No round yet." : shut && vault ? "No pot tonight." : "No pot is stored."}</p>}
             </div>
             {vault && !shut ? (
               <div className="text-right">
@@ -168,7 +174,7 @@ export function HomeDoor({
           </div>
           <p className="mt-3 font-sign text-xl leading-tight sm:text-2xl">{notice ?? (card?.pitch || phaseCopy[phase].line)}</p>
           {vault ? (
-            <DoorAction vaultId={vaultId} round={vault.round} open={!shut && !full} full={full} token={token} storageName={wallet?.storageName ?? null} />
+            <DoorAction vaultId={vaultId} round={vault.round} open={!shut && !full} full={full} token={token} storageName={wallet?.storageName ?? null} budget={messageBudget} />
           ) : (
             <p className="mt-5 rounded-2xl border border-white/10 py-4 text-center font-sign text-xl text-chalk/50">The queue is not open</p>
           )}
@@ -197,9 +203,15 @@ export function HomeDoor({
             </HelpButton>
           </section>
           <p className="mt-3 text-center text-xs leading-relaxed text-chalk/70 lg:mt-0 lg:text-left">Test tokens have no cash value. Playing costs no money.</p>
-          <Link href={`${base}/reveal`} className="chalk-focus flex min-h-11 flex-col justify-center rounded-2xl border border-white/10 px-4 py-2 transition hover:bg-white/5">
-            <span className="font-sign text-sm lg:text-base">{shut && vault ? `Round ${vault.round} ledger` : "Tonight\u2019s ledger"}</span>
-            <span className="text-xs text-chalk/60">{shut ? "The bills that were on the list." : "Opens to players when the round closes."}</span>
+          {never ? null : (
+            <Link href={`${base}/reveal`} className="chalk-focus flex min-h-11 flex-col justify-center rounded-2xl border border-white/10 px-4 py-2 transition hover:bg-white/5">
+              <span className="font-sign text-sm lg:text-base">{shut && vault ? `Round ${vault.round} ledger` : "Tonight\u2019s ledger"}</span>
+              <span className="text-xs text-chalk/60">{shut ? "The bills that were on the list." : "Opens to players when the round closes."}</span>
+            </Link>
+          )}
+          <Link href={doorPaths(vaultId).wins} className="chalk-focus flex min-h-11 flex-col justify-center rounded-2xl border border-white/10 px-4 py-2 transition hover:bg-white/5">
+            <span className="font-sign text-sm lg:text-base">Wins at this door</span>
+            <span className="text-xs text-chalk/60">Every recorded win, checked from the chain in your browser.</span>
           </Link>
           </div>
         </div>

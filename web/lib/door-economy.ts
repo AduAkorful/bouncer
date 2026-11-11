@@ -1,3 +1,4 @@
+import { doorNeverOpened } from "./door.ts";
 import type { VaultView } from "./vault";
 
 /**
@@ -22,7 +23,7 @@ export function doorEconomy(vault: VaultView, shut: boolean): DoorEconomy {
       // vault ft_on_transfer: a sponsor's deposit lands in `pot`.
       { id: "reserve", label: "In reserve", atomic: vault.pot, note: "Funded by the sponsor. Each round draws from it." },
       // vault commit_round: min(max_cracks × cap, pot) moves to `day_pot`, or the whole reserve on a split-the-day door.
-      { id: "tonight", label: "Tonight's pot", atomic: vault.dayPot, note: shut ? "This round is over. It goes back to the reserve when it is closed." : "What this round can pay out." },
+      { id: "tonight", label: "Tonight's pot", atomic: vault.dayPot, note: doorNeverOpened(vault) ? "No round has opened yet." : shut ? "This round is over. It goes back to the reserve when it is closed." : "What this round can pay out." },
       // vault submit_verdict reserves a win's amount; claim pays it, expire returns it.
       { id: "held", label: "Held for winners", atomic: vault.reserved, note: "Wins waiting for their time lock or their claim." },
     ],

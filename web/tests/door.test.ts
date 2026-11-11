@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CLOSED_DOOR_NOTE, CLOSED_QUEUE, COMMITMENT_LINE, NO_COMMITMENT, closesAtMs, commitmentFooter, doorFull, doorShut, doorTitle, playableRaid, playerDetail, playGateStatus, playStop } from "../lib/door.ts";
+import { CLOSED_DOOR_NOTE, CLOSED_QUEUE, COMMITMENT_LINE, NO_COMMITMENT, closesAtMs, commitmentFooter, doorFull, doorNeverOpened, doorShut, doorTitle, playableRaid, playerDetail, playGateStatus, playStop } from "../lib/door.ts";
 
 const OPEN = "1793577600000000000";
 
@@ -69,4 +69,14 @@ test("a round with no crack left is full, and a round with room is not", () => {
   assert.equal(doorFull({ ...base, maxCracks: 2 }), false);
   assert.equal(doorFull({ ...base, open: false }), false);
   assert.equal(doorFull({ open: true, crackCount: 0, maxCracks: 0 }), false);
+});
+
+test("a door that never opened is told apart from one that closed", () => {
+  assert.equal(doorNeverOpened({ open: false, opensAt: "0", commitment: null }), true);
+  assert.equal(doorNeverOpened({ open: false, opensAt: "1793577600000000000", commitment: "ab" }), false);
+  assert.equal(doorNeverOpened({ open: true, opensAt: "0", commitment: null }), false);
+});
+
+test("the server's closed answer reads as a closed round", () => {
+  assert.match(playerDetail("closed"), /closed/);
 });

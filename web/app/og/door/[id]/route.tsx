@@ -1,6 +1,6 @@
 import { connection } from "next/server";
 import { readPublicEnv } from "@/lib/config";
-import { doorFull, doorShut } from "@/lib/door";
+import { doorFull, doorNeverOpened, doorShut } from "@/lib/door";
 import { cardResponse, DEFAULT_CARD } from "@/lib/og-card";
 import { readPageVault } from "@/lib/page-vault";
 import { pageRpc } from "@/lib/page-rpc";
@@ -19,12 +19,14 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const token = await page.page.token;
   const shut = doorShut(vault, Date.now());
   const pot = token.ok ? formatAtomic(vault.dayPot, token.decimals) : null;
-  const line = shut ? "The door is closed tonight." : doorFull(vault) ? "Tonight's cut is taken." : pot && token.ok ? `Tonight's pot: ${pot} ${token.symbol}` : "The door is open tonight.";
+  const never = doorNeverOpened(vault);
+  const full = !shut && doorFull(vault);
+  const line = never ? "This door has not opened yet." : shut ? "The door is closed tonight." : doorFull(vault) ? "Tonight's cut is taken." : pot && token.ok ? `Tonight's pot: ${pot} ${token.symbol}` : "The door is open tonight.";
   return cardResponse(
     {
       sign: card?.sign || id,
       line,
-      detail: card ? [card.name ? `Guard ${card.name}` : "", card.pitch].filter(Boolean).join(" · ") : "Get a bill past the door.",
+      detail: card ? [card.name ? `Guard ${card.name}` : "", card.pitch].filter(Boolean).join(" · ") : full ? "Somebody got past the door tonight." : "Get a bill past the door.",
       stamp: shut ? undefined : doorFull(vault) ? { text: "TAKEN", color: "#f2a93b" } : { text: "OPEN", color: "#4fd18b" },
     },
     300,

@@ -7,17 +7,19 @@ import { readHold } from "@/lib/player-hold";
 import { loadPlayerSession } from "@/lib/player-session";
 
 /** What this browser already did at this door tonight. Nothing is drawn for a newcomer. */
-export function TonightRaid({ storageName, vaultId, round, playHref }: { storageName: string; vaultId: string; round: string; playHref: string }) {
+export function TonightRaid({ storageName, vaultId, round, playHref, budget }: { storageName: string; vaultId: string; round: string; playHref: string; budget?: number }) {
   const [row, setRow] = useState<RaidHistoryRow | null>(null);
+  const [spent, setSpent] = useState(false);
 
   useEffect(() => {
     let live = true;
     loadRaid(storageName, vaultId, round).then((found) => {
       if (!live || !found || "error" in found) return;
       setRow(raidHistoryRow(`${vaultId}:${round}`, found));
+      setSpent(budget !== undefined && budget > 0 && Math.max(found.used ?? 0, found.outcomes?.length ?? 0) >= budget);
     }).catch(() => undefined);
     return () => { live = false; };
-  }, [storageName, vaultId, round]);
+  }, [storageName, vaultId, round, budget]);
 
   if (!row || row.state === "shut") return null;
   const copy = row.state === "in"
@@ -26,7 +28,9 @@ export function TonightRaid({ storageName, vaultId, round, playHref }: { storage
       ? { line: "Your bill was approved, but this browser cannot send it to the vault.", link: "Why", href: raidHistoryHref(row) }
     : row.state === "held"
       ? { line: "Your bill was approved. The vault has not recorded it yet.", link: "Send it again", href: raidHistoryHref(row) }
-      : { line: "Your raid tonight is still open on this browser.", link: "Back to your raid", href: playHref };
+      : spent
+        ? { line: "You were turned away tonight. Every message is used.", link: "See how it ended", href: playHref }
+        : { line: "Your raid tonight is still open on this browser.", link: "Back to your raid", href: playHref };
   return (
     <p role="status" className="mt-4 rounded-2xl border border-uv/40 bg-uv/10 px-4 py-3 text-sm">
       {copy.line}{" "}

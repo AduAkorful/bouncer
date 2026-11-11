@@ -1,5 +1,6 @@
 "use client";
 
+import { generatedAccount } from "@/lib/account-name";
 import { useEffect, useState } from "react";
 import { payoutExplorerUrl } from "@/lib/explorer";
 import { fromBaseUnits } from "@/lib/token";
@@ -97,7 +98,7 @@ export function PayoutWallet({
     <section className="mt-5 rounded-3xl border border-white/10 bg-night-2 p-5">
       <h2 className="font-sign text-xl">Your wallet</h2>
       {/* The name of an account made for a passkey is a hash and a long suffix. It is not shown. */}
-      {GENERATED.test(accountId) ? null : <p className="mt-2 font-mono text-[12px] text-chalk/70 [overflow-wrap:anywhere]">{accountParts(accountId)}</p>}
+      {generatedAccount(accountId) ? null : <p className="mt-2 font-mono text-[12px] text-chalk/70 [overflow-wrap:anywhere]">{accountParts(accountId)}</p>}
       <p className="mt-3 text-sm text-chalk/70">
         {balanceError ? balanceError : shown ? `${shown} ${symbol ?? ""}${opened ? "" : ". This wallet is not on testnet yet."}`.trim() : "Reading the balance."}
       </p>
@@ -151,7 +152,6 @@ export function PayoutWallet({
 }
 
 /** The accounts the relay makes for a passkey: `p`, twelve hex digits, then the relay account. */
-const GENERATED = /^p[0-9a-f]{12}\./;
 
 /** A line break is offered before each dot, so `.relay.….testnet` moves down whole before the name itself is split. */
 function accountParts(accountId: string) {
