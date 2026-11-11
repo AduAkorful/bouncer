@@ -656,3 +656,25 @@ fn both_halves_of_a_reference_carry_digits() {
     assert_eq!(crate::clues::halves("VLV-B-123"), ("VLV-B-1".to_string(), "23".to_string()));
     assert_eq!(crate::clues::halves("ABCD"), ("AB".to_string(), "CD".to_string()));
 }
+
+#[test]
+fn a_paid_lines_look_alike_ending_is_not_the_second_half_of_the_bill() {
+    let line = |payee: &str, reference: &str, item: &str, paid: bool| crate::ledger::Line {
+        payee: payee.into(), reference: reference.into(), item: item.into(), qty: 1, unit: 2_000_000, total: 2_000_000, paid,
+    };
+    // Same last digits on the paid line as on the unpaid one; three people hand the pieces out in turn.
+    let spec = clue_example();
+    let parsed = parse(&serde_json::to_string(&spec).unwrap()).unwrap();
+    let clues = parsed.clues.as_ref().unwrap();
+    for target_ref in ["HIC-2806", "HIC-2906", "HIC-3006", "HIC-1106"] {
+        let lines = vec![line("Harbour Ice Co", target_ref, "ice delivery", false), line("Pier Glassware", "PG-1906", "glass hire", true), line("Quay Tents", "QT-4406", "tent hire", true)];
+        let mut failures = std::collections::BTreeSet::new();
+        crate::spec_check::check_clues(clues, &lines, &mut failures);
+        let own = crate::clues::queue(clues, &lines).iter().any(|p| {
+            let said = p["lines"].as_array().unwrap().iter().map(|l| l["text"].as_str().unwrap()).collect::<Vec<_>>().join(" ");
+            let (first, last) = crate::clues::halves(target_ref);
+            said.contains(&format!("The Harbour Ice Co invoice number starts {first}.")) && said.contains(&format!("The ice delivery invoice ended {last}."))
+        });
+        assert_eq!(failures.is_empty(), !own, "only the target's own two sentences count");
+    }
+}

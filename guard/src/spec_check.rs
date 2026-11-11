@@ -152,7 +152,7 @@ pub fn guess_space(line: &LineSpec) -> u128 {
 }
 
 /// Plan 85, for one sampled ledger: the pieces add up to the unpaid bill, and nobody on the street holds all of it.
-fn check_clues(clues: &crate::clues::Clues, lines: &[Line], failures: &mut BTreeSet<String>) {
+pub(crate) fn check_clues(clues: &crate::clues::Clues, lines: &[Line], failures: &mut BTreeSet<String>) {
     let Some(line) = crate::clues::target(lines) else {
         failures.insert("Some players would have no unpaid line with a reference of at least 2 characters, so their clues would be empty.".to_string());
         return;
@@ -160,7 +160,10 @@ fn check_clues(clues: &crate::clues::Clues, lines: &[Line], failures: &mut BTree
     let (first, last) = crate::clues::halves(&line.reference);
     for person in crate::clues::queue(clues, lines) {
         let said: String = person["lines"].as_array().into_iter().flatten().filter_map(|l| l["text"].as_str()).collect::<Vec<_>>().join(" ");
-        if said.contains(&format!("starts {first}.")) && said.contains(&format!("ended {last}.")) {
+        // The target's own two sentences, so a paid line's look-alike ending never counts as a second half.
+        let starts = format!("The {} invoice number starts {first}.", line.payee);
+        let ended = format!("The {} invoice ended {last}.", line.item);
+        if said.contains(&starts) && said.contains(&ended) {
             failures.insert("One person in the street would hold both halves of a reference. Add another person to the clues.".to_string());
         }
     }
