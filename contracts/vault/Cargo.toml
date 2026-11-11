@@ -3,6 +3,7 @@ name = "vault"
 version = "0.1.0"
 edition = "2021"
 publish = false
+license-file = "../../LICENSE"
 description = "Bouncer USDC vault. Testnet payout only. The model never holds a key."
 
 [lib]

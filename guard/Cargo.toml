@@ -3,6 +3,7 @@ name = "guard"
 version = "0.1.0"
 edition = "2021"
 publish = false
+license-file = "../LICENSE"
 description = "Bouncer door guard. Ledger, chat, and the verdict signature. No payout key."
 
 [lib]

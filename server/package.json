@@ -2,6 +2,7 @@
   "name": "server",
   "version": "0.1.0",
   "private": true,
+  "license": "UNLICENSED",
   "type": "module",
   "scripts": {
     "start": "tsx src/index.ts",

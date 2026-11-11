@@ -1,0 +1,23 @@
+Copyright (c) 2026 AduAkorful. All rights reserved.
+
+This repository and everything in it (source code, contracts, artwork,
+text, and other materials, together "the Software") is proprietary.
+
+You may view the Software, and you may clone it and run it locally only
+to review or evaluate it. No other right is granted. Without prior
+written permission from the copyright holder, you may not copy, modify,
+merge, publish, distribute, sublicense, sell, host, or offer as a
+service the Software or any part of it, or use it for any commercial
+purpose.
+
+Third-party components keep their own licenses. That includes the
+dependencies named in the package manifests and the sounds listed in
+web/public/audio/AUDIO_CREDITS.md.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES
+OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
