@@ -3,7 +3,7 @@ import { Account, actions, type KeyPairString } from "near-api-js";
 import { httpRpc, type Rpc } from "../../web/lib/chain.ts";
 import { parseOwner, parseVault, viewRequest } from "../../web/lib/vault.ts";
 import { parseLimits, parseVaultList } from "../../web/lib/sponsor-views.ts";
-import { createPasskeyAccount, signPasskeyTransaction } from "../../web/lib/passkey-sponsor.ts";
+import { createPasskeyAccount } from "../../web/lib/passkey-sponsor.ts";
 import { submitVerdict } from "../../web/lib/submit-verdict.ts";
 import type { Call } from "../../web/lib/vault-calls.ts";
 import type { Deps } from "./app.ts";
@@ -33,7 +33,7 @@ export async function chainNowMs(rpcUrl: string): Promise<{ ok: true; nowMs: num
   }
 }
 
-export function liveDeps(env: ServerEnv, status: () => unknown): Deps {
+export function liveDeps(env: ServerEnv, status: () => unknown, verdictKeyReady: () => boolean): Deps {
   const now = () => Date.now();
   const modelKey = process.env.NEAR_AI_KEY?.trim();
   const surreal = readSurrealEnv(process.env);
@@ -50,9 +50,9 @@ export function liveDeps(env: ServerEnv, status: () => unknown): Deps {
     accessKeyIsFull: (account, publicKey) => accessKeyIsFull(env.relay.rpcUrl, account, publicKey),
     marks: new Map(),
     players: surreal.ok && surreal.env ? surrealPlayers(surreal.env) : undefined,
+    verdictKeyReady,
     submitVerdict: (verdict, signature) => submitVerdict(env.relay, verdict, signature),
-    createAccount: (publicKey) => createPasskeyAccount(env.relay, env.authContractId, publicKey),
-    signTransaction: (body) => signPasskeyTransaction(env.relay, env.authContractId, body),
+    createAccount: (publicKey) => createPasskeyAccount(env.relay, publicKey),
     relayClaim: createClaimRelay(env.relay),
     chainNowMs: () => chainNowMs(env.relay.rpcUrl),
     status,

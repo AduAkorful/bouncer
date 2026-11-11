@@ -122,6 +122,17 @@ test("/verdict reads the vault the verdict names and keeps the guest rules", asy
   assert.equal((await app.request("/verdict", post("/verdict", verdict("anchor")))).status, 409);
 });
 
+test("/verdict is held when the verdict key is not provably scoped", async () => {
+  const { deps } = testDeps();
+  let sent = 0;
+  deps.verdictKeyReady = () => false;
+  deps.submitVerdict = async () => { sent += 1; return { ok: true, transactionHash: "hash" }; };
+  const res = await createApp(deps).request("/verdict", post("/verdict", verdict("anchor")));
+  assert.equal(res.status, 503);
+  assert.deepEqual(await res.json(), { ok: false, error: "key" });
+  assert.equal(sent, 0);
+});
+
 test("/verdict refuses a relay that owns the vault", async () => {
   const { deps } = testDeps({}, { vaults: { anchor: vaultRow() }, specs: {}, owner: "relay.test", calls: [] });
   const res = await createApp(deps).request("/verdict", post("/verdict", verdict("anchor")));
@@ -157,12 +168,12 @@ test("/crack reads a past round by number and refuses one the vault has not reac
   assert.equal((await app.request("/crack", post("/crack", { raid_id: "r1", vault_id: "anchor", round: "0" }))).status, 400);
 });
 
-test("account creation and signing are limited per address", async () => {
+test("account creation is limited per address, and the old fast-auth signing route is gone", async () => {
   const app = createApp(testDeps().deps);
   let last = 200;
   for (let i = 0; i < 6; i += 1) last = (await app.request("/passkey/create-account", post("/x", { publicKey: "ed25519:abc" }))).status;
   assert.equal(last, 429);
-  assert.equal((await app.request("/passkey/sign-tx", post("/x", { guard_id: "g" }, { "x-forwarded-for": "9.9.9.9" }))).status, 200);
+  assert.equal((await app.request("/passkey/sign-tx", post("/x", { guard_id: "g" }, { "x-forwarded-for": "9.9.9.9" }))).status, 404);
   assert.equal((await app.request("/passkey/create-account", post("/x", {}, { "x-forwarded-for": "8.8.8.8" }))).status, 400);
 });
 

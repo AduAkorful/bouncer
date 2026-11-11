@@ -1,16 +1,14 @@
-import { Account, actions, type KeyPairString } from "near-api-js";
+import { Account, type KeyPairString } from "near-api-js";
 import type { RelayEnv } from "./config";
-import { accountIdForPublicKey, signatureOutcome, signPayloadBytes, sponsorNear } from "./passkey-account";
+import { accountIdForPublicKey, sponsorNear } from "./passkey-account";
 
 // Rate limits live in the server that calls these, per address and per day. A counter here would only
 // count for the life of one process and never reset.
 
 export async function createPasskeyAccount(
   env: RelayEnv,
-  authContractId: string,
   publicKey: string,
 ): Promise<{ ok: true; accountId: string; transactionHash: string | null } | { ok: false; error: string }> {
-  if (!authContractId) return { ok: false, error: "auth" };
   const accountId = await accountIdForPublicKey(publicKey, env.accountId);
   if (!accountId) return { ok: false, error: "account" };
   try {
@@ -31,43 +29,6 @@ export async function createPasskeyAccount(
     return { ok: true, accountId, transactionHash: hash };
   } catch {
     return { ok: false, error: "account" };
-  }
-}
-
-export async function signPasskeyTransaction(
-  env: RelayEnv,
-  authContractId: string,
-  body: unknown,
-): Promise<{ ok: true; hash: string; result: unknown } | { ok: false; error: string }> {
-  if (!authContractId || !body || typeof body !== "object") return { ok: false, error: "sign" };
-  const record = body as Record<string, unknown>;
-  const guardId = record.guard_id;
-  const verifyPayload = record.verify_payload;
-  const algorithm = record.algorithm ?? "eddsa";
-  const payload = signPayloadBytes(record.sign_payload);
-  if (typeof guardId !== "string" || !guardId.startsWith("jwt#https://login.testnet.fast-auth.com/")) return { ok: false, error: "sign" };
-  if (typeof verifyPayload !== "string" || verifyPayload.length === 0) return { ok: false, error: "sign" };
-  if (algorithm !== "eddsa" || !payload) return { ok: false, error: "sign" };
-  try {
-    const sponsor = new Account(env.accountId, env.rpcUrl, env.privateKey as KeyPairString);
-    const outcome = await sponsor.signAndSendTransaction({
-      receiverId: authContractId,
-      waitUntil: "FINAL",
-      actions: [
-        actions.functionCall(
-          "sign",
-          { guard_id: guardId, verify_payload: verifyPayload, sign_payload: payload, algorithm },
-          300_000_000_000_000n,
-          1n,
-        ),
-      ],
-    });
-    const signed = signatureOutcome(outcome);
-    const hash = outcome.transaction?.hash;
-    if (!signed || !hash) return { ok: false, error: "sign" };
-    return { ok: true, hash, result: signed };
-  } catch {
-    return { ok: false, error: "sign" };
   }
 }
 

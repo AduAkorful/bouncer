@@ -25,6 +25,8 @@ services:
         sync: false
       - key: RELAY_PRIVATE_KEY
         sync: false
+      - key: RELAY_VERDICT_KEY
+        sync: false
       - key: OUTLAYER_CALL_URL
         sync: false
       - key: OUTLAYER_PAYMENT_KEY
@@ -34,8 +36,6 @@ services:
       - key: OUTLAYER_MAX_EXECUTION_SECONDS
         sync: false
       - key: OUTLAYER_MAX_MEMORY_MB
-        sync: false
-      - key: AUTH_CONTRACT_ID
         sync: false
       - key: SITE_ORIGIN
         sync: false

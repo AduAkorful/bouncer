@@ -7,17 +7,17 @@ import type { Deps } from "../src/app.ts";
 import type { ServerEnv } from "../src/env.ts";
 import { createBudget, createCounter, createLimiter } from "../src/limits.ts";
 
-export const SECRETS = ["payment-key-secret", "relay-private-key-secret", "keeper-private-key-secret"];
+export const SECRETS = ["payment-key-secret", "relay-private-key-secret", "keeper-private-key-secret", "verdict-key-secret"];
 
 export function testEnv(over: Partial<ServerEnv> = {}): ServerEnv {
   return {
     guard: { callUrl: "https://outlayer.test/call/a/b", paymentKey: SECRETS[0], versionKey: "ab".repeat(32), maxExecutionSeconds: 120, maxMemoryMb: 128 },
-    relay: { rpcUrl: "https://rpc.test", networkId: "testnet", contractId: "vault.test", vaultId: "velvet-1", accountId: "relay.test", privateKey: SECRETS[1] },
-    authContractId: "auth.test",
+    relay: { rpcUrl: "https://rpc.test", networkId: "testnet", contractId: "vault.test", vaultId: "velvet-1", accountId: "relay.test", privateKey: SECRETS[1], verdictKey: SECRETS[3] },
     keeper: { accountId: "keeper.test", privateKey: SECRETS[2] },
     siteOrigins: ["https://site.test"],
     dailyCalls: 3,
     roundBills: 5,
+    keyAllowanceYocto: 10n ** 24n,
     port: 8787,
     ...over,
   };
@@ -82,9 +82,9 @@ export function testDeps(over: Partial<Deps> = {}, views?: Views): { deps: Deps;
     bills: createCounter(),
     accessKeyIsFull: async () => true,
     marks: new Map(),
+    verdictKeyReady: () => true,
     submitVerdict: async () => ({ ok: true, transactionHash: "hash" }),
     createAccount: async () => ({ ok: true, accountId: "a.relay.test" }),
-    signTransaction: async () => ({ ok: true, hash: "h", result: {} }),
     relayClaim: async () => ({ ok: true, hash: "claimhash" }),
     chainNowMs: async () => ({ ok: true, nowMs: t }),
     status: () => ({}),

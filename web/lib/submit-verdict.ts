@@ -37,7 +37,8 @@ export async function submitVerdict(
   if (!args) return { ok: false, error: "number" };
   let account: Account;
   try {
-    account = new Account(env.accountId, env.rpcUrl, env.privateKey as KeyPairString);
+    // The scoped key, never the relay's full one: it can call submit_verdict on the vault and nothing else.
+    account = new Account(env.accountId, env.rpcUrl, env.verdictKey as KeyPairString);
   } catch {
     return { ok: false, error: "relay key" };
   }

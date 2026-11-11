@@ -7,9 +7,9 @@ import { testEnv } from "./testkit.ts";
 
 const full = {
   NEAR_RPC_URL: "https://rpc.test", NEAR_NETWORK_ID: "testnet", VAULT_CONTRACT_ID: "vault.test", VAULT_ID: "velvet-1",
-  RELAY_ACCOUNT_ID: "relay.test", RELAY_PRIVATE_KEY: "k", OUTLAYER_CALL_URL: "https://o.test/call/a/b", OUTLAYER_PAYMENT_KEY: "p",
+  RELAY_ACCOUNT_ID: "relay.test", RELAY_PRIVATE_KEY: "k", RELAY_VERDICT_KEY: "v", OUTLAYER_CALL_URL: "https://o.test/call/a/b", OUTLAYER_PAYMENT_KEY: "p",
   OUTLAYER_VERSION_KEY: "ab".repeat(32), OUTLAYER_MAX_EXECUTION_SECONDS: "120", OUTLAYER_MAX_MEMORY_MB: "128",
-  AUTH_CONTRACT_ID: "auth.test", SITE_ORIGIN: "https://site.test", SPONSOR_DAILY_CALLS: "100",
+  SITE_ORIGIN: "https://site.test", SPONSOR_DAILY_CALLS: "100",
 };
 
 test("the server env names what is missing and starts without a keeper", () => {
@@ -19,6 +19,9 @@ test("the server env names what is missing and starts without a keeper", () => {
   const bad = readServerEnv({});
   assert.ok(!bad.ok);
   if (!bad.ok) assert.ok(bad.missing.includes("OUTLAYER_PAYMENT_KEY") && bad.missing.includes("SITE_ORIGIN"));
+  const { RELAY_VERDICT_KEY: _verdict, ...noVerdict } = full;
+  const unscoped = readServerEnv(noVerdict);
+  assert.ok(!unscoped.ok && unscoped.missing.includes("RELAY_VERDICT_KEY"));
   const half = readServerEnv({ ...full, KEEPER_ACCOUNT_ID: "k.test" });
   assert.ok(!half.ok && half.missing.includes("KEEPER_PRIVATE_KEY"));
   assert.ok(!readServerEnv({ ...full, SITE_ORIGIN: "https://site.test/path" }).ok);

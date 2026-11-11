@@ -34,9 +34,10 @@ export type Deps = {
   marks: Map<string, Mark>;
   /** Absent until SurrealDB is configured. The phone is not the record. */
   players?: PlayerStore;
+  /** True only when the verdict key last read from the chain as scoped to `submit_verdict` on the vault (plan 73). */
+  verdictKeyReady: () => boolean;
   submitVerdict: (verdict: VerdictBody, signature: number[]) => Promise<{ ok: true; transactionHash: string } | { ok: false; error: string; reason?: string }>;
   createAccount: (publicKey: string) => Promise<unknown & { ok: boolean }>;
-  signTransaction: (body: unknown) => Promise<unknown & { ok: boolean }>;
   /** Sends a claim the player signed and pays its gas from the relay. */
   relayClaim: ClaimRelay;
   chainNowMs: () => Promise<{ ok: true; nowMs: number } | { ok: false; error: string }>;
@@ -162,6 +163,8 @@ export function createApp(deps: Deps) {
     if (!door.ok) return c.json(door, 502);
     const allowed = submissionAllowed(door.vault, door.owner, env.relay.accountId, parsed.verdict, parsed.verdict.vault_id);
     if (!allowed.ok) return c.json(allowed, 409);
+    // A key that is not provably scoped is not used, so the verdict waits and the browser keeps it to send again.
+    if (!deps.verdictKeyReady()) return c.json({ ok: false, error: "key" }, 503);
     const sent = await deps.submitVerdict(parsed.verdict, parsed.signature);
     // A refusal will be the same on every send, so it is a 422 and the browser does not retry it.
     if (!sent.ok) return c.json(sent, sent.error === "refused" || sent.error === "number" ? 422 : 502);
@@ -219,15 +222,6 @@ export function createApp(deps: Deps) {
     const sent = await deps.relayClaim(body);
     if (sent.ok) return c.json({ ok: true, hash: sent.hash });
     return c.json(sent, sent.error === "refused" ? 422 : 502);
-  });
-
-  app.post("/passkey/sign-tx", async (c) => {
-    if (!take(c, "sign", 60, HOUR) || !deps.limiter.take("sign:all", 2000, DAY)) return slow(c);
-    const body = await bodyOf(c);
-    if (!body) return c.json({ ok: false, error: "sign" }, 400);
-    const signed = (await deps.signTransaction(body)) as { ok: boolean; hash?: string; result?: unknown };
-    if (!signed.ok) return c.json(signed as Record<string, unknown>, 502);
-    return c.json({ hash: signed.hash, result: signed.result });
   });
 
   /** One sponsor call to the guard. It is signed, counted against the account, and budgeted. */

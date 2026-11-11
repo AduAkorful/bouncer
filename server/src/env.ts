@@ -5,12 +5,13 @@ export type KeeperEnv = { accountId: string; privateKey: string };
 export type ServerEnv = {
   guard: GuardEnv;
   relay: RelayEnv;
-  authContractId: string;
   keeper: KeeperEnv | null;
   siteOrigins: string[];
   dailyCalls: number;
   /** Bills one vault takes in one round, across every player. */
   roundBills: number;
+  /** The gas allowance each scoped key was created with, for the low-allowance warning. */
+  keyAllowanceYocto: bigint;
   port: number;
 };
 
@@ -24,14 +25,14 @@ export function readServerEnv(source: Source): { ok: true; env: ServerEnv } | { 
   if (!guard.ok) missing.push(...guard.missing);
   if (!relay.ok) missing.push(...relay.missing);
   const read = (key: string) => source[key]?.trim() ?? "";
-  const authContractId = read("AUTH_CONTRACT_ID");
-  if (!authContractId) missing.push("AUTH_CONTRACT_ID");
   const origins = read("SITE_ORIGIN").split(",").map((o) => o.trim()).filter(Boolean);
   if (origins.length === 0 || origins.some((o) => !/^https?:\/\/[^/]+$/.test(o))) missing.push("SITE_ORIGIN");
   const dailyCalls = Number(read("SPONSOR_DAILY_CALLS"));
   if (!Number.isSafeInteger(dailyCalls) || dailyCalls < 1) missing.push("SPONSOR_DAILY_CALLS");
   const roundBills = Number(read("VAULT_ROUND_BILLS") || "5000");
   if (!Number.isSafeInteger(roundBills) || roundBills < 1) missing.push("VAULT_ROUND_BILLS");
+  const allowance = read("KEY_ALLOWANCE_NEAR") || "1";
+  if (!/^[0-9]{1,6}$/.test(allowance) || allowance === "0") missing.push("KEY_ALLOWANCE_NEAR");
   const keeperId = read("KEEPER_ACCOUNT_ID");
   const keeperKey = read("KEEPER_PRIVATE_KEY");
   // The keeper is optional. A half-set keeper is a mistake, not a feature.
@@ -44,11 +45,11 @@ export function readServerEnv(source: Source): { ok: true; env: ServerEnv } | { 
     env: {
       guard: guard.env,
       relay: relay.env,
-      authContractId,
       keeper: keeperId ? { accountId: keeperId, privateKey: keeperKey } : null,
       siteOrigins: origins,
       dailyCalls,
       roundBills,
+      keyAllowanceYocto: BigInt(/^[0-9]{1,6}$/.test(allowance) ? allowance : "1") * 10n ** 24n,
       port,
     },
   };

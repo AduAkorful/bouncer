@@ -14,7 +14,10 @@ export type RelayEnv = {
   contractId: string;
   vaultId: string;
   accountId: string;
+  /** Full access. Only for creating passkey accounts and relaying the claims players sign. */
   privateKey: string;
+  /** A function-call key on the relay account that can call only `submit_verdict` on the vault (plan 73). */
+  verdictKey: string;
 };
 
 export type PublicEnv = {
@@ -49,6 +52,7 @@ const RELAY_KEYS = [
   "VAULT_ID",
   "RELAY_ACCOUNT_ID",
   "RELAY_PRIVATE_KEY",
+  "RELAY_VERDICT_KEY",
 ] as const;
 
 const PUBLIC_KEYS = [
@@ -100,6 +104,7 @@ export function readRelayEnv(source: EnvSource | undefined): Ready<RelayEnv> | M
       vaultId: read("VAULT_ID"),
       accountId: read("RELAY_ACCOUNT_ID"),
       privateKey: read("RELAY_PRIVATE_KEY"),
+      verdictKey: read("RELAY_VERDICT_KEY"),
     },
   };
 }
