@@ -45,6 +45,11 @@ export const limitsView: LimitsView = {
   maxOpenLeadNs: "86400000000000", maxSpecCt: 8300, maxCard: 600, defaultGuardPk: "07".repeat(32), reservedPrefixes: ["velvet"],
 };
 
+/** A round open on the test clock (5 Nov 2026 12:00 UTC), closing at the next midnight. */
+export function openRow(over: Record<string, unknown> = {}) {
+  return vaultRow({ open: true, opens_at: "0", closes_at: String(BigInt(Date.UTC(2026, 10, 6)) * 1_000_000n), ...over });
+}
+
 export type Views = { vaults: Record<string, unknown>; specs: Record<string, string | null>; owner: string; calls: { method: string; args: Record<string, unknown> }[] };
 
 /** An RPC that answers the vault's views from a table and records what was asked. */
@@ -65,7 +70,7 @@ export function fakeRpc(views: Views): Rpc {
 }
 
 export function testDeps(over: Partial<Deps> = {}, views?: Views): { deps: Deps; views: Views; posts: { op: unknown; input: Record<string, unknown> }[] } {
-  const v = views ?? { vaults: { "velvet-1": vaultRow(), anchor: vaultRow() }, specs: { anchor: "AQID" }, owner: "owner.test", calls: [] };
+  const v = views ?? { vaults: { "velvet-1": openRow(), anchor: vaultRow() }, specs: { anchor: "AQID" }, owner: "owner.test", calls: [] };
   const posts: { op: unknown; input: Record<string, unknown> }[] = [];
   let t = Date.UTC(2026, 10, 5, 12, 0, 0);
   const now = () => t;

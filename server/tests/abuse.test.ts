@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { KeyPair } from "near-api-js";
 import { createApp } from "../src/app.ts";
-import { authHeader, testDeps } from "./testkit.ts";
+import { authHeader, openRow, testDeps } from "./testkit.ts";
 
 const ORIGIN = "https://site.test";
 const post = (body: unknown, headers: Record<string, string> = {}) => ({
@@ -15,20 +15,21 @@ const draft = { story: "A club.", decimals: 6 };
 const signedPost = (route: string, body: unknown, over: Parameters<typeof authHeader>[1] = {}) => post(body, { "x-sponsor-auth": authHeader(route, over) });
 const bill = (vault: string, round: number, ip = "1.1.1.1") => post({ op: "bill", vault_id: vault, round, player_id: "p", blob: "b" }, { "x-forwarded-for": ip });
 
+const openDoors = () => ({ vaults: { anchor: openRow(), "velvet-1": openRow() }, specs: {}, owner: "owner.test", calls: [] });
+
 test("a vault takes only so many bills in a round, per vault and per round", async () => {
-  const { deps, posts } = testDeps();
+  const { deps, posts } = testDeps({}, openDoors());
   const app = createApp(deps);
   for (let i = 0; i < 5; i += 1) assert.equal((await app.request("/guard", bill("anchor", 1, `9.9.9.${i}`))).status, 200, String(i));
   const refused = await app.request("/guard", bill("anchor", 1, "9.9.9.9"));
   assert.equal(refused.status, 429);
   assert.deepEqual(await refused.json(), { ok: false, error: "The door is busy. Try again tomorrow." });
   assert.equal(posts.length, 5);
-  assert.equal((await app.request("/guard", bill("anchor", 2))).status, 200);
   assert.equal((await app.request("/guard", bill("velvet-1", 1))).status, 200);
 });
 
 test("a refused bill spends nothing at the guard, and only bills are counted", async () => {
-  const { deps, posts } = testDeps();
+  const { deps, posts } = testDeps({}, openDoors());
   const app = createApp(deps);
   for (let i = 0; i < 5; i += 1) await app.request("/guard", bill("anchor", 1, `8.8.8.${i}`));
   const before = posts.length;

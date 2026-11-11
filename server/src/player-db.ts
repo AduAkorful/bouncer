@@ -93,6 +93,7 @@ async function open(env: SurrealEnv): Promise<Surreal> {
     "DEFINE TABLE IF NOT EXISTS player SCHEMALESS",
     "DEFINE TABLE IF NOT EXISTS night SCHEMALESS",
     "DEFINE TABLE IF NOT EXISTS resume SCHEMALESS",
+    "DEFINE TABLE IF NOT EXISTS raid_progress SCHEMALESS",
     "DEFINE INDEX IF NOT EXISTS player_public_key ON player FIELDS public_key UNIQUE",
     "DEFINE INDEX IF NOT EXISTS player_claim_key ON player FIELDS claim_key UNIQUE",
     "DEFINE INDEX IF NOT EXISTS player_name ON player FIELDS name UNIQUE",

@@ -3,7 +3,7 @@ import test from "node:test";
 import { KeyPair } from "near-api-js";
 import { accountIdForPublicKey } from "../../web/lib/passkey-account.ts";
 import { createApp } from "../src/app.ts";
-import { authHeader, playerOpen, SECRETS, testDeps, vaultRow } from "./testkit.ts";
+import { authHeader, playerOpen, SECRETS, openRow, testDeps, vaultRow } from "./testkit.ts";
 
 const ORIGIN = "https://site.test";
 const post = (path: string, body: unknown, headers: Record<string, string> = {}) => ({
@@ -293,7 +293,7 @@ test("cap-aware drafting rejects an unpaid maximum above the selected cap even i
 });
 
 test("a round with no crack left sells no new raid and signs no new bill", async () => {
-  const views = { vaults: { anchor: vaultRow({ open: true, crack_count: 2, max_cracks: 2, round: "1" }), other: vaultRow({ open: true, crack_count: 1, max_cracks: 2, round: "1" }) }, specs: {}, owner: "owner.test", calls: [] };
+  const views = { vaults: { anchor: openRow({ crack_count: 2, max_cracks: 2, round: "1" }), other: openRow({ crack_count: 1, max_cracks: 2, round: "1" }) }, specs: {}, owner: "owner.test", calls: [] };
   const { deps, posts } = testDeps({}, views);
   const app = createApp(deps);
   const guard = (body: unknown) => app.request("/guard", post("/guard", body));
@@ -328,7 +328,7 @@ test("a raid opens only for a passkey that is not the door's sponsor or the owne
   const ownerKeys = KeyPair.fromRandom("ed25519");
   const sponsorAccount = (await accountIdForPublicKey(sponsorKeys.getPublicKey().toString(), relay))!;
   const ownerAccount = (await accountIdForPublicKey(ownerKeys.getPublicKey().toString(), relay))!;
-  const views = { vaults: { door: vaultRow({ open: true, crack_count: 0, max_cracks: 1, round: "1", sponsor: sponsorAccount }) }, specs: {}, owner: ownerAccount, calls: [] };
+  const views = { vaults: { door: openRow({ crack_count: 0, max_cracks: 1, round: "1", sponsor: sponsorAccount }) }, specs: {}, owner: ownerAccount, calls: [] };
   const { deps, posts } = testDeps({}, views);
   const app = createApp(deps);
   const open = (who: ReturnType<typeof playerOpen> | null, playerId?: string) =>
@@ -350,4 +350,79 @@ test("a raid opens only for a passkey that is not the door's sponsor or the owne
   // Any other passkey opens.
   assert.equal((await open(playerOpen("/guard/open"))).status, 200);
   assert.equal(posts.length, 1);
+});
+
+test("a shut, past-close or old round answers no raid, message or bill, so its street hints stay shut", async () => {
+  const closed = Date.UTC(2026, 10, 5) * 1_000_000;
+  const views = {
+    vaults: {
+      shut: vaultRow({ open: false }),
+      late: openRow({ closes_at: String(BigInt(closed)) }),
+      live: openRow({ round: "3" }),
+    },
+    specs: {},
+    owner: "owner.test",
+    calls: [],
+  };
+  const { deps, posts } = testDeps({}, views);
+  const app = createApp(deps);
+  for (const [vault, round] of [["shut", 1], ["late", 1], ["live", 2]] as const) {
+    for (const op of ["open", "say", "bill"]) {
+      const who = playerOpen("/guard/open");
+      const res = await app.request("/guard", post("/guard", { op, vault_id: vault, round, player_id: who.claimKey, blob: "b" }, { "x-player-auth": who.header }));
+      assert.equal(res.status, 409, `${vault} ${op}`);
+      assert.deepEqual(await res.json(), { ok: false, error: "closed" });
+    }
+  }
+  assert.equal(posts.length, 0);
+  const who = playerOpen("/guard/open");
+  assert.equal((await app.request("/guard", post("/guard", { op: "open", vault_id: "live", round: 3, player_id: who.claimKey }, { "x-player-auth": who.header }))).status, 200);
+});
+
+test("resume hands back the blob even when progress cannot be read", async () => {
+  const { memoryPlayers } = await import("../src/player-record.ts");
+  const players = memoryPlayers();
+  const who = playerOpen("/player/resume");
+  await players.saveBlob(who.claimKey, "anchor", "1", "sealed");
+  players.readProgress = async () => {
+    throw new Error("no table");
+  };
+  const { deps } = testDeps({ players });
+  const res = await createApp(deps).request("/player/resume", post("/player/resume", { vaultId: "anchor", round: "1" }, { "x-player-auth": who.header }));
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { ok: boolean; blob: string | null; progress: unknown };
+  assert.equal(body.ok, true);
+  assert.equal(body.blob, "sealed");
+});
+
+test("a draft that copies the form's sample payees is not handed back", async () => {
+  const { SAMPLE_SPEC } = await import("../../web/lib/sample-spec.ts");
+  const { deps } = testDeps();
+  const path = "/sponsor/draft";
+  const input = { story: "A club.", decimals: 6, cap: "20000000" };
+  let checked = 0;
+  const app = createApp({
+    ...deps,
+    generateDraft: async () => ({ lines: [{ paid: false, payee: SAMPLE_SPEC.lines[0].payee, reference: "NG-{d4}", qty: { hi: 1 }, unit: { hi: "5" } }] }),
+    post: async () => {
+      checked += 1;
+      return { ok: true, body: { ok: true, pass: true, spec_hash: "0".repeat(64) } };
+    },
+  });
+  const res = await app.request(path, signed(path, input));
+  assert.equal(res.status, 422);
+  assert.match(String(((await res.json()) as { detail?: string }).detail), /sample payees/);
+  assert.equal(checked, 0);
+});
+
+test("a claim key already paired with one account key cannot open a raid under another", async () => {
+  const { memoryPlayers } = await import("../src/player-record.ts");
+  const { deps } = testDeps({ players: memoryPlayers() });
+  const app = createApp(deps);
+  const claim = KeyPair.fromRandom("ed25519");
+  const first = playerOpen("/guard/open", { claim });
+  assert.equal((await app.request("/guard", post("/guard", { op: "open", vault_id: "velvet-1", round: 1, player_id: first.claimKey }, { "x-player-auth": first.header }))).status, 200);
+  const swapped = playerOpen("/guard/open", { claim });
+  const res = await app.request("/guard", post("/guard", { op: "open", vault_id: "velvet-1", round: 1, player_id: swapped.claimKey }, { "x-player-auth": swapped.header }));
+  assert.equal(res.status, 401);
 });

@@ -2,12 +2,12 @@ import { Hono, type Context } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { readDoor, type Rpc } from "../../web/lib/chain.ts";
 import { parseCard } from "../../web/lib/card.ts";
+import { doorFull, doorShut } from "../../web/lib/door.ts";
 import { runGuardTurn } from "../../web/lib/guard-turn.ts";
 import type { Mark } from "../../web/lib/marks.ts";
 import { parseVerdictSubmission, submissionAllowed, type VerdictBody } from "../../web/lib/verdict-turn.ts";
 import { parseCrack, viewRequest } from "../../web/lib/vault.ts";
 import { validVaultId } from "../../web/lib/preflight.ts";
-import type { AttestationAnswer } from "./attestation.ts";
 import { requestCommit } from "./commit-flow.ts";
 import type { ServerEnv } from "./env.ts";
 import { sponsorCall, type Post, type SponsorOp } from "./guard-client.ts";
@@ -43,7 +43,6 @@ export type Deps = {
   chainNowMs: () => Promise<{ ok: true; nowMs: number } | { ok: false; error: string }>;
   status: () => unknown;
   /** Looks a guard call's attestation up at OutLayer. Absent in tests that do not need it. */
-  attest?: (callId: string) => Promise<AttestationAnswer>;
 };
 
 const MINUTE = 60_000;
@@ -62,6 +61,11 @@ export function createApp(deps: Deps) {
   const authenticate = createAuthenticator({ accessKeyIsFull: deps.accessKeyIsFull, now: deps.now });
 
   app.use("*", async (c, next) => {
+    // Every answer is JSON for a fetch, never a page, so it is not sniffed, framed or sent with a referrer.
+    c.header("x-content-type-options", "nosniff");
+    c.header("x-frame-options", "DENY");
+    c.header("referrer-policy", "no-referrer");
+    c.header("content-security-policy", "default-src 'none'; frame-ancestors 'none'");
     const origin = c.req.header("origin");
     const allowed = origin !== undefined && env.siteOrigins.includes(origin);
     if (origin !== undefined && !allowed) return c.json({ ok: false, error: "origin" }, 403);
@@ -105,13 +109,14 @@ export function createApp(deps: Deps) {
       const key = `${String(body.vault_id)}|${String(body.round)}`;
       if (!deps.bills.take(key, env.roundBills)) return c.json({ ok: false, error: BUSY }, 429);
     }
-    // The vault records one crack per slot and refuses the rest. A round with none left sells no new raid and
-    // signs no new verdict. If the read fails the turn goes on, because the vault is the final check.
-    if ((body.op === "open" || body.op === "bill") && typeof body.vault_id === "string" && validVaultId(body.vault_id)) {
+    // A round that is shut, past its close, or not the vault's current round sells no raid and answers no
+    // message, so its street hints cannot be read after close by calling this route directly. A round with
+    // every crack taken sells no raid and signs no verdict. If the read fails the turn goes on, because the
+    // vault refuses a late or extra verdict anyway.
+    if ((body.op === "open" || body.op === "say" || body.op === "bill") && typeof body.vault_id === "string" && validVaultId(body.vault_id)) {
       const door = await readDoor(deps.rpc, env.relay.contractId, body.vault_id);
-      if (door.ok && door.vault.open && door.vault.maxCracks > 0 && door.vault.crackCount >= door.vault.maxCracks && String(body.round) === door.vault.round) {
-        return c.json({ ok: false, error: "full" }, 409);
-      }
+      if (door.ok && (doorShut(door.vault, deps.now()) || String(body.round) !== door.vault.round)) return c.json({ ok: false, error: "closed" }, 409);
+      if (door.ok && body.op !== "say" && doorFull(door.vault)) return c.json({ ok: false, error: "full" }, 409);
     }
     // A door's sponsor wrote the ledger, so the sponsor never gets a raid. The passkey signs this call with its
     // account key and the claim key, so the account behind the claim key is the one checked, not a page's claim.
@@ -119,6 +124,13 @@ export function createApp(deps: Deps) {
       const who = playerAuth(c.req.header("x-player-auth"), "/guard/open");
       if (!who.ok || who.claimKey !== body.player_id) return c.json({ ok: false, error: "unauthorized" }, 401);
       if (typeof body.vault_id !== "string" || !validVaultId(body.vault_id)) return c.json({ ok: false, error: "bad request" }, 400);
+      // The player record pairs one account key with one claim key the first time a passkey is seen. A claim
+      // key shown with a different account key is refused, so the sponsor check below cannot be stepped round by
+      // signing with a fresh account key. A record that cannot be read leaves the vault as the final check.
+      if (deps.players) {
+        const bound = await openSession(deps.players, { publicKey: who.publicKey, claimKey: who.claimKey, now: deps.now() }).catch(() => null);
+        if (bound && !bound.ok) return c.json({ ok: false, error: "unauthorized" }, 401);
+      }
       const door = await readDoor(deps.rpc, env.relay.contractId, body.vault_id);
       if (!door.ok) return c.json({ ok: false, error: "door" }, 502);
       const account = await accountIdForPublicKey(who.publicKey, env.relay.accountId);
@@ -142,16 +154,6 @@ export function createApp(deps: Deps) {
       }
     }
     return c.json(result.body as Record<string, unknown>, result.status as 200);
-  });
-
-  /** What OutLayer attests for one guard call, with the version this server pins to compare it with. */
-  app.get("/proof/:callId", async (c) => {
-    if (!deps.attest) return c.json({ ok: false, error: "proof" }, 404);
-    if (!take(c, "proof", 120, MINUTE)) return slow(c);
-    const answer = await deps.attest(c.req.param("callId"));
-    if (answer.ok) return c.json({ ok: true, attestation: answer.attestation, pinned: env.guard.versionKey });
-    // Not published yet is an answer to ask again, not an error.
-    return c.json({ ok: false, pending: answer.pending }, answer.pending ? 202 : 404);
   });
 
   app.post("/verdict", async (c) => {
@@ -244,6 +246,11 @@ export function createApp(deps: Deps) {
         const spec = await deps.generateDraft(input.story as string, input.decimals as number, requestedCap);
         if (!specFits(spec)) {
           failure = { status: 422, body: { ok: false, error: "model" } };
+          continue;
+        }
+        // The test refuses the form's sample payees, so a draft that copies them would only strand the sponsor.
+        if (usesSamplePayee(spec)) {
+          failure = { status: 422, body: { ok: false, error: "spec", detail: "The draft came back with the sample payees. Try again, or write the story by hand." } };
           continue;
         }
         const cap = requestedCap ?? MAX_CAP.toString();
@@ -378,7 +385,8 @@ export function createApp(deps: Deps) {
     const round = typeof body?.round === "string" ? body.round : "";
     if (!validVaultId(vaultId) || !/^[0-9]+$/.test(round)) return c.json({ ok: false, error: "bad request" }, 400);
     const blob = await deps.players.readBlob(who.claimKey, vaultId, round);
-    const progress = parseProgress(await deps.players.readProgress(who.claimKey, vaultId, round));
+    // Progress is extra: a failed read still hands back the blob, which is what continues the raid.
+    const progress = parseProgress(await deps.players.readProgress(who.claimKey, vaultId, round).catch(() => null));
     return c.json({ ok: true, blob, progress });
   }));
 
