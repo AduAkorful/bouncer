@@ -1,12 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { generatedPlayerName, playerNameToStore } from "../lib/player-name.ts";
-
-test("a generated name is two words and a number", () => {
-  const draws = [0, 0.5, 0.99];
-  let index = 0;
-  assert.equal(generatedPlayerName(() => draws[index++] ?? 0), "QuietNight99");
-});
+import { playerNameToStore } from "../lib/player-name.ts";
 
 test("a typed name keeps letters and numbers, and refuses the rest", () => {
   assert.equal(playerNameToStore("  QuietOkada42  "), "QuietOkada42");

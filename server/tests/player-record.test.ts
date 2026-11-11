@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { KeyPair } from "near-api-js";
 import { createPlayerAuth, playerChallenge } from "../src/player-auth.ts";
+import { generatedPlayerName } from "../src/name-pick.ts";
 import { boardEntry, memoryPlayers, nextStreak, openSession, parseProgress, publicBoard, recordGotIn, recordProgress, recordOpen, recordTurn, renamePlayer, shownStreak, utcDay } from "../src/player-record.ts";
 
+const FIRST = generatedPlayerName(() => 0);
 const DAY = 24 * 60 * 60 * 1000;
 const START = Date.parse("2026-11-01T12:00:00.000Z");
 
@@ -18,10 +20,10 @@ test("a streak adds one on the next UTC day and returns to zero after a missed d
 test("the first sign-in keeps the name, and a second rename is refused", async () => {
   const store = memoryPlayers();
   const keys = pair();
-  const opened = await openSession(store, { ...keys, now: START, random: () => 0 });
-  assert.equal(opened.ok && opened.player.name, "QuietOkada2");
+  const opened = await openSession(store, { ...keys, now: START, pick: () => 0 });
+  assert.equal(opened.ok && opened.player.name, FIRST);
   const again = await openSession(store, { ...keys, now: START + DAY });
-  assert.equal(again.ok && again.player.name, "QuietOkada2");
+  assert.equal(again.ok && again.player.name, FIRST);
   const renamed = await renamePlayer(store, keys.publicKey, "LateLamp7");
   assert.equal(renamed.ok && renamed.player.renameUsed, true);
   assert.equal((await renamePlayer(store, keys.publicKey, "BoldDoor8")).ok, false);
@@ -31,9 +33,9 @@ test("a taken name is refused", async () => {
   const store = memoryPlayers();
   const first = pair();
   const second = pair();
-  await openSession(store, { ...first, now: START, random: () => 0 });
-  await openSession(store, { ...second, now: START, random: () => 0.5 });
-  assert.equal((await renamePlayer(store, second.publicKey, "QuietOkada2")).ok, false);
+  await openSession(store, { ...first, now: START, pick: () => 0 });
+  await openSession(store, { ...second, now: START, pick: (max) => max - 1 });
+  assert.equal((await renamePlayer(store, second.publicKey, FIRST)).ok, false);
 });
 
 test("a night without a signed-in player does not move the board", async () => {
@@ -46,7 +48,7 @@ test("a night without a signed-in player does not move the board", async () => {
 test("getting in counts once, and the share line has no bill", async () => {
   const store = memoryPlayers();
   const keys = pair();
-  await openSession(store, { ...keys, now: START, random: () => 0 });
+  await openSession(store, { ...keys, now: START, pick: () => 0 });
   await recordOpen(store, { claimKey: keys.claimKey, vaultId: "door", round: "1", blob: "sealed", now: START });
   await recordGotIn(store, { claimKey: keys.claimKey, vaultId: "door", round: "1", now: START });
   await recordGotIn(store, { claimKey: keys.claimKey, vaultId: "door", round: "1", now: START });
@@ -106,7 +108,7 @@ test("the board lists only players who opened a raid, and level players share a 
 test("a later turn replaces the stored blob, so another device resumes where this one stopped", async () => {
   const store = memoryPlayers();
   const keys = pair();
-  await openSession(store, { ...keys, now: START, random: () => 0 });
+  await openSession(store, { ...keys, now: START, pick: () => 0 });
   await recordOpen(store, { claimKey: keys.claimKey, vaultId: "door", round: "1", blob: "first", now: START });
   await recordTurn(store, { claimKey: keys.claimKey, vaultId: "door", round: "1", blob: "third" });
   assert.equal(await store.readBlob(keys.claimKey, "door", "1"), "third");
@@ -134,7 +136,7 @@ test("a raid's progress keeps counts, outcomes, street and the win, and nothing 
   const account = KeyPair.fromRandom("ed25519");
   const claim = KeyPair.fromRandom("ed25519");
   const keys = { publicKey: account.getPublicKey().toString(), claimKey: Buffer.from(claim.getPublicKey().data).toString("hex") };
-  await openSession(store, { ...keys, now: START, random: () => 0 });
+  await openSession(store, { ...keys, now: START, pick: () => 0 });
   const at = { claimKey: keys.claimKey, vaultId: "door", round: "1" };
   await recordProgress(store, { ...at, used: 0, street: { payees: ["A"], poster: [], queue: [] } });
   await recordProgress(store, { ...at, outcome: "ask", used: 1 });

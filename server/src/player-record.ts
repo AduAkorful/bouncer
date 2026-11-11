@@ -1,6 +1,8 @@
 /** The player record. The phone proves the passkey. This module never sees the private key. */
 
-import { generatedPlayerName, playerNameToStore } from "../../web/lib/player-name.ts";
+import { playerNameToStore } from "../../web/lib/player-name.ts";
+import { randomInt } from "node:crypto";
+import { generatedPlayerName, type Pick } from "./name-pick.ts";
 
 export type PlayerRow = {
   publicKey: string;
@@ -138,7 +140,7 @@ export function boardEntry(board: PublicPlayer[], name: string): PublicPlayer | 
   return board.find((entry) => entry.name.toLowerCase() === wanted) ?? null;
 }
 
-export async function openSession(store: PlayerStore, input: { publicKey: string; claimKey: string; now: number; random?: () => number }): Promise<{ ok: true; player: PlayerRow; nights: NightRow[] } | { ok: false; error: string }> {
+export async function openSession(store: PlayerStore, input: { publicKey: string; claimKey: string; now: number; pick?: Pick }): Promise<{ ok: true; player: PlayerRow; nights: NightRow[] } | { ok: false; error: string }> {
   if (!ACCOUNT.test(input.publicKey) || !CLAIM.test(input.claimKey)) return { ok: false, error: "key" };
   const existing = await store.findByAccount(input.publicKey);
   if (existing) {
@@ -147,7 +149,7 @@ export async function openSession(store: PlayerStore, input: { publicKey: string
   }
   const claimOwner = await store.findByClaim(input.claimKey);
   if (claimOwner) return { ok: false, error: "key" };
-  const name = await freshName(store, input.random ?? Math.random);
+  const name = await freshName(store, input.pick);
   const row: PlayerRow = {
     publicKey: input.publicKey,
     claimKey: input.claimKey,
@@ -162,11 +164,11 @@ export async function openSession(store: PlayerStore, input: { publicKey: string
   return { ok: true, player: row, nights: [] };
 }
 
-export async function rollName(store: PlayerStore, publicKey: string, random: () => number = Math.random): Promise<{ ok: true; player: PlayerRow } | { ok: false; error: string }> {
+export async function rollName(store: PlayerStore, publicKey: string, pick?: Pick): Promise<{ ok: true; player: PlayerRow } | { ok: false; error: string }> {
   const player = await store.findByAccount(publicKey);
   if (!player) return { ok: false, error: "name" };
   if (player.renameUsed) return { ok: false, error: "once" };
-  const name = await freshName(store, random);
+  const name = await freshName(store, pick);
   const saved = { ...player, name, renameUsed: false };
   await store.save(saved);
   return { ok: true, player: saved };
@@ -267,12 +269,12 @@ export function viewOf(player: PlayerRow, today: string): { name: string; rename
   return { name: player.name, renameUsed: player.renameUsed, streak: shownStreak(player.streak, player.lastDay, today), nights: player.nightsIn, created: player.created, raidedToday: player.lastDay === today };
 }
 
-async function freshName(store: PlayerStore, random: () => number): Promise<string> {
+async function freshName(store: PlayerStore, pick?: Pick): Promise<string> {
   for (let i = 0; i < 8; i += 1) {
-    const name = generatedPlayerName(random);
+    const name = generatedPlayerName(pick);
     if (!(await store.findByName(name))) return name;
   }
-  return `${generatedPlayerName(random)}${Math.floor(random() * 1000)}`;
+  return `${generatedPlayerName(pick)}${(pick ?? randomInt)(1000)}`;
 }
 
 function ordinal(place: number): string {
