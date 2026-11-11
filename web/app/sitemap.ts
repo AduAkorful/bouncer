@@ -5,7 +5,7 @@ import { readDoorIndex } from "@/lib/door-index";
 import { pageRpc } from "@/lib/page-rpc";
 import { siteUrl } from "@/lib/site";
 
-const PAGES = ["/", "/home", "/fame", "/sponsors", "/vip"];
+const PAGES = ["/", "/home", "/fame", "/how-it-works", "/sponsors", "/vip"];
 
 /** The public pages, and each door that has been opened. A door the chain cannot be read for is left out, not guessed. */
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {

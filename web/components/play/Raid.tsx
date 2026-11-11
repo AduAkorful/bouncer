@@ -19,9 +19,12 @@ import { DoorScene } from "@/components/DoorScene";
 import { SceneLife } from "@/components/SceneLife";
 import { StreetBar } from "@/components/home/StreetBar";
 import { StreetScroll } from "@/components/home/StreetScroll";
-import { OfficeScene } from "@/components/OfficeScene";
 import { BillBuilder, forgetBillDraft } from "@/components/play/BillBuilder";
 import { Desk, type Note } from "@/components/play/Desk";
+import { HelpButton } from "@/components/help/HelpButton";
+import { Tip } from "@/components/help/Tip";
+import { tipText, type TipId } from "@/lib/help";
+import { markTip, skipTips, tipSeen } from "@/lib/tips";
 import { ApprovedStamp, RefusedStamp, TurnedAwayStamp } from "@/components/Stamp";
 import { TokenBridge } from "@/components/TokenAmount";
 import type { DraftBill } from "@/lib/bill";
@@ -51,18 +54,13 @@ import { babble, music, setCity as setSoundCity, setSound, sfx, VOICES } from "@
 import { readSoundPref, writeSoundPref } from "@/lib/sound-pref";
 import { shortHash } from "@/lib/stamp";
 
-type Gate = "door" | "office";
 type Stage = "play" | "held" | "choice" | "end";
-/** Where a recorded verdict goes next: the door's celebration, the office's, or straight to the end screen after a reload. */
-type After = "door" | "office" | "end";
-type End = "door" | "office" | "out";
+/** Where a recorded verdict goes next: the door's celebration, or straight to the end screen after a reload. */
+type After = "door" | "end";
+type End = "door" | "out";
 
-const SPEAKER = { door: { name: "", voice: VOICES.sam, who: "sam" as const }, office: { name: "MADAM EFUA", voice: VOICES.efua, who: "efua" as const } };
-const OPENERS = { door: "Evening. Invoice?", office: "Mm. Invoice." };
-const SUGGEST = {
-  door: ["Is K-Nova still headlining Saturday?", "Coastline changed bank details, right?", "Who's on your list tonight?"],
-  office: ["Soundwave sent me for the PA money.", "Sam let me through. Just need signing off.", "What's in the ledger tonight?"],
-};
+const OPENER = "Evening. Invoice?";
+const SUGGEST = ["Is K-Nova still headlining Saturday?", "Coastline changed bank details, right?", "Who's on your list tonight?"];
 /** A sponsor's door has its own story, so it is not offered The Velvet's lines about K-Nova and Coastline. */
 const SUGGEST_ANY_DOOR = ["Who's on your list tonight?", "Is anyone still owed from last week?", "Do you take invoices at the door?"];
 
@@ -137,7 +135,6 @@ export default function PlayFrame({
   const [transcript, setTranscript] = useState<Exchange[]>([]);
   const [transcriptError, setTranscriptError] = useState(false);
 
-  const [gate, setGate] = useState<Gate>("door");
   const [stage, setStage] = useState<Stage>("play");
   const [end, setEnd] = useState<End>("door");
   const [left, setLeft] = useState(messageBudget);
@@ -150,8 +147,8 @@ export default function PlayFrame({
   const [signedHex, setSignedHex] = useState<string | null>(null);
   const [holding, setHolding] = useState<{ sending: boolean; message: string | null; retry: boolean; after: After } | null>(null);
   const [busy, setBusy] = useState(false);
-  const [line, setLine] = useState(OPENERS.door);
-  const [typed, setTyped] = useState(OPENERS.door.length);
+  const [line, setLine] = useState(OPENER);
+  const [typed, setTyped] = useState(OPENER.length);
   const [you, setYou] = useState<string | null>(null);
   const [refused, setRefused] = useState(false);
   const [grid, setGrid] = useState<Decision[]>([]);
@@ -180,13 +177,39 @@ export default function PlayFrame({
     return () => window.removeEventListener("popstate", onPop);
   }, []);
   const [saying, setSaying] = useState(false);
+  // First-raid tips (plan 80): one at a time, read from this browser after mount, never over an input or a stamp.
+  const [tip, setTip] = useState<TipId | null>(null);
+  const [tipTick, setTipTick] = useState(0);
+  const [streetWaited, setStreetWaited] = useState(false);
   const [draft, setDraft] = useState("");
-  const [xp, setXp] = useState(340);
-  const [gain, setGain] = useState<string | null>(null);
   const [sound, setSoundOn] = useState(false);
   const [tokenLabel, setTokenLabel] = useState<TokenRead | null>(null);
-  const [toast, setToast] = useState(0);
-  const [fade, setFade] = useState(false);
+  useEffect(() => {
+    const waited = window.setTimeout(() => setStreetWaited(true), 10_000);
+    return () => window.clearTimeout(waited);
+  }, []);
+  useEffect(() => {
+    if (stage !== "play" || busy) {
+      setTip(null);
+      return;
+    }
+    if (sheet === "bill") {
+      setTip(tipSeen("bill") ? null : "bill");
+      return;
+    }
+    if (sheet || saying) {
+      setTip(null);
+      return;
+    }
+    if (!tipSeen("desk") && (notes.length > 0 || streetWaited)) setTip("desk");
+    else if (tipSeen("desk") && !tipSeen("messages")) setTip("messages");
+    else setTip(null);
+  }, [stage, busy, sheet, saying, notes.length, streetWaited, tipTick]);
+  const doneTip = useCallback((id: TipId, all: boolean) => {
+    if (all) skipTips();
+    else markTip(id);
+    setTipTick((n) => n + 1);
+  }, []);
   const [streetW, setStreetW] = useState<number | null>(null);
   const [narrow, setNarrow] = useState(true);
   const [doorView, setDoorView] = useState(STREET_VIEW);
@@ -393,7 +416,7 @@ export default function PlayFrame({
     if (typeof payload.used === "number") countFrom(payload.used);
   }
 
-  const speaker = gate === "door" ? { ...SPEAKER.door, name: doorName.toUpperCase() } : SPEAKER[gate];
+  const speaker = { name: doorName.toUpperCase(), voice: VOICES.sam };
   const playing = Boolean(session?.blob);
 
   // The passkey gate returns before this scene exists, so idle has to start again once the raid is on screen.
@@ -410,7 +433,7 @@ export default function PlayFrame({
       offP();
       ctx.current?.revert();
     };
-  }, [gate, streetKey, playing]);
+  }, [streetKey, playing]);
 
   useEffect(() => {
     setSoundCity(soundCity(setting));
@@ -439,11 +462,11 @@ export default function PlayFrame({
     });
     ro.observe(el);
     return () => ro.disconnect();
-  }, [playing, gate]);
+  }, [playing]);
 
   useEffect(() => {
     const sc = scroller.current;
-    if (!sc || gate !== "door") return;
+    if (!sc) return;
     let frames = 0;
     let handle = 0;
     const place = () => {
@@ -457,7 +480,7 @@ export default function PlayFrame({
     };
     place();
     return () => cancelAnimationFrame(handle);
-  }, [streetW, gate, playing, narrow]);
+  }, [streetW, playing, narrow]);
 
   // Keep the dock and the invoice above the keyboard. dvh does not shrink for it.
   useEffect(() => {
@@ -526,8 +549,6 @@ export default function PlayFrame({
     setTyped(reduced.current ? text.length : 0);
   }
 
-  function award(_n: number, _label: string) {}
-
   function addNote(n: Note) {
     let added = false;
     setNotes((ns) => {
@@ -565,9 +586,9 @@ export default function PlayFrame({
   }
 
   function listen(i: number, el: Element) {
-    const g = gate === "door" ? session?.street?.queue[i] : undefined;
+    const g = session?.street?.queue[i];
     if (!g || g.lines.length === 0) return;
-    const k = `${gate}${i}`;
+    const k = `door${i}`;
     const n = heard[k] ?? 0;
     const l = g.lines[n % g.lines.length];
     if (!l) return;
@@ -610,10 +631,10 @@ export default function PlayFrame({
   function readPose(dur: number) {
     const s = scene.current;
     anim(() => {
-      rigTo(s, gate === "door" ? "read" : "seatedRead", 0.35, E("settle"));
+      rigTo(s, "read", 0.35, E("settle"));
       const swings = Math.max(1, Math.floor(dur / 0.16)) | 1;
       rigTween(s, { ru: "+=5", rv: "+=2", duration: 0.16, yoyo: true, repeat: swings, ease: "sine.inOut", delay: 0.4 });
-      gsap.delayedCall(dur, () => rigTo(s, gate === "door" ? "idle" : "seated", 0.35, E("settle")));
+      gsap.delayedCall(dur, () => rigTo(s, "idle", 0.35, E("settle")));
     });
   }
 
@@ -677,7 +698,7 @@ export default function PlayFrame({
     setRefused(false);
     setYou(`BILL: ${b.payee} · ${b.reference} · ${b.item} · ${b.qty} × ${b.unit}`);
     spend(() => {
-      say(`${gate === "door" ? doorName : "Madam Efua"} reads your bill…`);
+      say(`${doorName} reads your bill…`);
       readPose(1.7);
       sfx.paper();
       setTimeout(sfx.scratch, 450);
@@ -747,7 +768,7 @@ export default function PlayFrame({
         leftRef.current = Math.min(messageBudget, leftRef.current + 1);
         setLeft(leftRef.current);
       }
-      say(transcriptRef.current.at(-1)?.guard ?? OPENERS[gate]);
+      say(transcriptRef.current.at(-1)?.guard ?? OPENER);
       sfx.error();
       setNotice(guardNotice(error));
       setBusy(false);
@@ -759,20 +780,19 @@ export default function PlayFrame({
       setSignedHex(typeof payload.signature === "string" ? payload.signature : null);
       // The signed verdict is the answer. The model's own words can read like a refusal, so they are not shown here.
       say("Approved.");
-      void recordHeld(gate === "door" ? "door" : "office");
+      void recordHeld("door");
       return;
     }
-    const reply = typeof payload.reply === "string" ? payload.reply : OPENERS[gate];
+    const reply = typeof payload.reply === "string" ? payload.reply : OPENER;
     if (bill && reply === "Not approved.") refuse();
     else {
       say(reply);
       setBusy(false);
       // The last message was talk, not a bill: the raid ends the same way, once the reply has been read.
       if (leftRef.current === 0) {
-        const doorGate = gate === "door";
         setTimeout(() => {
-          if (doorGate) sfx.turnedAway();
-          setEnd(doorGate ? "out" : "door");
+          sfx.turnedAway();
+          setEnd("out");
           setStage("end");
         }, Math.min(6000, 1800 + reply.length * 35));
       }
@@ -814,7 +834,6 @@ export default function PlayFrame({
     await saveRaid(storageName, vaultId, vault.round, next).catch(() => undefined);
     setHolding(null);
     if (after === "door") approveDoor();
-    else if (after === "office") approveOffice();
     else {
       setEnd("door");
       setStage("end");
@@ -825,24 +844,22 @@ export default function PlayFrame({
   function refuse() {
     say("Not approved.");
     setRefused(true);
-    award(10, "bill sent");
     sfx.thud();
     const s = scene.current;
     anim(() => {
-      if (gate === "door") rigTo(s, "refuse", 0.22, "power3.out");
+      rigTo(s, "refuse", 0.22, "power3.out");
       gsap.timeline()
         .fromTo(".redflash", { opacity: 0 }, { opacity: 0.45, duration: 0.06, yoyo: true, repeat: 1 }, 0.05)
         .fromTo(".slam", { scale: 2.6, opacity: 0, rotation: -18 }, { scale: 1, opacity: 1, rotation: -8, duration: 0.16, ease: E("strike") }, 0)
         .fromTo(".scene", { x: 0 }, { keyframes: { x: [-8, 7, -5, 3, 0] }, duration: 0.28, ease: "none" }, 0.14)
         .to(".slam", { opacity: 0, duration: 0.3 }, 1.6);
-      if (gate === "door") gsap.delayedCall(1.5, () => rigTo(s, "idle", 0.5));
+      gsap.delayedCall(1.5, () => rigTo(s, "idle", 0.5));
     });
     setTimeout(() => {
       setBusy(false);
       if (leftRef.current === 0) {
-        setEnd(gate === "door" ? "out" : "door");
-        if (gate === "office") say("That's all. Out you go.");
-        if (gate === "door") setTimeout(sfx.turnedAway, 900);
+        setEnd("out");
+        setTimeout(sfx.turnedAway, 900);
         setTimeout(() => setStage("end"), 900);
       }
     }, 700);
@@ -851,7 +868,6 @@ export default function PlayFrame({
   function approveDoor() {
     setStage("play");
     say("Approved.");
-    award(100, "you got in");
     sfx.approved();
     setTimeout(sfx.clink, 250);
     setTimeout(sfx.creak, 500);
@@ -882,32 +898,6 @@ export default function PlayFrame({
     }, reduced.current ? 400 : 2400);
   }
 
-
-  function approveOffice() {
-    setStage("play");
-    say("…Fine. Approved.");
-    award(250, "cracked the office");
-    sfx.dial();
-    setTimeout(sfx.safe, 900);
-    setTimeout(() => music.room("open", 1.2), 1000);
-    const s = scene.current;
-    anim(() => {
-      rigTo(s, "seated", 0.4);
-      gsap.timeline()
-        .to("#safe-dial", { rotation: 300, svgOrigin: "301 150", duration: 0.8, ease: "steps(10)" }, 0)
-        .to("#safe-door", { scaleX: 0.12, transformOrigin: "0% 50%", duration: D.deliberate, ease: E("settle") }, 0.9)
-        .to("#safe-glow, #safe-cash", { opacity: 1, duration: 0.6 }, 1.0)
-        .fromTo(".flood-gold", { opacity: 0, scale: 0.3 }, { opacity: 0.8, scale: 2.2, duration: 1, ease: E("arrive") }, 1.1)
-        .to(".flood-gold", { opacity: 0.25, duration: 0.8 }, 2.1);
-    });
-    setTimeout(() => {
-      setEnd("office");
-      setStage("end");
-      setBusy(false);
-    }, reduced.current ? 400 : 2600);
-  }
-
-
   function toggleSound() {
     const on = !sound;
     muted.current = !on;
@@ -915,7 +905,7 @@ export default function PlayFrame({
     setSound(on);
     if (on) sfx.tap();
     setSoundOn(on);
-    if (on) music.start(gate === "door" ? "street" : "office");
+    if (on) music.start("street");
   }
 
   const potShown = tokenAmount(tokenLabel, vault.dayPot);
@@ -987,7 +977,7 @@ export default function PlayFrame({
         <a href={doorHref} className="chalk-focus inline-flex min-h-11 min-w-0 flex-col justify-center leading-none">
           <div className="font-sign text-sm">BOUNCER</div>
           <div className="truncate font-mono text-xs uppercase tracking-wider text-chalk/80 sm:tracking-[0.2em]">
-            {gate === "door" ? signText : "Back office"} · Round {vault.round}
+            {signText} · Round {vault.round}
           </div>
         </a>
         <div className="flex shrink-0 items-center gap-1 sm:gap-1.5" aria-label={`${left} messages left`}>
@@ -1007,6 +997,10 @@ export default function PlayFrame({
           <span className="hidden items-center gap-1 rounded-full bg-night-3 px-2 py-1 font-mono text-[11px] min-[380px]:flex">
             Round {vault.round}
           </span>
+          <HelpButton values={{ budget: messageBudget, lockNs: vault.lockNs }} className="relative grid size-7 shrink-0 place-items-center rounded-full bg-night-3 font-sign text-sm after:absolute after:-inset-2 after:content-['']">
+            <span aria-hidden="true">?</span>
+            <span className="sr-only">How to play</span>
+          </HelpButton>
           <button onClick={toggleSound} data-sound-toggle aria-label={sound ? "Street sound on" : "Street sound off"} className="relative shrink-0 whitespace-nowrap rounded-full bg-night-3 px-2 py-1 font-mono text-[11px] after:absolute after:-inset-x-1 after:-inset-y-2.5 after:content-[''] sm:px-2.5 sm:text-xs" aria-pressed={sound}>
             {sound ? "♪ sound on" : "♪ sound off"}
           </button>
@@ -1015,29 +1009,24 @@ export default function PlayFrame({
 
       {/* The scene: the player writes. Taps do not read a sample ledger. */}
       <section ref={stageRef} className="scene relative min-h-0 flex-1 overflow-hidden bg-[#140f1c]" onClick={onScene}>
-        <div ref={scroller} className={`absolute inset-0 [scrollbar-width:none] ${narrow && gate === "door" ? "overflow-x-auto overflow-y-hidden" : "overflow-hidden"}`}>
-          <div ref={scene} key={gate} className={`relative h-full ${narrow && gate === "door" ? "w-[240%] min-w-[880px]" : ""}`} style={narrow && gate === "door" ? undefined : { width: gate === "door" && streetW ? streetW : "100%" }}>
-            {gate === "door" ? (
-              <DoorScene key={streetKey} setting={setting} sign={signText} look={doorLook} gossip={Boolean(session?.street)} speakingSlots={stage === "play" ? speakingSlots : undefined} viewBox={narrow ? STREET_VIEW : doorView} className="absolute inset-0 size-full" />
-            ) : (
-              <OfficeScene hints={stage === "play"} className="absolute inset-0 size-full" />
-            )}
+        <div ref={scroller} className={`absolute inset-0 [scrollbar-width:none] ${narrow ? "overflow-x-auto overflow-y-hidden" : "overflow-hidden"}`}>
+          <div ref={scene} className={`relative h-full ${narrow ? "w-[240%] min-w-[880px]" : ""}`} style={narrow ? undefined : { width: streetW ?? "100%" }}>
+            <DoorScene key={streetKey} setting={setting} sign={signText} look={doorLook} gossip={Boolean(session?.street)} speakingSlots={stage === "play" ? speakingSlots : undefined} viewBox={narrow ? STREET_VIEW : doorView} className="absolute inset-0 size-full" />
           </div>
         </div>
-        {narrow && gate === "door" ? <StreetBar scroller={scroller} /> : null}
+        {narrow ? <StreetBar scroller={scroller} /> : null}
         <div className="vignette pointer-events-none absolute inset-0 opacity-0 shadow-[inset_0_0_120px_40px_rgb(179_36_58/0.55)]" />
         <div className="spot pointer-events-none absolute inset-0 opacity-0 bg-[radial-gradient(ellipse_32%_42%_at_50%_58%,transparent_55%,rgb(5_3_8/0.82)_100%)]" />
         <div className="redflash pointer-events-none absolute inset-0 bg-rope opacity-0 mix-blend-screen" />
         <div className="flood pointer-events-none absolute left-1/2 top-[52%] size-[70vmin] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-0 mix-blend-screen bg-[radial-gradient(circle,rgb(185_162_255/0.95),rgb(143_107_255/0.5)_40%,transparent_70%)]" />
-        <div className="flood-gold pointer-events-none absolute right-[8%] top-[55%] size-[60vmin] -translate-y-1/2 rounded-full opacity-0 mix-blend-screen bg-[radial-gradient(circle,rgb(255_230_160/0.95),rgb(207_163_73/0.45)_40%,transparent_70%)]" />
         <div aria-hidden="true" className="slam pointer-events-none absolute left-1/2 top-[58%] -translate-x-1/2 opacity-0">
           {/* Drawn only once a bill is refused, so the page does not carry the word before any bill. */}
           <div className="scale-[2.2]">{refused ? <RefusedStamp /> : null}</div>
         </div>
         {stage === "play" && notes.length === 0 && !bubble && (
           <div className="pointer-events-none absolute bottom-3 left-1/2 w-max max-w-[calc(100%-1.5rem)] -translate-x-1/2 rounded-full bg-chalk px-3 py-1.5 text-center text-[12px] font-semibold text-ink shadow-lg">
-            {gate === "office" ? "Look around. Tap what's glowing." : speakingSlots.some(Boolean)
-              ? "Tap a person or use Listen."
+            {speakingSlots.some(Boolean)
+              ? "Tap a person or use Listen. Listening is free."
               : "Nobody in this queue has a hint to share."}
           </div>
         )}
@@ -1057,10 +1046,9 @@ export default function PlayFrame({
             {bubble.gloss && <div className="mt-1.5 border-t border-ink/15 pt-1 text-[11px] leading-snug text-ink/60">{bubble.gloss}</div>}
           </div>
         )}
-        {fade && <div className="absolute inset-0 z-20 animate-[fadeIn_.3s_ease-out] bg-night" />}
       </section>
 
-      {stage === "play" && gate === "door" && speakingSlots.some(Boolean) && (
+      {stage === "play" && speakingSlots.some(Boolean) && (
         <div className="flex items-center gap-2 overflow-x-auto bg-night-2 px-4 py-2" role="group" aria-label="People on the street">
           <span className="shrink-0 font-mono text-xs uppercase text-chalk/75">Street hints</span>
           {streetQueue.map((person, i) => speakingSlots[i] && (
@@ -1102,7 +1090,7 @@ export default function PlayFrame({
                   maxLength={200}
                   onChange={(e) => setDraft(e.target.value)}
                   onKeyDown={() => sfx.key()}
-                  placeholder={`Say something to ${gate === "door" ? doorName : "Madam Efua"}…`}
+                  placeholder={`Say something to ${doorName}…`}
                   className="min-w-0 flex-1 rounded-xl border border-white/15 bg-night px-3 py-3 text-[15px] outline-none focus:border-chalk/60"
                 />
                 <button disabled={!draft.trim() || busy || left === 0} className="shrink-0 rounded-xl bg-chalk px-4 font-sign text-ink disabled:opacity-40">
@@ -1110,20 +1098,24 @@ export default function PlayFrame({
                 </button>
               </div>
               <div className="flex gap-2 overflow-x-auto pb-1">
-                {(venueId === "custom" ? SUGGEST_ANY_DOOR : SUGGEST[gate]).map((q) => (
+                {(venueId === "custom" ? SUGGEST_ANY_DOOR : SUGGEST).map((q) => (
                   <button key={q} type="button" onClick={() => setDraft(q)} className="shrink-0 rounded-full border border-chalk/25 px-3 py-1.5 text-[13px] text-chalk/80">
                     {q}
                   </button>
                 ))}
               </div>
               <div className="flex items-center justify-between text-[11px] text-chalk/45">
-                <span>Each message costs 1 of your 6. Listening and the desk are free.</span>
+                <span>Each message costs 1 of your {messageBudget}. Listening and the desk are free.</span>
                 <button type="button" onClick={() => setSaying(false)} className="underline">
                   Back
                 </button>
               </div>
             </form>
           ) : (
+            <>
+            {tip === "desk" || tip === "messages" ? (
+              <Tip text={tipText(tip, messageBudget)} onDone={(all) => doneTip(tip, all)} className={`mt-3 ${tip === "desk" ? "ml-auto" : ""}`} />
+            ) : null}
             <div className="mt-3 grid grid-cols-[1fr_1.3fr_1fr] gap-2">
               <button
                 disabled={busy || left === 0}
@@ -1155,6 +1147,7 @@ export default function PlayFrame({
                 )}
               </button>
             </div>
+            </>
           ))}
       </section>
 
@@ -1165,6 +1158,9 @@ export default function PlayFrame({
       {sheet && (
         <div className="absolute inset-0 z-40 flex flex-col justify-end bg-black/60" onClick={() => setSheet(null)}>
           <div className="max-h-[88%] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            {sheet === "bill" && tip === "bill" ? (
+              <Tip text={tipText("bill")} onDone={(all) => doneTip("bill", all)} className="mx-4 mb-2" />
+            ) : null}
             {sheet === "bill" ? (
               <BillBuilder
                 payees={session?.street?.payees ?? []}
@@ -1181,11 +1177,9 @@ export default function PlayFrame({
                 notes={notes}
                 payees={session?.street?.payees ?? []}
                 poster={session?.street?.poster ?? []}
-                inside={gate === "office"}
                 onPin={(n) => {
                   if (addNote(n)) {
                     sfx.note();
-                    award(1, "pinned");
                   }
                 }}
                 onMark={(id, mark) => setNotes((ns) => ns.map((x) => (x.id === id ? { ...x, mark } : x)))}

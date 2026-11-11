@@ -88,6 +88,9 @@ export function Landing({ live = null }: { live?: ReactNode }) {
               <Link href="/sponsors" className="chalk-focus inline-flex min-h-11 items-center text-sm text-chalk/80 underline decoration-white/30">
                 Sponsor a door
               </Link>
+              <Link href="/how-it-works" className="chalk-focus inline-flex min-h-11 items-center text-sm text-chalk/80 underline decoration-white/30">
+                How it works
+              </Link>
             </div>
           </div>
         </div>

@@ -89,7 +89,7 @@ export function VerifiedPanel({
   return (
     <section aria-labelledby="verified-heading" className="mt-5 rounded-3xl border border-white/10 bg-night-2 p-5">
       <h2 id="verified-heading" className="font-sign text-2xl">Verified</h2>
-      <p className="mt-1 text-sm text-chalk/70">What this page could check about how this win was decided. Nothing is ticked unless it was compared.</p>
+      <p className="mt-1 text-sm text-chalk/70">What this page could check about how this win was decided. Nothing is ticked unless it was compared. <a href="/how-it-works#hiw-5" className="chalk-focus underline decoration-white/20">What these checks mean</a></p>
       <ul className="mt-4 flex flex-col gap-3">
         {rows.map((row) => (
           <li key={row.id} className="text-sm">

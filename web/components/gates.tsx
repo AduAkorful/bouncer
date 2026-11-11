@@ -105,6 +105,7 @@ export async function HomeGate({ vaultId }: { vaultId?: string }) {
       card={page.page.card}
       base={doorPaths(id).door}
       networkTag={labels.networkTag}
+      messageBudget={labels.messageBudget}
       token={page.page.token}
       wallet={{ rpcUrl: labels.rpcUrl, contractId: labels.contractId, networkId: labels.networkId, storageName: labels.storageName }}
       doors={

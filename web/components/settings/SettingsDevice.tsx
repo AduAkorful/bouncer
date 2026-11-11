@@ -4,11 +4,13 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useWalletAccount } from "@/components/profile/ProfileWallet";
 import { readSoundPref, writeSoundPref } from "@/lib/sound-pref";
+import { resetTips } from "@/lib/tips";
 
 /** What this browser holds: the sign-in and its account, and the street sound choice. */
 export function SettingsDevice({ storageName }: { storageName: string }) {
   const wallet = useWalletAccount(storageName);
   const [sound, setSound] = useState(true);
+  const [tipsReset, setTipsReset] = useState(false);
 
   useEffect(() => {
     setSound(readSoundPref() !== "off");
@@ -49,6 +51,15 @@ export function SettingsDevice({ storageName }: { storageName: string }) {
         </div>
         <button type="button" onClick={toggle} aria-pressed={sound} aria-label={sound ? "Street sound on" : "Street sound off"} className="chalk-focus min-h-11 shrink-0 rounded-full border border-white/20 px-4 text-sm">
           {sound ? "Sound on" : "Sound off"}
+        </button>
+      </section>
+      <section className="flex items-center justify-between gap-3 rounded-3xl border border-white/10 bg-night-2 p-5">
+        <div>
+          <h2 className="font-sign text-lg">Tips</h2>
+          <p className="mt-1 text-sm text-chalk/70" role="status">{tipsReset ? "The tips show again in your next raid." : "Short tips the first time you raid."}</p>
+        </div>
+        <button type="button" onClick={() => { resetTips(); setTipsReset(true); }} className="chalk-focus min-h-11 shrink-0 rounded-full border border-white/20 px-4 text-sm">
+          Show tips again
         </button>
       </section>
     </div>
