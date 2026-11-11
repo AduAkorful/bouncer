@@ -12,6 +12,8 @@ import { ACCRA_SETTING, STREET_VIEW, streetPieces } from "@/lib/street-setting";
 import { PotBoard } from "@/components/home/PotBoard";
 import { cardLook, type Card } from "@/lib/card";
 import { SoundToggle } from "@/components/home/SoundToggle";
+import { HelpButton } from "@/components/help/HelpButton";
+import { DoorEconomy } from "@/components/home/DoorEconomy";
 import { SceneLife } from "@/components/SceneLife";
 import { CLOSED_DOOR_NOTE, COMMITMENT_LINE, NO_COMMITMENT, commitmentFooter, doorFull, doorShut, doorTitle } from "@/lib/door";
 import type { TokenRead } from "@/lib/page-vault";
@@ -40,6 +42,7 @@ export function HomeDoor({
   vault,
   vaultId,
   networkTag,
+  messageBudget,
   notice,
   card = null,
   base = "",
@@ -51,6 +54,8 @@ export function HomeDoor({
   /** This vault's id. It is the sign when the vault has no card. */
   vaultId: string;
   networkTag?: string;
+  /** Messages per raid, for the help sheet. */
+  messageBudget?: number;
   notice?: string;
   /** A sponsor's public card. Null when this vault has none. */
   card?: Card | null;
@@ -184,6 +189,12 @@ export function HomeDoor({
               ))}
             </ol>
             <p className="mt-2 text-xs text-chalk/60 lg:mt-5 lg:border-t lg:border-white/10 lg:pt-3 lg:text-sm">A wrong bill only hears &ldquo;Not approved.&rdquo; Nothing says what was wrong with it.</p>
+            <HelpButton
+              values={{ budget: messageBudget, lockNs: vault?.lockNs }}
+              className="chalk-focus mt-1 inline-flex min-h-11 items-center text-sm text-chalk/85 underline decoration-white/30 lg:mt-2"
+            >
+              The full rules: matching a bill, getting paid, the night
+            </HelpButton>
           </section>
           <p className="mt-3 text-center text-xs leading-relaxed text-chalk/70 lg:mt-0 lg:text-left">Test tokens have no cash value. Playing costs no money.</p>
           <Link href={`${base}/reveal`} className="chalk-focus flex min-h-11 flex-col justify-center rounded-2xl border border-white/10 px-4 py-2 transition hover:bg-white/5">
@@ -193,6 +204,8 @@ export function HomeDoor({
           </div>
         </div>
       </section>
+
+      {vault ? <DoorEconomy vault={vault} shut={shut} token={token} /> : null}
 
       {doors}
 
