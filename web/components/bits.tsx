@@ -44,28 +44,3 @@ export function DemoBadge({ className = "" }: { className?: string }) {
   if (!text) return null;
   return <span className={`font-mono text-[10px] uppercase tracking-widest text-graphite ${className}`}>{text}</span>;
 }
-
-/** Venue names are painted signs. */
-export function VenueSign({ name, area, size = "md" }: { name: string; area?: string; size?: "sm" | "md" | "lg" }) {
-  const cls = { sm: "text-lg", md: "text-3xl", lg: "text-5xl sm:text-6xl" }[size];
-  return (
-    <div className="leading-none">
-      <div className={`font-sign-inline ${cls} neon-uv`}>{name}</div>
-      {area && <div className="mt-2 font-mono text-[11px] uppercase tracking-[0.25em] text-graphite">{area}</div>}
-    </div>
-  );
-}
-
-export function MessageDots({ used, budget }: { used: number; budget: number }) {
-  return (
-    <div className="flex items-center gap-1.5" aria-label={`${budget - used} of ${budget} messages left`}>
-      {Array.from({ length: budget }, (_, i) => (
-        <span
-          key={i}
-          className={`size-2.5 rounded-full ${i < used ? "bg-graphite/50" : "bg-chalk"}`}
-        />
-      ))}
-      <span className="ml-1 font-mono text-[11px] text-chalk/60 tnum">{budget - used} left</span>
-    </div>
-  );
-}

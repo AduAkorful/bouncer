@@ -118,10 +118,6 @@ function sample(name: SampleName, o: Out & { gain?: number; rate?: number } = {}
   return true;
 }
 
-export function soundOn() {
-  return enabled;
-}
-
 export function setSound(on: boolean) {
   enabled = on;
   if (on) ensure();
@@ -409,17 +405,6 @@ export const sfx = {
     tone(392, 0.22, "square", 0.012, { pan: -0.6, verb: 0.6 });
     tone(311, 0.3, "square", 0.012, { pan: -0.6, verb: 0.6, when: 0.26 });
   },
-  /** The safe: dial clicks, then the bolt */
-  dial: () => {
-    for (let i = 0; i < 7; i++) tone(3200, 0.012, "square", 0.04, { when: i * 0.09 + Math.random() * 0.03 });
-    tone(1200, 0.03, "square", 0.06, { when: 0.75 });
-  },
-  safe: () => {
-    tone(70, 0.5, "sine", 0.7, { slide: 45, verb: 0.3 });
-    hiss(0.2, 0.25, "lowpass", 600);
-    sfx.creak();
-    for (let i = 0; i < 14; i++) bell(2400 + Math.random() * 2400, 0.4, 0.02, { when: 0.4 + i * 0.05, verb: 0.3, pan: Math.random() - 0.5 });
-  },
 };
 
 export interface Voice {
@@ -432,8 +417,6 @@ export interface Voice {
 
 export const VOICES = {
   sam: { base: 82, spread: 0.28, formant: 0.8, gain: 0.55 },
-  pat: { base: 190, spread: 0.4, formant: 1.05, gain: 0.4 },
-  efua: { base: 168, spread: 0.18, formant: 1.15, gain: 0.38 },
   crowd: { base: 150, spread: 0.6, formant: 1, gain: 0.12 },
 } satisfies Record<string, Voice>;
 
@@ -532,12 +515,11 @@ const ambience = (() => {
 // ——— The club behind the door: a four-bar loop heard through a wall. ———
 
 type BeatFn = (accent: boolean) => void;
-export type Room = "street" | "open" | "office" | "quiet";
+export type Room = "street" | "open" | "quiet";
 
 const ROOMS: Record<Room, { cut: number; gain: number }> = {
   street: { cut: 280, gain: 0.6 },
   open: { cut: 16000, gain: 0.55 },
-  office: { cut: 900, gain: 0.32 },
   quiet: { cut: 200, gain: 0.15 },
 };
 
@@ -697,11 +679,6 @@ export const music = (() => {
           i++;
         }
       }, 25);
-    },
-    /** Move the listener: through the wall, door open, the back office. */
-    room(r: Room, secs = 1.2) {
-      if (r !== "street") ambience.stop();
-      setRoom(r, secs);
     },
     /** The door opens: the wall lifts and the music comes through clear. */
     open() {

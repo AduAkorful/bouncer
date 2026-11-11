@@ -152,10 +152,6 @@ export const CROWDS: Crowd[] = [
   },
 ];
 
-export function crowdAt(index: number): Crowd {
-  return CROWDS[index] ?? CROWDS[0];
-}
-
 type Look = { skin: string; top: string; bottom: string; hair: Hair; hairColor: string; outfit: Outfit; pose: Pose; accent?: string; broad?: boolean };
 
 /**

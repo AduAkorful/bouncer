@@ -2,7 +2,7 @@
 // clipboard, so wherever the board goes the fingers go with it. Pure geometry; safe on the server.
 import type { Build } from "./look";
 
-export type HandShape = "grip" | "pen" | "palm" | "open" | "mug";
+export type HandShape = "grip" | "pen" | "palm" | "open";
 
 export interface RigState {
   /** Clipboard centre and angle, body coordinates (feet at 0,0) */
@@ -33,7 +33,7 @@ export interface RigState {
   rShape: HandShape;
 }
 
-export type PoseName = "idle" | "read" | "refuse" | "aside" | "seated" | "seatedRead" | "tea";
+export type PoseName = "idle" | "read" | "refuse" | "aside";
 
 const BOARD = { hw: 14, hh: 18 };
 
@@ -69,11 +69,6 @@ export const POSES: Record<PoseName, Omit<RigState, "lift" | "gl">> = {
   refuse: { ...base, bx: -10, by: -72, br: -2, ra: 0, rx: 64, ry: -166, rShape: "palm", hr: -4, hy: -1 },
   // Stepped aside: board tucked under the right arm, left arm sweeps the guest in.
   aside: { ...base, bx: 30, by: -86, br: 10, la: 0, lx: -88, ly: -96, lShape: "open", ru: 6, rv: 16, hr: -7 },
-  // Behind a desk: ledger held low, both hands on it.
-  seated: { ...base, bx: 0, by: -92, br: 0, lv: 6, rv: 4 },
-  seatedRead: { ...base, bx: -4, by: -108, br: -10, ru: 2, rv: 0, rShape: "pen", hr: 8, hy: 2 },
-  // Morning: list in one hand, tea in the other.
-  tea: { ...base, bx: -14, by: -80, br: -8, ra: 0, rx: 30, ry: -96, rShape: "mug", hr: -3 },
 };
 
 export function pose(name: PoseName, lift = 0): RigState {

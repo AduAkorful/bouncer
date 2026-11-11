@@ -11,7 +11,7 @@ export interface Note {
   mark?: "true" | "rumour";
 }
 
-type Tab = "Notes" | "Receipts" | "Payees" | "Poster" | "Inside";
+type Tab = "Notes" | "Receipts" | "Payees" | "Poster";
 
 /**
  * The investigation desk: everything public about tonight, plus what you've overheard. Free to use, no clock.
@@ -21,7 +21,6 @@ export function Desk({
   notes,
   payees,
   poster,
-  inside,
   onPin,
   onMark,
   onClose,
@@ -29,16 +28,12 @@ export function Desk({
   notes: Note[];
   payees: string[];
   poster: string[];
-  /** The office is open: show what's been found inside */
-  inside: boolean;
   onPin: (n: Note) => void;
   onMark: (id: string, mark: Note["mark"]) => void;
   onClose: () => void;
 }) {
-  const tabs: Tab[] = inside ? ["Notes", "Inside", "Receipts", "Payees", "Poster"] : ["Notes", "Receipts", "Payees", "Poster"];
+  const tabs: Tab[] = ["Notes", "Receipts", "Payees", "Poster"];
   const [tab, setTab] = useState<Tab>("Notes");
-  const pinned = new Set(notes.map((n) => n.id));
-  const insideNotes = notes.filter((n) => n.source === "Found" || n.text.includes("(barman)"));
   return (
     <div className="flex max-h-full flex-col rounded-t-3xl bg-paper text-on-paper" role="dialog" aria-label="Investigation desk">
       <div className="flex items-center justify-between px-5 pt-5">
@@ -91,19 +86,6 @@ export function Desk({
                       </button>
                     </span>
                   )}
-                </li>
-              ))}
-            </ul>
-          ))}
-
-        {tab === "Inside" &&
-          (insideNotes.length === 0 ? (
-            <p className="text-muted">Look around the office: the corkboard, the bin, the barman in the doorway.</p>
-          ) : (
-            <ul className="space-y-2">
-              {insideNotes.map((n) => (
-                <li key={n.id} className="rounded-xl border border-rule p-3 font-mono text-[12.5px]">
-                  {n.text}
                 </li>
               ))}
             </ul>

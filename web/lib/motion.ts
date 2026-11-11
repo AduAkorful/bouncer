@@ -69,17 +69,6 @@ export function registerMotion() {
   registered = true;
 }
 
-/** Reduced-motion map: what each motion becomes when the person asks for less */
-export const REDUCED: { motion: string; becomes: string }[] = [
-  { motion: "Rows sliding in, cards rising", becomes: "Appear in place (150 ms fade)" },
-  { motion: "Numbers rolling", becomes: "Final number shown" },
-  { motion: "Headline blur-to-sharp", becomes: "Headline shown" },
-  { motion: "The signature moment", becomes: "Its end state, shown at once" },
-  { motion: "The cinematic moment", becomes: "Its end state at rest; no drift" },
-  { motion: "Shared-element moves", becomes: "Cut between states" },
-  { motion: "Countdowns", becomes: "Unchanged (they're information, not decoration)" },
-];
-
 // ——— Helpers used by scenes. Each adds `from` motion to a timeline at `at`, ending on the markup's own state. ———
 
 type Tl = gsap.core.Timeline;
@@ -107,36 +96,6 @@ export function roll(tl: Tl, el: Element | null, from: number, at: Pos, dur: num
     },
   };
   tl.fromTo(proxy, { v: from }, { v: to, duration: dur, ease: E("settle") }, at);
-}
-
-/** Text resolves from scrambled characters to its own content, left to right (addresses, codes) */
-export function resolveText(tl: Tl, el: Element | null, at: Pos, dur = 0.6, alphabet = "0123456789abcdef") {
-  if (!el) return;
-  const final = el.textContent ?? "";
-  // Deterministic scramble so the same moment always looks the same when scrubbed
-  const noise = Array.from(final, (_, i) => alphabet[(i * 7 + 3) % alphabet.length]!);
-  let p = 1;
-  const proxy = {
-    get v() {
-      return p;
-    },
-    set v(x: number) {
-      p = x;
-      const n = Math.floor(x * final.length);
-      el.textContent = final.slice(0, n) + Array.from(final.slice(n), (c, i) => (c === "…" || c === " " ? c : noise[n + i])).join("");
-    },
-  };
-  tl.fromTo(proxy, { v: 0 }, { v: 1, duration: dur, ease: "none" }, at);
-}
-
-/** Headlines resolve from a blur */
-export function blurIn(tl: Tl, targets: gsap.TweenTarget, at: Pos) {
-  tl.from(targets, { opacity: 0, filter: "blur(12px)", y: 8, duration: D.move, ease: E("arrive") }, at);
-}
-
-/** A line of text or a rule writes in left to right */
-export function writeIn(tl: Tl, targets: gsap.TweenTarget, at: Pos, stagger: number = S.row) {
-  tl.from(targets, { clipPath: "inset(0 100% 0 0)", duration: D.arrive, ease: E("settle"), stagger }, at);
 }
 
 /** SVG strokes draw on (ticks, crosses, edges); paths need pathLength="1" */

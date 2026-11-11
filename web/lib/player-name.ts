@@ -5,10 +5,6 @@ const NOUNS = ["Okada", "Taxi", "Lamp", "Queue", "Drum", "Night", "Door", "Stamp
 
 const NAME = /^[A-Za-z][A-Za-z0-9]{2,23}$/;
 
-export function playerNameKey(storageName: string): string {
-  return `${storageName.trim()}.player-name`;
-}
-
 /** Two words and a number, in the shape of a generated handle. */
 export function generatedPlayerName(random: () => number = Math.random): string {
   return `${pick(ADJECTIVES, random)}${pick(NOUNS, random)}${2 + Math.floor(random() * 98)}`;

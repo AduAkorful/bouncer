@@ -25,10 +25,6 @@ interface Props {
   pose?: PoseName;
   /** Colour of the light behind and above: the neon sign or the door */
   rim?: string;
-  /** What's in their hands: the guest list, or the back office's ledger */
-  holds?: "clipboard" | "ledger";
-  /** Behind a desk: no legs drawn */
-  seated?: boolean;
 }
 
 /**
@@ -36,7 +32,7 @@ interface Props {
  * from where the board is, so the hands never let go of it. data-part hooks are what lib/rigMotion.ts moves.
  * Every bouncer reads with the same animation; reactions play only after a verdict.
  */
-export function Bouncer({ look, x, y, scale = 1, p, pose = "idle", rim = "#b9a2ff", holds = "clipboard", seated = false }: Props) {
+export function Bouncer({ look, x, y, scale = 1, p, pose = "idle", rim = "#b9a2ff" }: Props) {
   const d = dims(look.build);
   const g = solve(d, poseOf(pose));
   const { w, top } = d;
@@ -74,7 +70,7 @@ export function Bouncer({ look, x, y, scale = 1, p, pose = "idle", rim = "#b9a2f
     );
   };
 
-  // A hand that isn't gripping the edge (pen, palm, mug) is in front of the board, so its forearm must be too.
+  // A hand that isn't gripping the edge (pen, palm) is in front of the board, so its forearm must be too.
   const inFront = (shape: string) => shape !== "grip";
   const foreFront = (side: "L" | "R", a: ArmGeom, shape: string) => {
     const [cx1, cy1, cx2, cy2] = cuffPoints(a);
@@ -103,17 +99,15 @@ export function Bouncer({ look, x, y, scale = 1, p, pose = "idle", rim = "#b9a2f
         </linearGradient>
       </defs>
 
-      {!seated && (
-        <g>
-          <ellipse cx="0" cy="1" rx={w + 4} ry="7" fill="#000" opacity="0.55" />
-          {/* Trousers and shoes */}
-          <path d={`M${-waist + 2},-52 L-26,-3 L-7,-3 L-1,-52 Z M${waist - 2},-52 L26,-3 L7,-3 L1,-52 Z`} fill="#0b0910" />
-          <path d="M-15,-46 L-17,-6 M15,-46 L17,-6" stroke={rim} strokeOpacity="0.18" strokeWidth="1" />
-          <path d="M-32,1 Q-32,-7 -20,-7 L-6,-6 Q-2,-3 -3,1 Z M32,1 Q32,-7 20,-7 L6,-6 Q2,-3 3,1 Z" fill="#050407" />
-          <ellipse cx="-22" cy="-4" rx="4" ry="1.2" fill="#fff" opacity="0.22" />
-          <ellipse cx="22" cy="-4" rx="4" ry="1.2" fill="#fff" opacity="0.22" />
-        </g>
-      )}
+      <g>
+        <ellipse cx="0" cy="1" rx={w + 4} ry="7" fill="#000" opacity="0.55" />
+        {/* Trousers and shoes */}
+        <path d={`M${-waist + 2},-52 L-26,-3 L-7,-3 L-1,-52 Z M${waist - 2},-52 L26,-3 L7,-3 L1,-52 Z`} fill="#0b0910" />
+        <path d="M-15,-46 L-17,-6 M15,-46 L17,-6" stroke={rim} strokeOpacity="0.18" strokeWidth="1" />
+        <path d="M-32,1 Q-32,-7 -20,-7 L-6,-6 Q-2,-3 -3,1 Z M32,1 Q32,-7 20,-7 L6,-6 Q2,-3 3,1 Z" fill="#050407" />
+        <ellipse cx="-22" cy="-4" rx="4" ry="1.2" fill="#fff" opacity="0.22" />
+        <ellipse cx="22" cy="-4" rx="4" ry="1.2" fill="#fff" opacity="0.22" />
+      </g>
 
       <g data-part="torso" transform={g.torso}>
         {/* Rim light: the jacket's outline catches the light behind */}
@@ -210,7 +204,7 @@ export function Bouncer({ look, x, y, scale = 1, p, pose = "idle", rim = "#b9a2f
       {arm("L", g.armL)}
       {arm("R", g.armR)}
 
-      <g data-part="board" transform={g.board}>{holds === "ledger" ? <Ledger /> : <Clipboard />}</g>
+      <g data-part="board" transform={g.board}><Clipboard /></g>
       {foreFront("L", g.armL, poseOf(pose).lShape)}
       {foreFront("R", g.armR, poseOf(pose).rShape)}
       {/* The wrist stays in front of the board even when the hand grips its edge, so the hand meets a visible sleeve. */}
@@ -259,22 +253,6 @@ function Clipboard() {
   );
 }
 
-function Ledger() {
-  return (
-    <g>
-      <rect x="-13" y="-15.5" width="28" height="36" rx="2" fill="#000" opacity="0.35" />
-      <rect x="-14" y="-18" width="28" height="36" rx="2" fill="#2a1f3a" />
-      <rect x="11" y="-17" width="3" height="34" fill="#efe8da" opacity="0.85" />
-      <rect x="-14" y="-18" width="4" height="36" rx="1.5" fill="#1a1325" />
-      <path d="M14,-18 l-5,0 l5,5 Z M14,18 l-5,0 l5,-5 Z" fill="#cfa349" />
-      <rect x="-7" y="-8" width="15" height="7" rx="1" fill="none" stroke="#cfa349" strokeWidth="0.7" />
-      <text x="0.5" y="-3" textAnchor="middle" fontFamily="var(--font-jetbrains)" fontSize="3.6" fill="#cfa349">
-        LEDGER
-      </text>
-    </g>
-  );
-}
-
 /** All hand shapes are drawn once; the rig shows the one in use. Canonical: a right hand. */
 function Hands({ skin, base, initial }: { skin: string; base: string; initial: string }) {
   const dark = shade(base, 0.66);
@@ -319,17 +297,6 @@ function Hands({ skin, base, initial }: { skin: string; base: string; initial: s
         <rect x="7" y="-4.5" width="10.5" height="7.5" rx="3.6" fill={skin} stroke={line} strokeWidth="0.45" />
         <path d="M9,-1.6 h7.5 M9,1 h7" stroke={line} strokeWidth="0.5" />
         <rect x="3" y="-9" width="7.5" height="3.6" rx="1.8" fill={skin} stroke={line} strokeWidth="0.45" transform="rotate(-24 3 -7)" />
-      </g>
-      {/* A mug of tea */}
-      <g data-shape="mug" style={show("mug")}>
-        <path className="steam" d="M3,-15 q2.5,-4 0,-8 M7.5,-15 q2.5,-4 0,-8" stroke="#efe8da" strokeOpacity="0.55" strokeWidth="1" fill="none" />
-        <rect x="-6" y="-12" width="6.5" height="12" rx="3" fill={dark} />
-        <path d="M10.5,-11 h2.5 a3,3 0 0 1 0,7 h-2.5" stroke="#d9cfbd" strokeWidth="2" fill="none" />
-        <rect x="-0.5" y="-13.5" width="11.5" height="13.5" rx="2" fill="#efe8da" />
-        <rect x="-0.5" y="-9" width="11.5" height="2.6" fill="#b3243a" />
-        {[-11, -7.6, -4.2].map((yy) => (
-          <rect key={yy} x="-3" y={yy} width="6.5" height="3.3" rx="1.6" fill={skin} stroke={line} strokeWidth="0.45" />
-        ))}
       </g>
     </>
   );

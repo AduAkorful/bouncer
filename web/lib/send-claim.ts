@@ -1,4 +1,4 @@
-import { Account, actions, KeyPair, KeyPairSigner, PublicKey, type KeyPairString } from "near-api-js";
+import { Account, actions, KeyPair, KeyPairSigner, type KeyPairString } from "near-api-js";
 import { apiPost, apiPostOnce } from "./api";
 import { claimMessage } from "./claim";
 import { CLAIM_GAS, CLAIM_TTL_BLOCKS, claimDelegate } from "./claim-relay";
@@ -87,43 +87,6 @@ async function relayAccount(rpcUrl: string, publicKey: string): Promise<string |
   const account = (created.ok ? created.body : null) as { ok?: boolean; accountId?: string } | null;
   if (!account?.ok || typeof account.accountId !== "string") return null;
   return account.accountId;
-}
-
-/** Adds a wallet's public key. The passkey key is not shown and is not replaced. */
-export async function addWalletKey(input: {
-  vaultId: string;
-  round: string;
-  raidId: string;
-  rpcUrl: string;
-  networkId: string;
-  accountId: string;
-  walletPublicKey: string;
-}): Promise<{ ok: true } | { ok: false; error: string }> {
-  if (input.networkId !== "testnet") return { ok: false, error: "The passkey network is not testnet." };
-  let walletKey: PublicKey;
-  try {
-    walletKey = PublicKey.from(input.walletPublicKey.trim());
-  } catch {
-    return { ok: false, error: "That public key could not be read." };
-  }
-  const secrets = await deviceSecrets(input.vaultId, input.round);
-  if ("error" in secrets) return { ok: false, error: secrets.error };
-  if (secrets.raidId !== input.raidId) return { ok: false, error: "This device's passkey does not match this raid." };
-  try {
-    const player = new Account(input.accountId, input.rpcUrl, secrets.accountSecret);
-    const outcome = await player.signAndSendTransaction({
-      receiverId: input.accountId,
-      waitUntil: "FINAL",
-      actions: [actions.addFullAccessKey(walletKey)],
-    });
-    if (!outcome.transaction?.hash) return { ok: false, error: "That key was not added." };
-    if (outcome.status && typeof outcome.status === "object" && "Failure" in outcome.status) {
-      return { ok: false, error: "That key was not added." };
-    }
-    return { ok: true };
-  } catch (error) {
-    return { ok: false, error: shortError(error) };
-  }
 }
 
 async function deviceSecrets(
