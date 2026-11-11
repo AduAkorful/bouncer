@@ -1,6 +1,6 @@
 import type { ProofBundle } from "./proof-bundle.ts";
 
-/** What the server read from OutLayer for one guard call. */
+/** What this browser read from OutLayer for one guard call. */
 export type SeenAttestation = {
   call_id: string;
   project_id: string;
@@ -18,6 +18,7 @@ export type AttestationState =
   | { state: "none" }
   | { state: "pending" }
   | { state: "failed" }
+  | { state: "unpinned" }
   | { state: "ok"; value: SeenAttestation; pinned: string };
 
 export type Row = { id: string; label: string; status: "ok" | "bad" | "unchecked"; detail: string };
@@ -52,6 +53,8 @@ export function proofRows(input: {
     rows.push({ id: "enclave", label: "Made by the published guard code", status: "unchecked", detail: "This verdict has no attestation link. It was signed before attestations were kept." });
   } else if (attestation.state === "pending" || attestation.state === "none") {
     rows.push({ id: "enclave", label: "Made by the published guard code", status: "unchecked", detail: "OutLayer has not published this call's attestation yet. It usually takes a few seconds." });
+  } else if (attestation.state === "unpinned") {
+    rows.push({ id: "enclave", label: "Made by the published guard code", status: "unchecked", detail: "This site was built without a pinned guard version, so there is nothing to compare the attestation with." });
   } else if (attestation.state === "failed") {
     rows.push({ id: "enclave", label: "Made by the published guard code", status: "unchecked", detail: "The attestation could not be read just now." });
   } else {
@@ -59,12 +62,12 @@ export function proofRows(input: {
     const sameWasm = a.wasm_hash === a.executed_wasm_sha256 && a.wasm_hash === attestation.pinned;
     rows.push(
       sameWasm
-        ? { id: "enclave", label: "Made by the published guard code", status: "ok", detail: `Intel TDX attestation for guard ${short(a.wasm_hash)}, the version this site pins.` }
-        : { id: "enclave", label: "Made by the published guard code", status: "bad", detail: `The attested code ${short(a.wasm_hash)} is not the version this site pins (${short(attestation.pinned)}).` },
+        ? { id: "enclave", label: "Made by the published guard code", status: "ok", detail: `OutLayer's Intel TDX attestation, read by this browser from OutLayer, names guard ${short(a.wasm_hash)}: the version built into this site. The quote itself is checked with the command below, not in the browser.` }
+        : { id: "enclave", label: "Made by the published guard code", status: "bad", detail: `The attested code ${short(a.wasm_hash)} is not the version built into this site (${short(attestation.pinned)}).` },
     );
     rows.push(
       a.output_hash === call.outputSha256
-        ? { id: "answer", label: "This answer is the one attested", status: "ok", detail: `The answer this site received hashes to ${short(a.output_hash)}, the output hash in the attestation.` }
+        ? { id: "answer", label: "This answer is the one attested", status: "ok", detail: `The answer this site received hashes to ${short(a.output_hash)}, the output hash in OutLayer's attestation.` }
         : { id: "answer", label: "This answer is the one attested", status: "bad", detail: "The attested output hash is not the hash of the answer this site received." },
     );
   }

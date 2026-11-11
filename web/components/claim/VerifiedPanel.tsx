@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { apiGet } from "@/lib/api";
+import { readAttestation } from "@/lib/attestation-read";
 import type { ProofBundle } from "@/lib/proof-bundle";
-import { proofRows, verifyCommands, type AttestationState, type Row, type SeenAttestation } from "@/lib/proof-rows";
+import { proofRows, verifyCommands, type AttestationState, type Row } from "@/lib/proof-rows";
 import { verifyVerdict } from "@/lib/verdict-check";
 
 const POLL_MS = 4000;
@@ -24,11 +24,17 @@ export function VerifiedPanel({
   verdict,
   signature,
   guardKey,
+  outlayerApiUrl,
+  guardVersion,
 }: {
   bundle: ProofBundle | null;
   verdict: Record<string, unknown> | null;
   signature: string | null;
   guardKey: string | null;
+  /** Where this browser reads the attestation itself. Unset, the attestation rows stay unchecked. */
+  outlayerApiUrl: string | null;
+  /** The guard version built into this site, not one a server hands over. */
+  guardVersion: string | null;
 }) {
   const [attestation, setAttestation] = useState<AttestationState>({ state: "none" });
   const [signed, setSigned] = useState<boolean | null | "none">(verdict && signature ? null : "none");
@@ -58,18 +64,21 @@ export function VerifiedPanel({
       setAttestation({ state: "none" });
       return;
     }
+    if (!outlayerApiUrl || !guardVersion) {
+      setAttestation({ state: "unpinned" });
+      return;
+    }
     let cancel = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     setAttestation({ state: "pending" });
     const look = async (attempt: number) => {
-      const answer = await apiGet(`/proof/${callId}`, 12_000);
+      const answer = await readAttestation(outlayerApiUrl, callId);
       if (cancel) return;
-      const body = answer.ok ? (answer.body as { ok?: boolean; pending?: boolean; attestation?: SeenAttestation; pinned?: string } | null) : null;
-      if (body?.ok === true && body.attestation && typeof body.pinned === "string") {
-        setAttestation({ state: "ok", value: body.attestation, pinned: body.pinned });
-      } else if (body?.pending === true && attempt < POLLS) {
+      if (answer.ok) {
+        setAttestation({ state: "ok", value: answer.attestation, pinned: guardVersion });
+      } else if (answer.pending && attempt < POLLS) {
         timer = setTimeout(() => void look(attempt + 1), POLL_MS);
-      } else if (body?.pending === true) {
+      } else if (answer.pending) {
         setAttestation({ state: "pending" });
       } else {
         setAttestation({ state: "failed" });
@@ -80,7 +89,7 @@ export function VerifiedPanel({
       cancel = true;
       if (timer) clearTimeout(timer);
     };
-  }, [callId]);
+  }, [callId, outlayerApiUrl, guardVersion]);
 
   const rows = proofRows({ bundle, attestation, signature: signed });
   const commands = verifyCommands(bundle);

@@ -24,6 +24,12 @@ export type PublicEnv = {
   rpcUrl: string;
   /** Optional. A second RPC endpoint for the last try of a read. */
   rpcFallbackUrl: string | null;
+  /** Optional. A node that keeps old blocks, so a win older than a few days can still be checked. */
+  archivalRpcUrl: string | null;
+  /** Optional. OutLayer's API, which the claim page reads a call's attestation from directly. */
+  outlayerApiUrl: string | null;
+  /** Optional. The guard wasm SHA-256 this build pins. The Verified panel compares OutLayer's record with it. */
+  guardVersion: string | null;
   contractId: string;
   currency: string;
   decimals: number;
@@ -122,6 +128,9 @@ export function readPublicEnv(source: EnvSource | undefined): Ready<PublicEnv> |
     env: {
       rpcUrl: read("NEXT_PUBLIC_RPC_URL"),
       rpcFallbackUrl: httpsUrl(read("NEXT_PUBLIC_RPC_FALLBACK_URL")),
+      archivalRpcUrl: httpsUrl(read("NEXT_PUBLIC_ARCHIVAL_RPC_URL")),
+      outlayerApiUrl: httpsUrl(read("NEXT_PUBLIC_OUTLAYER_API_URL")),
+      guardVersion: /^[0-9a-f]{64}$/.test(read("NEXT_PUBLIC_GUARD_VERSION")) ? read("NEXT_PUBLIC_GUARD_VERSION") : null,
       contractId: read("NEXT_PUBLIC_VAULT_CONTRACT_ID"),
       currency: read("NEXT_PUBLIC_CURRENCY"),
       decimals: decimals as number,

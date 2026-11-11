@@ -49,7 +49,7 @@ Each step says what to do and what you should see.
 6. **Hand over a wrong bill.** The stamp says NOT APPROVED and the guard says "Not approved." Nothing tells you which field was wrong.
 7. **Hand over a bill that matches an unpaid line.** The guard says "Approved.", the verdict is recorded on the vault, and you see "You got in" with your cut and a countdown to when you can collect it.
 8. **Collect.** When the time lock opens, Collect on the door or the claim page creates a NEAR testnet account for your passkey if it does not have one yet, and sends the claim from it. The vault pays tUSDC to that account, and the page links the transaction on the testnet explorer.
-9. **Read the Verified panel on the claim page.** Each row ticks only when the page compared two things itself: the verdict's signature against the vault's guard key, the guard code that ran against the version this site pins, the answer against the enclave's attestation, and the model's reply signature against its attestation report.
+9. **Read the Verified panel on the claim page.** Each row ticks only when the page compared two things itself: the verdict's signature against the vault's guard key, the guard code that ran against the version built into the site (the browser reads OutLayer's attestation directly; the TDX quote itself is checked with `outlayer-verify`), the answer against that attestation, and the model's reply signature against its attestation report.
 10. **After the round closes, open the door's ledger.** The page shows your raid's ledger and recomputes its commitment, which must equal the one the vault stored before the round opened.
 11. **Run out of messages instead.** The stamp says TURNED AWAY, the guard points you at another open door, and the ledger opens at the close.
 
@@ -64,6 +64,8 @@ curl -s https://rpc.testnet.fastnear.com -H 'content-type: application/json' -d 
 ```
 
 The `result` bytes decode to a JSON list of door ids. `get_vault` with `{"vault_id":"<id>"}` returns that door's pot, round, open flag, commitment, cap, and time lock.
+
+Each door's **Wins** page (`/v/<id>/wins`, linked from the door) does this for every recorded win, in your browser and without our server. It lists the wins from the vault's storage, finds the `submit_verdict` call that recorded each one, checks that the signed verdict equals what the vault stored, and checks the guard's Ed25519 signature against the vault's guard key. Each check shows the `curl` commands to repeat it.
 
 ## Rules the code enforces
 

@@ -47,3 +47,7 @@ test("commands are built only from what the raid holds", () => {
   assert.equal(commands[0], `outlayer-verify call ${seen.call_id}`);
   assert.match(commands[1], /nonce=c{64}/);
 });
+
+test("a site built without a pinned guard version ticks no attestation row", () => {
+  assert.equal(status(proofRows({ bundle, attestation: { state: "unpinned" }, signature: true })).enclave, "unchecked");
+});

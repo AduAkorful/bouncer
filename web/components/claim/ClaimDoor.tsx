@@ -2,6 +2,7 @@
 
 import { SiteNav } from "@/components/SiteNav";
 import Link from "next/link";
+import { doorPaths } from "@/lib/door-read";
 import { useEffect, useRef, useState } from "react";
 import { apiPost } from "@/lib/api";
 import { Countdown } from "@/components/Countdown";
@@ -35,6 +36,8 @@ export function ClaimDoor({
   networkTag,
   round,
   rpcUrl,
+  outlayerApiUrl,
+  guardVersion,
   contractId,
   networkId,
   doorHref,
@@ -51,6 +54,8 @@ export function ClaimDoor({
   networkTag: string;
   round: string;
   rpcUrl: string;
+  outlayerApiUrl: string | null;
+  guardVersion: string | null;
   contractId: string;
   networkId: string;
   doorHref: string;
@@ -420,7 +425,12 @@ export function ClaimDoor({
             networkId={networkId}
           />
         ) : null}
-        {evidence && vault ? <VerifiedPanel bundle={evidence.bundle ?? null} verdict={evidence.verdict} signature={evidence.signature} guardKey={vault.guardPk} /> : null}
+        {evidence && vault ? <VerifiedPanel bundle={evidence.bundle ?? null} verdict={evidence.verdict} signature={evidence.signature} guardKey={vault.guardPk} outlayerApiUrl={outlayerApiUrl} guardVersion={guardVersion} /> : null}
+        {crack && raidId ? (
+          <Link href={`${doorPaths(vaultId).wins}?round=${round}&raid=${encodeURIComponent(raidId)}`} className="chalk-focus mt-4 inline-flex min-h-11 items-center text-sm text-chalk/80 underline decoration-white/20">
+            This win&apos;s public page: anyone can check it there
+          </Link>
+        ) : null}
         {vault && <p className="mt-4 font-mono text-xs text-chalk/80">Round {vault.round}</p>}
         <Link href={doorHref} className="chalk-focus mt-6 inline-flex min-h-11 items-center text-sm text-chalk/80 underline decoration-white/20">
           The door

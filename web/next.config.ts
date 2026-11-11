@@ -3,7 +3,7 @@ import type { NextConfig } from "next";
 /** Hosts the browser may talk to: this site, the server, and the testnet nodes. Nothing else can be called from a page. */
 function connectSources(): string {
   const hosts = new Set(["'self'"]);
-  for (const value of [process.env.NEXT_PUBLIC_API_URL, process.env.NEXT_PUBLIC_RPC_URL, process.env.NEXT_PUBLIC_RPC_FALLBACK_URL]) {
+  for (const value of [process.env.NEXT_PUBLIC_API_URL, process.env.NEXT_PUBLIC_RPC_URL, process.env.NEXT_PUBLIC_RPC_FALLBACK_URL, process.env.NEXT_PUBLIC_ARCHIVAL_RPC_URL, process.env.NEXT_PUBLIC_OUTLAYER_API_URL]) {
     try {
       if (value) hosts.add(new URL(value).origin);
     } catch {
