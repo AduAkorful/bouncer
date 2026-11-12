@@ -215,6 +215,7 @@ The `result` bytes decode to a JSON list of door ids. `get_vault` with `{"vault_
 | `guard` | The enclave guard | `cargo test` |
 | `server` | The relay and keeper | `npm test` |
 | `web` | The web app | `npm test` |
+| `score` | Renders the game's music: each door style's looping stems and stingers into `web/public/audio/score`. Run `node score/score.mjs` (Node 22 and ffmpeg). | none |
 | `prototype` | A clickable design reference with invented demo data. It is not the product, and nothing in the product reads it. | none |
 
 ## Run it locally
@@ -265,6 +266,8 @@ cd guard && cargo build --target wasm32-wasip2 --release
 - **Sound:** CC0 recordings, credited in `web/public/audio/AUDIO_CREDITS.md`.
 
 The repository's history starts on 3 November 2026. No earlier project is reused.
+
+AI assistants were used for planning, research, code review and parts of the implementation. The design and every decision are the author's own, and each change was tested before it was kept.
 
 ## License
 
