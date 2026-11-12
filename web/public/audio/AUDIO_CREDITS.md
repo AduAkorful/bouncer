@@ -2,6 +2,8 @@
 
 Every file here is CC0 (public domain dedication, https://creativecommons.org/publicdomain/zero/1.0/). Each was converted to mono, loudness-normalised, and saved as `.ogg` (Vorbis) and `.m4a` (AAC, for Safari). Nothing else in the game is recorded audio; anything not listed is synthesized in `lib/sfx.ts`.
 
+The music in `score/` (one folder per door style: eight looping stems and five stingers) is original, made for this game from oscillators and noise. It uses no samples and no third-party material.
+
 | File | Original | Pack | Author | License |
 |---|---|---|---|---|
 | `stamp-refused.ogg`, `stamp-refused.m4a` | `impactPunch_heavy_001.ogg` | [impact-sounds](https://kenney.nl/assets/impact-sounds) | Kenney (kenney.nl) | CC0 |

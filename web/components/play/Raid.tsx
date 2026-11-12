@@ -47,7 +47,8 @@ import { readHold, unlockHeld } from "@/lib/player-hold";
 import { loadRaid, raidFromDevice, saveRaid, loadTranscript, saveTranscript, type StoredRaid } from "@/lib/session-store";
 import type { Exchange } from "@/lib/raid-transcript";
 import { readStreet } from "@/lib/street";
-import { ACCRA_SETTING, pieceLearn, soundCity, STREET_VIEW } from "@/lib/street-setting";
+import { ACCRA_SETTING, pieceLearn, soundCity, STREET_VIEW, streetPieces } from "@/lib/street-setting";
+import { styleForPosters } from "@/lib/score";
 import { beatGlow, parallax, startIdle } from "@/lib/idle";
 import { D, E, registerMotion, roll } from "@/lib/motion";
 import { rigTo, rigTween } from "@/lib/rigMotion";
@@ -460,7 +461,14 @@ export default function PlayFrame({
 
   useEffect(() => {
     setSoundCity(soundCity(setting));
+    music.style(styleForPosters(streetPieces(setting).posters));
   }, [setting]);
+
+  // The score follows the raid: the street outside until a raid opens, then the night builds as messages run down.
+  useEffect(() => {
+    if (!playing) music.state("street");
+    else if (stage === "play") music.left(left, messageBudget);
+  }, [playing, stage, left, messageBudget]);
 
   // A phone keeps the same street scale as the door and swipes sideways.
   // A wide stage opens the viewBox until the suya cart, the chop-bar sign, and the taxi
@@ -868,6 +876,7 @@ export default function PlayFrame({
     say("Not approved.");
     setRefused(true);
     sfx.thud();
+    sfx.refusedSting();
     const s = scene.current;
     anim(() => {
       rigTo(s, "refuse", 0.22, "power3.out");
@@ -892,6 +901,7 @@ export default function PlayFrame({
     setStage("play");
     say("Approved.");
     sfx.approved();
+    sfx.approvedSting();
     setTimeout(sfx.clink, 250);
     setTimeout(sfx.creak, 500);
     setTimeout(sfx.whoosh, 650);

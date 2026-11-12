@@ -1,9 +1,13 @@
-// The game's moments (stamps, paper, coins, the door, the stings) are recorded CC0 files in `public/audio`,
-// listed in `public/audio/AUDIO_CREDITS.md`. The street, the club loop and the voices are still synthesized here.
+// The game's moments (stamps, paper, coins, the door) are recorded CC0 files in `public/audio`, listed in
+// `public/audio/AUDIO_CREDITS.md`. The music is the door's score (`lib/score.ts`): stems that follow the raid,
+// and stingers in its key. The guard's voice is short notes from the chord playing. The street is synthesized here.
 // Nothing plays until the player has tapped (browsers require a gesture) and sound is on.
 //
 // Graph: every voice → master → compressor → speakers, with a send into a generated-impulse reverb.
 // The club's music runs through a low-pass "wall" whose cutoff says where you're standing.
+
+import { stateForLeft, type ScoreState } from "./score-mix.ts";
+import { createScore, noteInRegister, type StyleId } from "./score.ts";
 
 let ctx: AudioContext | null = null;
 let enabled = false;
@@ -204,10 +208,17 @@ export const sfx = {
   sheet: () => void sample("paper", { gain: 0.7 }),
   /** The APPROVED stamp */
   approved: () => void sample("stamp-approved", { gain: 1, verb: 0.2 }),
-  /** You got in: the club's band hits a sting */
-  gotIn: () => void sample("win", { gain: 0.75, verb: 0.15 }),
-  /** Out of messages and turned away */
-  turnedAway: () => void sample("turned-away", { gain: 0.7 }),
+  /** You got in. With the score playing, `music.open()` plays the door's own sting on the bar line instead. */
+  gotIn: () => void (score.ready || sample("win", { gain: 0.75, verb: 0.15 })),
+  /** Out of messages and turned away: the door's falling line, then the music falls away. */
+  turnedAway: () => {
+    if (score.cue("out", { then: "out" })) setTimeout(() => score.fade(4), 2200);
+    else sample("turned-away", { gain: 0.7 });
+  },
+  /** A bill refused: the door's game-over line, with the music ducked for a bar. */
+  refusedSting: () => void score.cue("refuse"),
+  /** A bill approved: the door's rising line. */
+  approvedSting: () => void score.cue("approve"),
   /** The vault paid: chips land, then the steel-drum sting */
   paid: () => {
     sample("paid-chips", { gain: 0.9 });
@@ -413,12 +424,44 @@ export interface Voice {
   /** Formant scale: lower is a bigger chest */
   formant: number;
   gain: number;
+  /** A character who sings their syllables: the MIDI range their notes are picked from, and the wave. */
+  sings?: { lo: number; hi: number; wave: OscillatorType };
 }
 
 export const VOICES = {
-  sam: { base: 82, spread: 0.28, formant: 0.8, gain: 0.55 },
+  sam: { base: 82, spread: 0.28, formant: 0.8, gain: 0.32, sings: { lo: 50, hi: 64, wave: "triangle" } },
   crowd: { base: 150, spread: 0.6, formant: 1, gain: 0.12 },
 } satisfies Record<string, Voice>;
+
+/** A syllable sung on a note of the chord playing now, in the character's register. */
+function sung(v: Voice & { sings: NonNullable<Voice["sings"]> }, o: Out) {
+  if (!ctx) return;
+  const t = ctx.currentTime + (o.when ?? 0);
+  const m = noteInRegister(score.chordNow(), v.sings.lo, v.sings.hi, Math.random());
+  const f = 440 * 2 ** ((m - 69) / 12);
+  const osc = ctx.createOscillator();
+  osc.type = v.sings.wave;
+  osc.frequency.setValueAtTime(f * 1.02, t);
+  osc.frequency.exponentialRampToValueAtTime(f, t + 0.02);
+  // A little vowel on top, so it reads as a voice and not a beep.
+  const [f1] = VOWELS[Math.floor(Math.random() * VOWELS.length)]!;
+  const bp = ctx.createBiquadFilter();
+  bp.type = "peaking";
+  bp.frequency.value = f1 * v.formant;
+  bp.Q.value = 3;
+  bp.gain.value = 8;
+  const lp = ctx.createBiquadFilter();
+  lp.type = "lowpass";
+  lp.frequency.value = 2600;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(v.gain, t + 0.008);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.085);
+  osc.connect(bp).connect(lp).connect(g);
+  route(g, { verb: 0.06, ...o });
+  osc.start(t);
+  osc.stop(t + 0.1);
+}
 
 // First two formants of a, e, i, o, u.
 const VOWELS = [
@@ -432,6 +475,7 @@ const VOWELS = [
 /** A syllable of gibberish: a buzz shaped by two vowel formants, so it sounds like speech without words. */
 export function babble(v: Voice, o: Out = {}) {
   if (!enabled || !ensure() || !ctx) return;
+  if (v.sings) return sung(v as Voice & { sings: NonNullable<Voice["sings"]> }, o);
   const t = ctx.currentTime + (o.when ?? 0);
   const f0 = v.base * (1 + (Math.random() - 0.35) * v.spread);
   const [f1, f2] = VOWELS[Math.floor(Math.random() * VOWELS.length)]!;
@@ -512,7 +556,11 @@ const ambience = (() => {
   };
 })();
 
-// ——— The club behind the door: a four-bar loop heard through a wall. ———
+// ——— The door's score ———
+
+export const score = createScore();
+
+// ——— The old club loop, kept for a browser that cannot load the score. ———
 
 type BeatFn = (accent: boolean) => void;
 export type Room = "street" | "open" | "quiet";
@@ -523,7 +571,7 @@ const ROOMS: Record<Room, { cut: number; gain: number }> = {
   quiet: { cut: 200, gain: 0.15 },
 };
 
-export const music = (() => {
+const legacy = (() => {
   const BPM = 118;
   const step = 60 / BPM / 4;
   // Am7 · Fmaj7 · C/G · G6, one bar each
@@ -695,6 +743,69 @@ export const music = (() => {
       duck = null;
       delay = null;
       pluck = null;
+    },
+  };
+})();
+
+/**
+ * The music the raid talks to. It plays the door's score; if the score cannot load, the old club loop plays
+ * through its wall instead. `state` follows the raid; once the player is inside or turned away it holds.
+ */
+export const music = (() => {
+  let want: ScoreState = "street";
+  let starting = false;
+  let usingLegacy = false;
+  const final = (s: ScoreState) => s === "inside" || s === "out";
+  return {
+    style(id: StyleId) {
+      score.setStyle(id);
+    },
+    onBeat(fn: (accent: boolean) => void) {
+      const a = score.onBeat(fn);
+      const b = legacy.onBeat(fn);
+      return () => { a(); b(); };
+    },
+    /** Starts the music. `room` is kept for the old loop. */
+    start(room: Room = "street") {
+      if (!enabled || !ensure() || !ctx || !master || score.ready || starting) return;
+      starting = true;
+      if (room === "street") ambience.start();
+      void score.start(ctx, master, want).then((ok) => {
+        starting = false;
+        if (!ok && enabled) {
+          usingLegacy = true;
+          legacy.start(room);
+        }
+      });
+    },
+    /** Where the raid is: messages left, inside, or out. Moves on the next bar line. */
+    state(next: ScoreState, force = false) {
+      if (final(want) && !force) return;
+      want = next;
+      score.set(next);
+    },
+    /** Messages left in a raid of `budget`. */
+    left(left: number, budget: number) {
+      this.state(stateForLeft(left, budget));
+    },
+    /** A cue on the next eighth note. */
+    cue(name: "approve" | "refuse") {
+      score.cue(name);
+    },
+    /** The door opens: on the next bar line the wall lifts and the full mix comes in with the door's sting. */
+    open() {
+      ambience.stop();
+      want = "inside";
+      if (score.cue("gotin", { onBar: true, then: "inside" })) return;
+      if (usingLegacy) legacy.open();
+    },
+    stop() {
+      score.stop();
+      legacy.stop();
+      ambience.stop();
+      starting = false;
+      usingLegacy = false;
+      want = "street";
     },
   };
 })();
