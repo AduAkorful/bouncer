@@ -29,6 +29,8 @@ export type PublicEnv = {
   outlayerApiUrl: string | null;
   /** Optional. The guard wasm SHA-256 this build pins. The Verified panel compares OutLayer's record with it. */
   guardVersion: string | null;
+  /** Optional. Guard versions published before this one. A win signed by any of them is still our guard's code. */
+  pastGuardVersions: string[];
   contractId: string;
   currency: string;
   decimals: number;
@@ -128,6 +130,7 @@ export function readPublicEnv(source: EnvSource | undefined): Ready<PublicEnv> |
       archivalRpcUrl: httpsUrl(read("NEXT_PUBLIC_ARCHIVAL_RPC_URL")),
       outlayerApiUrl: httpsUrl(read("NEXT_PUBLIC_OUTLAYER_API_URL")),
       guardVersion: /^[0-9a-f]{64}$/.test(read("NEXT_PUBLIC_GUARD_VERSION")) ? read("NEXT_PUBLIC_GUARD_VERSION") : null,
+      pastGuardVersions: read("NEXT_PUBLIC_GUARD_PAST_VERSIONS").split(",").map((v) => v.trim()).filter((v) => /^[0-9a-f]{64}$/.test(v)),
       contractId: read("NEXT_PUBLIC_VAULT_CONTRACT_ID"),
       currency: read("NEXT_PUBLIC_CURRENCY"),
       decimals: decimals as number,

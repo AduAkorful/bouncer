@@ -19,7 +19,7 @@ export type AttestationState =
   | { state: "pending" }
   | { state: "failed" }
   | { state: "unpinned" }
-  | { state: "ok"; value: SeenAttestation; pinned: string };
+  | { state: "ok"; value: SeenAttestation; pinned: string; earlier?: string[] };
 
 export type Row = { id: string; label: string; status: "ok" | "bad" | "unchecked"; detail: string };
 
@@ -59,11 +59,16 @@ export function proofRows(input: {
     rows.push({ id: "enclave", label: "Made by the published guard code", status: "unchecked", detail: "The attestation could not be read just now." });
   } else {
     const a = attestation.value;
-    const sameWasm = a.wasm_hash === a.executed_wasm_sha256 && a.wasm_hash === attestation.pinned;
+    // A win signed before a guard update was made by the guard published then, so it is checked against every
+    // version this site lists, and the row says which one it was.
+    const ran = a.wasm_hash === a.executed_wasm_sha256;
+    const current = ran && a.wasm_hash === attestation.pinned;
+    const earlier = ran && !current && (attestation.earlier ?? []).includes(a.wasm_hash);
+    const which = current ? "the version built into this site" : `an earlier published version of the guard (this site is now on ${short(attestation.pinned)})`;
     rows.push(
-      sameWasm
-        ? { id: "enclave", label: "Made by the published guard code", status: "ok", detail: `OutLayer's Intel TDX attestation, read by this browser from OutLayer, names guard ${short(a.wasm_hash)}: the version built into this site. The quote itself is checked with the command below, not in the browser.` }
-        : { id: "enclave", label: "Made by the published guard code", status: "bad", detail: `The attested code ${short(a.wasm_hash)} is not the version built into this site (${short(attestation.pinned)}).` },
+      current || earlier
+        ? { id: "enclave", label: "Made by the published guard code", status: "ok", detail: `OutLayer's Intel TDX attestation, read by this browser from OutLayer, names guard ${short(a.wasm_hash)}: ${which}. The quote itself is checked with the command below, not in the browser.` }
+        : { id: "enclave", label: "Made by the published guard code", status: "bad", detail: `The attested code ${short(a.wasm_hash)} is not a guard version this site lists as published (now ${short(attestation.pinned)}).` },
     );
     rows.push(
       a.output_hash === call.outputSha256

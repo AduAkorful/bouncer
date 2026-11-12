@@ -6,6 +6,7 @@ import { KeyPair, type KeyPairString } from "near-api-js";
 import { apiPost } from "./api.ts";
 import { deriveSecrets, type DeviceSecrets } from "./device-pass.ts";
 import { unlockHeld } from "./player-hold.ts";
+import { mergeProof, type ProofBundle } from "./proof-bundle.ts";
 
 export type PlayerSession = {
   player: { name: string; renameUsed: boolean; streak: number; nights: number; created: string; raidedToday?: boolean };
@@ -38,12 +39,26 @@ export async function rollPlayerName(secrets: DeviceSecrets): Promise<{ ok: true
 export type ResumedRaid = {
   blob: string;
   progress: { used: number; outcomes: ("ask" | "refused" | "approved")[]; street: unknown; won: boolean; amount: string | null };
+  /** A win's signed verdict and proof, kept by the server so another sign-in can show the Verified panel. */
+  evidence: { verdict: Record<string, unknown>; signature: string; proof: ProofBundle } | null;
 };
+
+const record = (v: unknown): Record<string, unknown> | null => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null);
+
+/** Rebuilds the proof bundle the browser would have kept, through the same reader, so nothing unchecked gets in. */
+export function resumedEvidence(raw: unknown, preflight: unknown): ResumedRaid["evidence"] {
+  const e = record(raw);
+  const verdict = record(e?.verdict);
+  if (!e || !verdict || typeof e.signature !== "string") return null;
+  const opened = mergeProof(null, { model_proof: preflight });
+  const proof = mergeProof(opened, { ok: true, verdict, signature: e.signature, attestation: e.attestation, proof: e.proof });
+  return { verdict, signature: e.signature, proof };
+}
 
 /** The raid this passkey left on the server: the guard's blob and the counts, outcomes and win another device needs. */
 export async function resumeRaid(secrets: DeviceSecrets, vaultId: string, round: string): Promise<ResumedRaid | null> {
   const result = await apiPost("/player/resume", { vaultId, round }, () => ({ "x-player-auth": playerHeader(secrets, "/player/resume") }));
-  const body = result.ok && result.body && typeof result.body === "object" ? result.body as { blob?: unknown; progress?: Partial<ResumedRaid["progress"]> } : null;
+  const body = result.ok && result.body && typeof result.body === "object" ? result.body as { blob?: unknown; progress?: Partial<ResumedRaid["progress"]> & { preflight?: unknown; evidence?: unknown } } : null;
   if (typeof body?.blob !== "string" || body.blob.length === 0) return null;
   const p = body.progress ?? {};
   const outcomes = Array.isArray(p.outcomes) ? p.outcomes.filter((item): item is "ask" | "refused" | "approved" => item === "ask" || item === "refused" || item === "approved") : [];
@@ -56,6 +71,7 @@ export async function resumeRaid(secrets: DeviceSecrets, vaultId: string, round:
       won: p.won === true,
       amount: typeof p.amount === "string" && /^[0-9]+$/.test(p.amount) ? p.amount : null,
     },
+    evidence: resumedEvidence(p.evidence, p.preflight),
   };
 }
 

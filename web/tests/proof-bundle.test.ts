@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { mergeProof, readAttestation, readPreflight, readReply } from "../lib/proof-bundle.ts";
+import { resumedEvidence } from "../lib/player-session.ts";
 
 const call = "16df134e-f31e-4f0a-a035-9dc7373c0017";
 const attestation = { call_id: call, url: `https://testnet-api.outlayer.ai/attestations/by-call/${call}`, output_sha256: "0f".repeat(32) };
@@ -46,4 +47,17 @@ test("a signed answer without evidence clears a stale verdict call and reply", (
   const again = mergeProof(signed, { ok: true, signature: "bb", verdict: { vault_id: "v" } });
   assert.equal(again.verdictCall, undefined);
   assert.equal(again.reply, undefined);
+});
+
+test("evidence the server kept for a win rebuilds the same bundle, and a malformed piece is left out", () => {
+  const kept = resumedEvidence({ verdict: { vault_id: "v" }, signature: "aa", attestation, proof: reply }, preflight);
+  assert.equal(kept?.signature, "aa");
+  assert.equal(kept?.proof.verdictCall?.callId, call);
+  assert.equal(kept?.proof.reply?.chatId, "c1");
+  assert.equal(kept?.proof.preflight?.nonce, "a4".repeat(32));
+  const partial = resumedEvidence({ verdict: { vault_id: "v" }, signature: "aa", attestation: { ...attestation, url: "http://x.test" }, proof: reply }, null);
+  assert.equal(partial?.proof.verdictCall, undefined);
+  assert.equal(partial?.proof.preflight, undefined);
+  assert.equal(resumedEvidence({ verdict: null, signature: "aa" }, preflight), null);
+  assert.equal(resumedEvidence(null, preflight), null);
 });

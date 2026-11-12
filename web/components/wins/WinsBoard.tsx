@@ -38,7 +38,8 @@ const STATUS: Record<string, string> = {
 
 function when(ns: string): string {
   const ms = Number(BigInt(ns) / 1_000_000n);
-  return new Date(ms).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short", timeZoneName: "short" });
+  // dateStyle and timeStyle cannot be combined with timeZoneName: the browser throws, so the fields are named one by one.
+  return new Date(ms).toLocaleString(undefined, { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" });
 }
 
 /**

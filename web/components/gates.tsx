@@ -252,6 +252,7 @@ export async function ClaimGate({ vaultId, round }: { vaultId?: string; round?: 
       rpcUrl={labels.rpcUrl}
       outlayerApiUrl={labels.outlayerApiUrl}
       guardVersion={labels.guardVersion}
+      pastGuardVersions={labels.pastGuardVersions}
       contractId={labels.contractId}
       networkId={labels.networkId}
       doorHref={doorPaths(page.vaultId).door}

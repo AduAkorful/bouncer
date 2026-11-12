@@ -11,6 +11,7 @@ import { NetworkTag } from "@/components/bits";
 import { TokenAmount, TokenWord } from "@/components/TokenAmount";
 import { deriveSecrets } from "@/lib/device-pass";
 import { readHold, unlockHeld } from "@/lib/player-hold";
+import { resumeRaid } from "@/lib/player-session";
 import { readPayoutAccount, testnetAccountId, writePayoutAccount } from "@/lib/imported-account";
 import { sendClaim } from "@/lib/send-claim";
 import { setSound, sfx } from "@/lib/sfx";
@@ -38,6 +39,7 @@ export function ClaimDoor({
   rpcUrl,
   outlayerApiUrl,
   guardVersion,
+  pastGuardVersions,
   contractId,
   networkId,
   doorHref,
@@ -56,6 +58,7 @@ export function ClaimDoor({
   rpcUrl: string;
   outlayerApiUrl: string | null;
   guardVersion: string | null;
+  pastGuardVersions: string[];
   contractId: string;
   networkId: string;
   doorHref: string;
@@ -236,6 +239,9 @@ export function ClaimDoor({
       return;
     }
     setRaidId(secrets.raidId);
+    // The server keeps a win's evidence with the raid, so a new sign-in still shows the Verified panel.
+    const resumed = await resumeRaid(secrets, vaultId, round).catch(() => null);
+    if (resumed?.evidence) setEvidence({ bundle: resumed.evidence.proof, verdict: resumed.evidence.verdict, signature: resumed.evidence.signature });
     await readCrack(secrets.raidId);
   }
 
@@ -425,7 +431,10 @@ export function ClaimDoor({
             networkId={networkId}
           />
         ) : null}
-        {evidence && vault ? <VerifiedPanel bundle={evidence.bundle ?? null} verdict={evidence.verdict} signature={evidence.signature} guardKey={vault.guardPk} outlayerApiUrl={outlayerApiUrl} guardVersion={guardVersion} /> : null}
+        {evidence && vault ? <VerifiedPanel bundle={evidence.bundle ?? null} verdict={evidence.verdict} signature={evidence.signature} guardKey={vault.guardPk} outlayerApiUrl={outlayerApiUrl} guardVersion={guardVersion} pastGuardVersions={pastGuardVersions} /> : null}
+        {!evidence && crack && raidId ? (
+          <p className="mt-4 text-sm text-chalk/80">This browser does not hold this win&apos;s signed verdict, so its checks are not shown here. The public page below runs them from chain data.</p>
+        ) : null}
         {crack && raidId ? (
           <Link href={`${doorPaths(vaultId).wins}?round=${round}&raid=${encodeURIComponent(raidId)}`} className="chalk-focus mt-4 inline-flex min-h-11 items-center text-sm text-chalk/80 underline decoration-white/20">
             This win&apos;s public page: anyone can check it there

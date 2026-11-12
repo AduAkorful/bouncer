@@ -48,6 +48,20 @@ test("commands are built only from what the raid holds", () => {
   assert.match(commands[1], /nonce=c{64}/);
 });
 
+test("a win made by an earlier published guard version still verifies, and says so", () => {
+  const OLD = "b".repeat(64);
+  const attestation: AttestationState = { state: "ok", value: { ...seen, wasm_hash: OLD, executed_wasm_sha256: OLD }, pinned: WASM, earlier: [OLD] };
+  const rows = proofRows({ bundle, attestation, signature: true });
+  assert.equal(status(rows).enclave, "ok");
+  assert.match(rows.find((r) => r.id === "enclave")!.detail, /earlier published version/);
+});
+
+test("a guard version the site does not list is still refused", () => {
+  const OTHER = "c".repeat(64);
+  const attestation: AttestationState = { state: "ok", value: { ...seen, wasm_hash: OTHER, executed_wasm_sha256: OTHER }, pinned: WASM, earlier: ["b".repeat(64)] };
+  assert.equal(status(proofRows({ bundle, attestation, signature: true })).enclave, "bad");
+});
+
 test("a site built without a pinned guard version ticks no attestation row", () => {
   assert.equal(status(proofRows({ bundle, attestation: { state: "unpinned" }, signature: true })).enclave, "unchecked");
 });

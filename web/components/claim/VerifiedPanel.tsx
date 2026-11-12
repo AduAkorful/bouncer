@@ -26,6 +26,7 @@ export function VerifiedPanel({
   guardKey,
   outlayerApiUrl,
   guardVersion,
+  pastGuardVersions = [],
 }: {
   bundle: ProofBundle | null;
   verdict: Record<string, unknown> | null;
@@ -35,6 +36,8 @@ export function VerifiedPanel({
   outlayerApiUrl: string | null;
   /** The guard version built into this site, not one a server hands over. */
   guardVersion: string | null;
+  /** Guard versions published before the current one, also built into this site. */
+  pastGuardVersions?: string[];
 }) {
   const [attestation, setAttestation] = useState<AttestationState>({ state: "none" });
   const [signed, setSigned] = useState<boolean | null | "none">(verdict && signature ? null : "none");
@@ -75,7 +78,7 @@ export function VerifiedPanel({
       const answer = await readAttestation(outlayerApiUrl, callId);
       if (cancel) return;
       if (answer.ok) {
-        setAttestation({ state: "ok", value: answer.attestation, pinned: guardVersion });
+        setAttestation({ state: "ok", value: answer.attestation, pinned: guardVersion, earlier: pastGuardVersions });
       } else if (answer.pending && attempt < POLLS) {
         timer = setTimeout(() => void look(attempt + 1), POLL_MS);
       } else if (answer.pending) {

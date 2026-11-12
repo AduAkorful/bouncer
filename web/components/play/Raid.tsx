@@ -396,7 +396,8 @@ export default function PlayFrame({
         used: progress.used,
         outcomes: progress.outcomes,
         street: readStreet(progress.street),
-        ...(progress.won ? { verdict: { amount: progress.amount }, recorded: true } : {}),
+        ...(progress.won ? { verdict: restored.evidence?.verdict ?? { amount: progress.amount }, recorded: true } : {}),
+        ...(restored.evidence ? { signature: restored.evidence.signature, proof: restored.evidence.proof } : {}),
       };
       await saveRaid(storageName, vaultId, vault.round, next);
       setBusy(false);
