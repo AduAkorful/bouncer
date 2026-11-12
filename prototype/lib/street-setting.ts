@@ -85,7 +85,7 @@ export const SETTING_FIELDS = [
   { key: "passer", label: "Passing by", options: labels(PASSERS) },
   { key: "seller", label: "Seller in the queue", options: labels(SELLERS) },
   { key: "shop", label: "Shop next door", options: labels(SHOPS) },
-  { key: "posters", label: "Posters", options: labels(POSTERS) },
+  { key: "posters", label: "Posters and music", options: labels(POSTERS) },
   { key: "board", label: "Pot board", options: labels(BOARDS) },
   { key: "weather", label: "Sky", options: labels(WEATHERS) },
   { key: "sound", label: "Sound", options: labels(SOUNDS) },
