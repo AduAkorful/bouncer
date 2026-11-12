@@ -10,8 +10,9 @@ import { TokenAmount, TokenWord } from "@/components/TokenAmount";
 import type { ProofBundle } from "@/lib/proof-bundle";
 import { proofRows, verifyCommands, type AttestationState, type Row } from "@/lib/proof-rows";
 import { shareText, squares, type Square } from "@/lib/share-text";
-import { CUT, TOKEN, UNLOCK_NS, doorSpec, frontId } from "@/lib/demo/world";
+import { CUT, REAL_WIN, TOKEN, UNLOCK_NS, doorSpec, frontId } from "@/lib/demo/world";
 import { doorPaths } from "@/lib/door-read";
+import { payoutExplorerUrl } from "@/lib/explorer";
 
 const GRID: Square[] = ["ask", "ask", "approved", "none", "none", "none"];
 const HASH = "ab".repeat(32);
@@ -25,7 +26,7 @@ export function ClaimFrame({ query }: { query: Record<string, string> }) {
   const paths = doorPaths(spec.id);
   const state = query.state || "locked";
   const paid = state === "paid";
-  const wallet = state === "paid" || state === "wallet";
+  const wallet = state === "paid" || state === "wallet" || state === "sent";
   const guard = spec.name || null;
   // No crack exists yet for a held verdict, a raid this browser does not hold, or one the vault has no record of.
   const crack = !["held", "reading", "missing", "none"].includes(state);
@@ -66,11 +67,11 @@ export function ClaimFrame({ query }: { query: Record<string, string> }) {
                 <p className="mt-2 text-sm text-chalk/60">This device&apos;s passkey has to be a full-access key on that account. The account pays the gas.</p>
               </>
             ) : null}
-            <a href={`${paths.claim}?state=paying`} className="mt-4 block w-full rounded-2xl bg-chalk py-4 text-center font-sign text-lg text-ink">Claim</a>
+            <a href={`${paths.claim}&state=paying`} className="mt-4 block w-full rounded-2xl bg-chalk py-4 text-center font-sign text-lg text-ink">Claim</a>
             {state === "existing" ? (
-              <a href={`${paths.claim}?state=ready`} className="mt-3 block w-full text-center text-sm text-chalk/70 underline decoration-white/20">Use this passkey&apos;s own account</a>
+              <a href={`${paths.claim}&state=ready`} className="mt-3 block w-full text-center text-sm text-chalk/70 underline decoration-white/20">Use this passkey&apos;s own account</a>
             ) : (
-              <a href={`${paths.claim}?state=existing`} className="mt-3 block w-full text-center text-sm text-chalk/70 underline decoration-white/20">Use an account you already have</a>
+              <a href={`${paths.claim}&state=existing`} className="mt-3 block w-full text-center text-sm text-chalk/70 underline decoration-white/20">Use an account you already have</a>
             )}
           </section>
         ) : null}
@@ -87,8 +88,13 @@ export function ClaimFrame({ query }: { query: Record<string, string> }) {
           </>
         ) : null}
         {state === "closed" ? <p className="mt-5 text-sm text-chalk/70">This crack can no longer be claimed.</p> : null}
-        {wallet ? <Wallet open={state === "wallet"} /> : null}
-        {state === "verified" || state === "mismatch" || state === "unchecked" || paid ? <Verified kind={state === "mismatch" ? "bad" : state === "unchecked" ? "unchecked" : "ok"} /> : null}
+        {wallet ? <Wallet open={state === "wallet" || state === "sent"} sent={state === "sent"} /> : null}
+        {state === "verified" || state === "mismatch" || state === "unchecked" || state === "unpinned" || paid ? <Verified kind={state === "mismatch" ? "bad" : state === "unchecked" ? "unchecked" : state === "unpinned" ? "unpinned" : "ok"} /> : null}
+        {crack ? (
+          <a href={`${paths.wins}&round=1&raid=demo-raid`} className="chalk-focus mt-4 inline-flex min-h-11 items-center text-sm text-chalk/80 underline decoration-white/20">
+            This win&apos;s public page: anyone can check it there
+          </a>
+        ) : null}
         <p className="mt-4 font-mono text-xs text-chalk/80">Round 1</p>
         <a href={paths.door} className="chalk-focus mt-6 inline-flex min-h-11 items-center text-sm text-chalk/80 underline decoration-white/20">The door</a>
       </div>
@@ -96,10 +102,10 @@ export function ClaimFrame({ query }: { query: Record<string, string> }) {
   );
 }
 
-/** The explorer link. The real transaction hash is filled in after a real testnet win; no hash is invented here. */
+/** The explorer link, to a real testnet payment (REAL_WIN). No hash is invented here. */
 function PaymentLink() {
   return (
-    <a href="#tx-hash-pending" data-tx="TX HASH PENDING" className="chalk-focus mt-4 inline-flex min-h-11 items-center text-sm text-chalk underline decoration-white/20">
+    <a href={payoutExplorerUrl(REAL_WIN.claimTx) ?? "#"} data-tx={REAL_WIN.claimTx} className="chalk-focus mt-4 inline-flex min-h-11 items-center text-sm text-chalk underline decoration-white/20">
       View the payment
     </a>
   );
@@ -107,7 +113,7 @@ function PaymentLink() {
 
 function Paid({ sign, guard, doorHref, revealHref }: { sign: string; guard: string | null; doorHref: string; revealHref: string }) {
   const ref = useRef<HTMLElement>(null);
-  const [shown, setShown] = useState("12.5");
+  const [shown, setShown] = useState("3.24");
   useLayoutEffect(() => {
     if (!ref.current || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const ctx = gsap.context(() => {
@@ -118,7 +124,7 @@ function Paid({ sign, guard, doorHref, revealHref }: { sign: string; guard: stri
       const counter = ref.current?.querySelector(".paid-count");
       if (counter) {
         const state = { value: 0 };
-        gsap.to(state, { value: 12.5, duration: 1.2, ease: "power2.out", delay: 0.3, onUpdate: () => { counter.textContent = state.value.toFixed(1); setShown(state.value.toFixed(1)); } });
+        gsap.to(state, { value: 3.24, duration: 1.2, ease: "power2.out", delay: 0.3, onUpdate: () => { counter.textContent = state.value.toFixed(2); setShown(state.value.toFixed(2)); } });
       }
     }, ref);
     return () => ctx.revert();
@@ -132,7 +138,7 @@ function Paid({ sign, guard, doorHref, revealHref }: { sign: string; guard: stri
           <text x="80" y="42" textAnchor="middle" fill="#4fd18b" fontFamily="var(--font-bungee)" fontSize="30" letterSpacing="3">PAID</text>
         </g>
       </svg>
-      <p className="paid-rest mt-3 font-sign text-4xl text-brass"><span className="paid-count tabular-nums">{shown}</span> <span className="text-lg">tUSDC</span></p>
+      <p className="paid-rest mt-3 font-sign text-4xl text-brass"><span className="paid-count tabular-nums">{shown}</span> <span className="font-mono text-lg">tUSDC</span></p>
       <p className="paid-rest mt-2 text-sm text-chalk/80">{guard ? `${guard} let you in, and the vault paid.` : "You got in, and the vault paid."} It is in your account now.</p>
       <p className="paid-rest mt-2 text-lg tracking-widest" aria-hidden>{squares(GRID)}</p>
       <div className="paid-rest mt-4 flex flex-col gap-3">
@@ -144,11 +150,12 @@ function Paid({ sign, guard, doorHref, revealHref }: { sign: string; guard: stri
   );
 }
 
-function Wallet({ open }: { open: boolean }) {
+function Wallet({ open, sent }: { open: boolean; sent: boolean }) {
   return (
     <section className="mt-5 rounded-3xl border border-white/10 bg-night-2 p-5">
       <h2 className="font-sign text-xl">Your wallet</h2>
-      <p className="mt-3 text-sm text-chalk/70">12.5 tUSDC</p>
+      <p className="mt-3 text-sm text-chalk/70">{sent ? "3.14 tUSDC" : "3.24 tUSDC"}</p>
+      <p className="mt-2 text-sm text-chalk/70">Signed in on this browser. Your wallet was made for this passkey.</p>
       <details className="mt-4 group" open={open}>
         <summary className="chalk-focus inline-flex min-h-11 cursor-pointer items-center text-sm text-chalk/80 underline decoration-white/20">Move your winnings</summary>
         <p className="mt-2 text-sm text-chalk/60">Send the token to another testnet account, or take this account to another wallet. You do not need either to be paid.</p>
@@ -162,6 +169,7 @@ function Wallet({ open }: { open: boolean }) {
           <label className="block text-sm text-chalk/80" htmlFor="payout-amount">Amount</label>
           <input id="payout-amount" inputMode="decimal" className="w-full rounded-2xl border border-white/10 bg-night px-3 py-3 font-mono text-sm" />
           <button type="submit" className="chalk-focus min-h-11 w-full rounded-2xl bg-chalk py-3 font-sign text-lg text-ink">Send</button>
+          {sent ? <p role="status" className="text-sm text-chalk/80">Sent 0.10 tUSDC to kofi.testnet.</p> : null}
         </form>
       </details>
     </section>
@@ -174,9 +182,9 @@ const BADGE: Record<Row["status"], { word: string; tone: string }> = {
   unchecked: { word: "Not checked", tone: "border-white/15 text-chalk/70" },
 };
 
-function Verified({ kind }: { kind: "ok" | "bad" | "unchecked" }) {
+function Verified({ kind }: { kind: "ok" | "bad" | "unchecked" | "unpinned" }) {
   const rows = panelRows(kind);
-  const bundle = kind === "unchecked" ? null : bundleFor(kind);
+  const bundle = kind === "unchecked" ? null : bundleFor(kind === "unpinned" ? "ok" : kind);
   const commands = verifyCommands(bundle);
   return (
     <section aria-labelledby="verified-heading" className="mt-5 rounded-3xl border border-white/10 bg-night-2 p-5">
@@ -209,7 +217,7 @@ function Verified({ kind }: { kind: "ok" | "bad" | "unchecked" }) {
 }
 
 function seen(hash: string, output: string) {
-  return { call_id: CALL, project_id: "harbour-light", wasm_hash: hash, executed_wasm_sha256: hash, input_hash: hash, output_hash: output, worker_measurement: hash, timestamp: 0, quote_bytes: 1024, quote_sha256: hash };
+  return { call_id: CALL, project_id: "skyline-social", wasm_hash: hash, executed_wasm_sha256: hash, input_hash: hash, output_hash: output, worker_measurement: hash, timestamp: 0, quote_bytes: 1024, quote_sha256: hash };
 }
 
 function bundleFor(kind: "ok" | "bad"): ProofBundle {
@@ -221,8 +229,10 @@ function bundleFor(kind: "ok" | "bad"): ProofBundle {
   };
 }
 
-function panelRows(kind: "ok" | "bad" | "unchecked"): Row[] {
+function panelRows(kind: "ok" | "bad" | "unchecked" | "unpinned"): Row[] {
   if (kind === "unchecked") return proofRows({ bundle: null, attestation: { state: "none" }, signature: "none" });
+  // A site built without a pinned guard version has nothing to compare the attestation with.
+  if (kind === "unpinned") return proofRows({ bundle: bundleFor("ok"), attestation: { state: "unpinned" }, signature: true });
   const attestation: AttestationState = kind === "ok"
     ? { state: "ok", pinned: HASH, value: seen(HASH, HASH) }
     : { state: "ok", pinned: OTHER, value: seen(OTHER, "ee".repeat(32)) };

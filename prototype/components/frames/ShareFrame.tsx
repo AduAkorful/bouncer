@@ -35,8 +35,8 @@ function Night({ state }: { state: string }) {
   }
   const kind = state === "out" ? "out" : state === "paid" ? "paid" : "in";
   const shared: Shared = kind === "paid"
-    ? { kind, sign: "HARBOUR LIGHT", guard: "Ama Boateng", grid: IN_GRID, streak: 3, amount: "12.5 tUSDC" }
-    : { kind, sign: "HARBOUR LIGHT", guard: "Ama Boateng", grid: kind === "out" ? OUT_GRID : IN_GRID, streak: 3 };
+    ? { kind, sign: "SKYLINE SOCIAL", guard: "Delroy", grid: IN_GRID, streak: 3, amount: "3.24 tUSDC" }
+    : { kind, sign: "SKYLINE SOCIAL", guard: "Delroy", grid: kind === "out" ? OUT_GRID : IN_GRID, streak: 3 };
   const text = shareText(shared, 6);
   const title = kind === "out" ? "Turned away" : kind === "paid" ? "Got paid" : "Got in";
   const shown = state === "copied" ? "copied" : state === "manual" ? "manual" : null;
@@ -51,8 +51,8 @@ function Night({ state }: { state: string }) {
         <pre className="mt-3 whitespace-pre-wrap font-mono text-sm text-chalk/80">{text}</pre>
       </article>
       <div className="mt-5 flex flex-col gap-3">
-        <ShareButton text={text} url="/frames/door?id=harbour-light" label={kind === "out" ? "Dare a friend" : "Share it"} shown={shown} className="rounded-2xl bg-chalk py-4 font-sign text-lg text-ink shadow-[0_6px_0_#9c9483]" />
-        <a href="/frames/door?id=harbour-light" className="rounded-2xl border border-chalk/30 py-3 text-center text-sm">That door</a>
+        <ShareButton text={text} url="/frames/door?id=skyline-social" label={kind === "out" ? "Dare a friend" : "Share it"} shown={shown} className="rounded-2xl bg-chalk py-4 font-sign text-lg text-ink shadow-[0_6px_0_#9c9483]" />
+        <a href="/frames/door?id=skyline-social" className="rounded-2xl border border-chalk/30 py-3 text-center text-sm">That door</a>
         <a href="/frames/home" className="text-center text-sm text-chalk/70 underline decoration-white/20">Tonight&apos;s doors</a>
       </div>
     </>
@@ -64,7 +64,7 @@ function CardArt({ kind }: { kind: string }) {
     ? { sign: "COASTLINE NIGHT", line: "Tonight's cut is taken.", detail: "Guard Yaw Mensah", stamp: { text: "TAKEN", color: "#f2a93b" } }
     : kind === "card-player"
       ? { sign: "AmberQuay", line: "#4 on the board", detail: "6 nights in · 3-day streak", stamp: { text: "GOT IN.", color: "#4fd18b" } }
-      : { sign: "HARBOUR LIGHT", line: "Tonight's pot: 20 tUSDC", detail: "Guard Ama Boateng", stamp: { text: "OPEN", color: "#4fd18b" } };
+      : { sign: "SKYLINE SOCIAL", line: "Tonight's pot: 20 tUSDC", detail: "Guard Delroy", stamp: { text: "OPEN", color: "#4fd18b" } };
   const box = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(0.3);
   useEffect(() => {

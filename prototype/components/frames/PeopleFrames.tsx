@@ -104,7 +104,7 @@ function BoardBody({ period, rows, failed, me, remind }: { period: "all" | "week
 }
 
 const RECENT = [
-  { door: "Harbour Light", href: "/frames/door?id=harbour-light", day: "10 Nov", state: "in" as const },
+  { door: "Skyline Social", href: "/frames/door?id=skyline-social", day: "10 Nov", state: "in" as const },
   { door: "Labadi Tide", href: "/frames/door?id=labadi-tide", day: "9 Nov", state: "opened" as const },
   { door: "Ridge Canteen", href: "/frames/door?id=ridge-canteen", day: "8 Nov", state: "opened" as const },
 ];
@@ -157,7 +157,7 @@ export function PlayerFrame({ query }: { query: Record<string, string> }) {
 }
 
 const HISTORY = [
-  { door: "Harbour Light", round: "2", label: "Got in", href: "/frames/claim?id=harbour-light&state=locked" },
+  { door: "Skyline Social", round: "2", label: "Got in", href: "/frames/claim?id=skyline-social&state=locked" },
   { door: "Labadi Tide", round: "1", label: "Played", href: "/frames/reveal?id=labadi-tide&state=open" },
   { door: "Ridge Canteen", round: "1", label: "Approved, not recorded", href: "/frames/claim?id=ridge-canteen&state=held" },
   { door: "Salt Market", round: "1", label: "Approved, cannot be sent", href: "/frames/claim?id=salt-market&state=sponsor" },
@@ -207,8 +207,8 @@ export function ProfileFrame({ query }: { query: Record<string, string> }) {
           <h2 className="font-sign text-lg">History</h2>
           {signed ? (
             <>
-              <a href="/frames/claim?id=harbour-light&state=locked" className="chalk-focus mt-3 block rounded-2xl bg-brass px-4 py-3 font-sign text-lg text-ink">
-                A cut is waiting · Harbour Light, round 2
+              <a href="/frames/claim?id=skyline-social&state=locked" className="chalk-focus mt-3 block rounded-2xl bg-brass px-4 py-3 font-sign text-lg text-ink">
+                A cut is waiting · Skyline Social, round 2
                 <span className="block font-mono text-xs uppercase tracking-wider">Collect it when the time lock opens</span>
               </a>
               <ul className="mt-3 divide-y divide-white/10">
@@ -348,7 +348,13 @@ export function SettingsFrame({ query }: { query: Record<string, string> }) {
         <div className="mt-4 space-y-4">
           <section className="rounded-3xl border border-white/10 bg-night-2 p-5">
             <h2 className="font-sign text-lg">Sign-in</h2>
-            {signed ? (
+            {signed && query.state === "generated" ? (
+              <>
+                {/* A wallet the passkey made (p…relay) has no name worth showing (lib/account-name.ts). */}
+                <p className="mt-2 text-sm text-chalk/70">Signed in on this browser. Your wallet was made for this passkey.</p>
+                <a href="/frames/profile?state=logout" className="chalk-focus mt-2 inline-flex min-h-11 items-center text-sm text-chalk/80 underline decoration-white/20">Log out from the profile</a>
+              </>
+            ) : signed ? (
               <>
                 <p className="mt-2 text-sm text-chalk/70">Signed in on this browser as</p>
                 <p className="mt-1 break-all font-mono text-[12px]">amber-quay.testnet</p>

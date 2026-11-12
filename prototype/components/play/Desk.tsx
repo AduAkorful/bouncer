@@ -40,10 +40,10 @@ export function Desk({
   const pinned = new Set(notes.map((n) => n.id));
   const insideNotes = notes.filter((n) => n.source === "Found" || n.text.includes("(barman)"));
   return (
-    <div className="flex max-h-full flex-col rounded-t-3xl bg-paper text-on-paper" role="dialog" aria-label="Investigation desk">
+    <div className="flex max-h-full flex-col rounded-t-3xl bg-paper text-on-paper">
       <div className="flex items-center justify-between px-5 pt-5">
         <span className="font-sign text-xl">The desk</span>
-        <button onClick={onClose} className="rounded-full border border-on-paper/30 px-3 py-1 text-sm">
+        <button onClick={onClose} className="min-h-11 rounded-full border border-on-paper/30 px-4 text-sm">
           Close
         </button>
       </div>

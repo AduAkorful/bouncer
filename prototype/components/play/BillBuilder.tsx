@@ -6,7 +6,6 @@ import type { DraftBill } from "@/lib/bill";
 /** The player writes the bill themselves. Every field is a guess they have to earn from the desk. */
 export function BillBuilder({
   payees,
-  payout,
   venue,
   onSubmit,
   onClose,
@@ -18,7 +17,6 @@ export function BillBuilder({
   payees: string[];
   /** The pot's token symbol. The total is shown in it, never in dollars. */
   currency?: string;
-  payout: string;
   venue: string;
   onSubmit: (b: DraftBill) => void;
   onClose: () => void;
@@ -46,13 +44,13 @@ export function BillBuilder({
   const ready = b.payee.trim() && b.reference.trim() && b.item.trim() && b.qty >= 1 && b.unit > 0;
   const field = "w-full border-b border-rule bg-transparent py-1.5 font-mono text-[15px] text-on-paper outline-none placeholder:text-on-paper/30 focus:border-on-paper";
   return (
-    <div className="relative rounded-t-3xl bg-paper p-5 pb-6 text-on-paper" role="dialog" aria-label="Write a bill">
+    <div className="relative rounded-t-3xl bg-paper p-5 pb-6 text-on-paper">
       <div className="mb-4 flex items-start justify-between">
         <div>
           <div className="font-sign text-2xl leading-none">Invoice</div>
           <div className="mt-1 font-mono text-[10px] uppercase tracking-[0.2em] text-on-paper/50">To: {venue}</div>
         </div>
-        <button onClick={onClose} className="rounded-full border border-rule px-3 py-1 text-sm">
+        <button type="button" onClick={onClose} className="min-h-11 rounded-full border border-rule px-4 text-sm">
           Close
         </button>
       </div>
@@ -98,7 +96,7 @@ export function BillBuilder({
           <span className="font-mono text-2xl tnum">{total.toFixed(2)}{currency ? ` ${currency}` : ""}</span>
         </div>
         <div className="rounded-lg bg-on-paper/5 px-3 py-2 font-mono text-[11px] text-on-paper/60">
-          Pay to: {payout} · your wallet, fixed. Payout details can&apos;t be changed.
+          A win pays your own wallet when you claim it. A bill cannot name another account.
         </div>
       </div>
       <button

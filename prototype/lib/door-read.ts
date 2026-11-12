@@ -30,7 +30,7 @@ export function isVaultId(vaultId: string): boolean {
 }
 
 /** Frame paths. The product uses `/v/<id>`; this copy stays inside the prototype. */
-export function doorPaths(vaultId?: string): { door: string; play: string; reveal: string; claim: string } {
+export function doorPaths(vaultId?: string): { door: string; play: string; reveal: string; claim: string; wins: string } {
   if (vaultId && isVaultId(vaultId)) {
     const id = encodeURIComponent(vaultId);
     return {
@@ -38,7 +38,8 @@ export function doorPaths(vaultId?: string): { door: string; play: string; revea
       play: `/frames/play?id=${id}`,
       reveal: `/frames/reveal?id=${id}`,
       claim: `/frames/claim?id=${id}`,
+      wins: `/frames/wins?id=${id}`,
     };
   }
-  return { door: "/frames/home", play: "/frames/play", reveal: "/frames/reveal", claim: "/frames/claim" };
+  return { door: "/frames/home", play: "/frames/play", reveal: "/frames/reveal", claim: "/frames/claim", wins: "/frames/wins" };
 }

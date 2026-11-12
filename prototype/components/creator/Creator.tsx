@@ -110,10 +110,10 @@ export function Creator({ savedStart = false }: { savedStart?: boolean }) {
               setSoundOn(!sound);
               setSaved(false);
             }}
-            className="relative shrink-0 rounded-full bg-black/50 px-2 py-1 font-mono text-[11px] after:absolute after:-inset-x-1 after:-inset-y-2.5 after:content-[''] sm:px-2.5 sm:text-xs"
+            className="-my-2 inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center"
             aria-pressed={sound}
           >
-            {sound ? "♪ on" : "♪ off"}
+            <span className="rounded-full bg-black/50 px-2 py-1 font-mono text-[11px] sm:px-2.5 sm:text-xs">{sound ? "♪ on" : "♪ off"}</span>
           </button>
         </header>
         <SceneLife key={`${city}-${look.build}`} className="absolute inset-0">

@@ -2,12 +2,12 @@ import { DoorScene } from "@/components/DoorScene";
 import { cardLook } from "@/lib/card";
 import { CROWDS } from "@/lib/crowds";
 import { ACCRA_SETTING, PLACE_LABELS, PLACES, SETTING_FIELDS, pieceDrawn } from "@/lib/street-setting";
-import { doorSpec, frontId, makeCard, settingFrom } from "@/lib/demo/world";
+import { baseSetting, doorSpec, frontId, makeCard, settingFrom } from "@/lib/demo/world";
 
 /** One street at a time. Place, crowd, and each sponsor-menu piece come from the query. */
 export function StreetFrame({ query }: { query: Record<string, string> }) {
   const spec = doorSpec(frontId())!;
-  const setting = settingFrom(ACCRA_SETTING, query);
+  const setting = settingFrom(baseSetting(spec), query);
   const card = makeCard(spec, setting)!;
   const place = PLACES[setting.place] ?? "street";
   const crowd = CROWDS[setting.crowd];

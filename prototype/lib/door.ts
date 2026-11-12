@@ -33,6 +33,11 @@ export function doorShut(vault: Pick<VaultView, "open" | "closesAt">, nowMs: num
   return nowMs >= ms;
 }
 
+/** The sponsor made the door and has not opened a first round: nothing was ever on its list. */
+export function doorNeverOpened(vault: Pick<VaultView, "open" | "opensAt" | "commitment">): boolean {
+  return !vault.open && vault.opensAt === "0" && !vault.commitment;
+}
+
 /** Every crack the round allows has been recorded. The vault refuses another, so the door must not sell one. */
 export function doorFull(vault: Pick<VaultView, "open" | "crackCount" | "maxCracks">): boolean {
   return vault.open && vault.maxCracks > 0 && vault.crackCount >= vault.maxCracks;
@@ -43,6 +48,7 @@ export const SPONSOR_DETAIL = "You sponsor this door, so you cannot raid it: the
 
 export function playerDetail(error: string): string {
   if (error === "full") return "Tonight's cut has been taken. Nothing is left to win.";
+  if (error === "closed") return "This round is closed. The door is not taking a queue.";
   if (error === SPONSOR_DETAIL_CODE) return SPONSOR_DETAIL;
   if (HIDDEN.has(error)) return "The door did not answer.";
   return error;

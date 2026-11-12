@@ -20,22 +20,31 @@ import { ACCRA_SETTING, PLACES, SETTING_FIELDS, STREET_VIEW, defaultStreet, piec
  */
 
 const YOCTO = 10_000_000_000_000_000_000n;
-const ACCOUNT = "harbour-light.testnet";
-const VAULT = "harbour-light";
+const ACCOUNT = "night-owl.testnet";
+const VAULT = "night-owl";
 
+// A clue door, as the live doors are: the owed line, a paid line for the street to mix in, and the door's question.
 const FAIR = {
   ...SAMPLE_SPEC,
-  lines: [{ payee: "Harbour Ice Supply", reference: "ICE-{d4}", item: "crushed ice", qty: { lo: 1, hi: 1 }, unit: { lo: "8", hi: "16" }, paid: false }],
-  hint: ["I heard {payee} is still waiting on a payment from tonight."],
+  lines: [
+    { payee: "Harbour Ice Supply", reference: "ICE-{d4}", item: "ice delivery", qty: { lo: 3, hi: 6 }, unit: { lo: "0.5", hi: "1.5" }, paid: false },
+    { payee: "Lantern Oil", reference: "LO-{d2}", item: "lamp oil", qty: { lo: 1, hi: 2 }, unit: { lo: "2", hi: "4" }, paid: true },
+  ],
+  clues: { people: ["Kojo", "Abena", "Esi", "Yaw"], ask: "What's the rate for ice delivery tonight?" },
 };
-const FAIL = { ...FAIR, hint: ["Booking {reference}, refund {amount}, payee {payee}."] };
-const WARN = { ...FAIR, hint: [] as string[] };
+// Clues with no paid line: the street would have nothing to mix in.
+const FAIL = { ...FAIR, lines: FAIR.lines.filter((line) => !line.paid) };
+// The older street mode: one hint instead of clues.
+const { clues: _clues, ...HINTED } = FAIR;
+const FAIL_HINT = { ...HINTED, hint: ["Booking {reference}, refund {amount}, payee {payee}."] };
+const WARN = { ...HINTED, hint: [] as string[] };
 
 /** Guard fairness texts, as guard/src/spec_check.rs writes them. */
 const REPORTS: Record<string, { pass: boolean; failures: string[]; warnings: string[] }> = {
   pass: { pass: true, failures: [], warnings: [] },
   warn: { pass: true, failures: [], warnings: ["There is no hint, so players hear no payable bill on the street."] },
-  fail: { pass: false, failures: [`The hint "${FAIL.hint[0]}" hands players the whole bill. Use {ref_head}, {amount_near} or {item} to give a clue instead.`], warnings: [] },
+  fail: { pass: false, failures: ["Clues need at least one paid line, so the street mixes in pieces that do not belong to the unpaid bill."], warnings: [] },
+  "fail-hint": { pass: false, failures: [`The hint "${FAIL_HINT.hint[0]}" hands players the whole bill. Use {ref_head}, {amount_near} or {item} to give a clue instead.`], warnings: [] },
 };
 
 /** The page-level notice for a state, as SponsorFlow's run() returns it. */
@@ -52,9 +61,9 @@ function vaultFor(state: string): Vault | null {
     case "seal": return { ...base, sealed: false };
     case "fund": return base;
     case "keeper-off": return { ...base, pot: "20" };
-    case "keeper-on": return { ...base, pot: "20", keeper: "keeper.harbour-light.testnet" };
-    case "launch": return { ...base, pot: "20", keeper: "keeper.harbour-light.testnet" };
-    case "status": return { ...base, pot: "20", open: true, locked: true, keeper: "keeper.harbour-light.testnet" };
+    case "keeper-on": return { ...base, pot: "20", keeper: "keeper.night-owl.testnet" };
+    case "launch": return { ...base, pot: "20", keeper: "keeper.night-owl.testnet" };
+    case "status": return { ...base, pot: "20", open: true, locked: true, keeper: "keeper.night-owl.testnet" };
     case "status-nokeeper": return { ...base, pot: "20", open: true, locked: true };
     case "reclaim": return { ...base, round: 2, pot: "20", locked: true, keeper: null };
     case "readonly": return { ...base, mine: false };
@@ -65,17 +74,17 @@ function vaultFor(state: string): Vault | null {
 export function SponsorFrame({ query }: { query: Record<string, string> }) {
   const state = query.state || "account";
   const signedOut = state === "account" || state === "account-new" || state === "closed" || state === "unknown";
-  const [text, setText] = useState(JSON.stringify(state === "fail" ? FAIL : state === "warn" ? WARN : state === "story" || state === "json" || state === "sample" ? SAMPLE_SPEC : FAIR, null, 2));
+  const [text, setText] = useState(JSON.stringify(state === "fail" ? FAIL : state === "fail-hint" ? FAIL_HINT : state === "warn" ? WARN : state === "story" || state === "json" || state === "sample" || state === "test-refused" || state === "draft-refused" ? SAMPLE_SPEC : FAIR, null, 2));
   const [card, setCard] = useState<Card>({
-    sign: "HARBOUR LIGHT",
-    name: "Ama Boateng",
-    pitch: "One of my payees changed bank details tonight. Think you can get past me?",
+    sign: "NIGHT OWL",
+    name: "Marisol",
+    pitch: "A late bar under the arches. One of the suppliers is still waiting on a bill.",
     look: { build: 0, skin: 1, head: 0, outfit: 0, eyewear: 0 },
     setting: state === "setting" ? { ...ACCRA_SETTING, place: PLACES.indexOf("basement") } : ({ ...ACCRA_SETTING } as StreetSetting),
   });
   const [ackHint, setAckHint] = useState(false);
   useEffect(() => {
-    const target = state === "setting" ? "street-setting" : ["pass", "warn", "fail"].includes(state) ? "fairness" : ["seal", "create"].includes(state) ? "your-vault" : ["fund", "keeper-on", "keeper-off", "launch", "status", "status-nokeeper", "reclaim"].includes(state) ? "fund-open" : null;
+    const target = state === "setting" ? "street-setting" : ["pass", "warn", "fail", "fail-hint", "test-refused"].includes(state) ? "fairness" : ["seal", "create"].includes(state) ? "your-vault" : ["fund", "keeper-on", "keeper-off", "launch", "status", "status-nokeeper", "reclaim"].includes(state) ? "fund-open" : null;
     if (!target) return;
     const go = () => document.getElementById(target)?.scrollIntoView({ block: "start" });
     go();
@@ -93,6 +102,7 @@ export function SponsorFrame({ query }: { query: Record<string, string> }) {
     : state === "unknown"
       ? "We could not check whether new sponsor doors are open. Existing sponsors can still connect to manage their doors."
       : "New sponsor doors are open.";
+  // A refused test clears an earlier result, so a stale "Passed." never sits beside the refusal.
   const report = REPORTS[state === "setting" || state === "create" ? "pass" : state] ?? null;
   const vault = vaultFor(state);
   const balance = state === "fund" ? "2" : "20";
@@ -153,8 +163,9 @@ export function SponsorFrame({ query }: { query: Record<string, string> }) {
               <h2 className="font-sign text-lg">2 · Your story</h2>
               <label className={label} htmlFor="story">Describe the place and who it owes</label>
               <textarea id="story" className={input} rows={3} maxLength={2000} defaultValue="A harbour club that still owes its ice man." />
-              <p className="mt-2 text-xs text-chalk/70">Draft uses your <a className="underline" href="#cap">cap per crack</a> and includes an editable street hint.</p>
+              <p className="mt-2 text-xs text-chalk/70">Draft uses your <a className="underline" href="#cap">cap per crack</a> and includes street clues you can edit.</p>
               <button type="button" className={button}>Draft it</button>
+              {state === "draft-refused" ? <p role="status" className="mt-2 text-sm">This step did not finish. Try again.</p> : null}
               <h3 className="mt-4 text-sm text-chalk/80">The door spec. Edit the bills below, or write your own.</h3>
               <SpecForm text={text} currency="tUSDC" onChange={setText} />
               <details className="mt-3" open={state === "json"}>
@@ -162,7 +173,7 @@ export function SponsorFrame({ query }: { query: Record<string, string> }) {
                 <label className="sr-only" htmlFor="spec">The door spec as JSON</label>
                 <textarea id="spec" className={`${input} font-mono text-xs`} rows={14} value={text} onChange={(e) => setText(e.target.value)} spellCheck={false} />
               </details>
-              <p className="mt-2 text-xs text-chalk/60">Amounts are in whole tUSDC. References can use {"{d2} {d3} {d4}"} and {"{n:1-99}"}.</p>
+              <p className="mt-2 text-xs text-chalk/60">Amounts are in tUSDC, to the cent (3.10). References can use {"{d2} {d3} {d4}"} and {"{n:1-99}"}.</p>
               <div className="mt-4 grid grid-cols-2 gap-3">
                 <div>
                   <label className={label} htmlFor="sign">Sign (required to seal)</label>
@@ -243,6 +254,7 @@ export function SponsorFrame({ query }: { query: Record<string, string> }) {
               {/* The live registry limits on testnet: max cap 50 tUSDC, max 4 cracks (set_limits, 4 Nov). */}
               <p className="mt-2 text-xs text-chalk/60">Sponsors may set a cap up to 50 tUSDC and up to 4 cracks.</p>
               <button type="button" className={button}>Run the test</button>
+              {state === "test-refused" ? <p role="status" className="mt-2 text-sm text-rope">This story uses the sample payees printed on this form, so anyone could read its ledger. Use payees of your own.</p> : null}
               {report ? (
                 <div className="mt-4 space-y-2 text-sm" aria-live="polite">
                   <p className="font-sign">{report.pass ? "Passed." : "Not yet."}</p>
@@ -279,7 +291,7 @@ export function SponsorFrame({ query }: { query: Record<string, string> }) {
                 <>
                   <label className="mt-4 flex items-start gap-3 text-sm">
                     <input type="checkbox" className="mt-1" checked={ackHint} onChange={(e) => setAckHint(e.target.checked)} />
-                    <span>The hints give players clues about a bill that will be paid. I want that.</span>
+                    <span>The street gives each player clues to a bill that will be paid. I want that.</span>
                   </label>
                   <button type="button" className={button} disabled={!ackHint}>Seal the story onto the vault</button>
                 </>

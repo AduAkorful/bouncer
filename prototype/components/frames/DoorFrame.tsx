@@ -3,7 +3,7 @@ import { DoorUnread } from "@/components/DoorUnread";
 import { HomeDoor } from "@/components/home/HomeDoor";
 import { ACCRA_SETTING } from "@/lib/street-setting";
 import { doorPaths, unreadDoor } from "@/lib/door-read";
-import { allDoors, doorSpec, frontId, makeCard, makeVault, otherDoors, othersTitle, settingFrom, TOKEN, type DoorKind } from "@/lib/demo/world";
+import { allDoors, baseSetting, doorSpec, frontId, makeCard, makeVault, otherDoors, othersTitle, settingFrom, TOKEN, CUT, type DoorKind } from "@/lib/demo/world";
 
 const KINDS: Record<string, DoorKind> = { closed: "closed", taken: "taken", never: "never" };
 
@@ -17,17 +17,19 @@ export function DoorFrame({ mode, query }: { mode: "home" | "door"; query: Recor
   const spec = doorSpec(asked);
   if (!spec) return <DoorUnread {...unreadDoor("id", asked)} retryHref={null} backHref="/frames/home" />;
   const kind = KINDS[state] ?? spec.kind;
-  const setting = settingFrom(ACCRA_SETTING, query);
+  const setting = settingFrom(baseSetting(spec), query);
   const vault = makeVault(kind, spec.pot);
   const card = kind === "never" ? null : makeCard({ ...spec, kind }, setting);
   const paths = doorPaths(spec.id);
-  const signed = state === "signed" || state === "raid" || state === "held" || state === "collect";
+  const signed = state === "signed" || state === "raid" || state === "held" || state === "collect" || state === "spent";
   const banner = state === "raid"
-    ? { line: "Your raid tonight is still open on this browser.", link: "Back to your raid", href: `${paths.play}?state=street` }
+    ? { line: "Your raid tonight is still open on this browser.", link: "Back to your raid", href: `${paths.play}&state=street` }
     : state === "held"
-      ? { line: "Your bill was approved. The vault has not recorded it yet.", link: "Send it again", href: `${paths.play}?state=not-recorded` }
-      : null;
-  const win = state === "collect" ? { amount: "12500000", ready: false, href: `${paths.claim}?state=locked` } : null;
+      ? { line: "Your bill was approved. The vault has not recorded it yet.", link: "Send it again", href: `${paths.play}&state=not-recorded` }
+      : state === "spent"
+        ? { line: "You were turned away tonight. Every message is used.", link: "See how it ended", href: `${paths.play}&state=out` }
+        : null;
+  const win = state === "collect" ? { amount: CUT, ready: false, href: `${paths.claim}&state=locked` } : null;
   return (
     <HomeDoor
       vault={vault}
@@ -42,6 +44,7 @@ export function DoorFrame({ mode, query }: { mode: "home" | "door"; query: Recor
       signedIn={signed ? "AmberQuay · 3-day streak" : null}
       walletAtomic={signed ? "0" : null}
       banner={banner}
+      finished={state === "spent"}
       win={win}
       showJoinBar={state === "join"}
       doors={

@@ -64,10 +64,12 @@ export default function HowItWorksPage() {
           <P>After a win, the claim page shows four checks. Each one ticks only when the page compared two things itself.</P>
           <dl className="mt-3 space-y-3 text-sm">
             <Term t="Signed by the vault's guard key">Your browser checks the verdict&apos;s signature against the guard key stored on the vault.</Term>
-            <Term t="Made by the published guard code">OutLayer&apos;s attestation names the guard code that ran, and the page compares it with the guard version this site pins.</Term>
+            <Term t="Made by the published guard code">Your browser reads OutLayer&apos;s attestation straight from OutLayer. It names the guard code that ran, and the page compares that with the guard version built into this site. The Intel TDX quote inside it is checked with <code>outlayer-verify</code>, not in the browser.</Term>
             <Term t="This answer is the one attested">The answer the site received is hashed and compared with the output hash in that attestation.</Term>
             <Term t="Reply written by an attested model">The model&apos;s signature on its reply is compared with the signer in the attestation report taken for your raid.</Term>
           </dl>
+          {/* web/lib/win-check.ts, components/wins/WinsBoard.tsx. */}
+          <P>Anyone can check a win without playing. Each door&apos;s Wins page lists every win the vault has recorded. Checking one reads the chain from your browser: the vault&apos;s record of the win, the call that wrote it, that the signed verdict in that call equals the record, and that the guard&apos;s key signed it. The page does not use our server.</P>
         </Section>
 
         <Section n={6} title="What we store">

@@ -14,6 +14,7 @@ export function DoorAction({
   win = null,
   banner = null,
   showJoinBar = false,
+  finished = false,
 }: {
   vaultId?: string;
   round: string;
@@ -23,6 +24,8 @@ export function DoorAction({
   win?: { amount: string; ready: boolean; href: string } | null;
   banner?: { line: string; link: string; href: string } | null;
   showJoinBar?: boolean;
+  /** This browser's raid tonight is over: turned away, or got in. Joining again leads only to that ending. */
+  finished?: boolean;
 }) {
   const paths = doorPaths(vaultId);
   const claimHref = win?.href ?? paths.claim;
@@ -34,7 +37,7 @@ export function DoorAction({
           {win.ready ? null : <span className="font-mono text-[11px] uppercase tracking-wider">The time lock is still running</span>}
         </a>
       ) : null}
-      {open ? (
+      {open && !finished ? (
         <a
           id="join-queue"
           href={paths.play}
@@ -42,10 +45,10 @@ export function DoorAction({
         >
           Join the queue
         </a>
-      ) : win ? null : (
+      ) : win || finished ? null : (
         <p className="mt-5 rounded-2xl border border-white/10 py-4 text-center font-sign text-xl text-chalk/50">{full ? "Tonight's cut is taken" : "The queue is closed"}</p>
       )}
-      {open && !win ? <QueueBar href={paths.play} targetId="join-queue" force={showJoinBar} /> : null}
+      {open && !win && !finished ? <QueueBar href={paths.play} targetId="join-queue" force={showJoinBar} /> : null}
       {banner && !win ? (
         <p role="status" className="mt-4 rounded-2xl border border-uv/40 bg-uv/10 px-4 py-3 text-sm">
           {banner.line}{" "}

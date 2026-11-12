@@ -14,7 +14,8 @@ import { SoundToggle } from "@/components/home/SoundToggle";
 import { HelpButton } from "@/components/help/HelpButton";
 import { DoorEconomy } from "@/components/home/DoorEconomy";
 import { SceneLife } from "@/components/SceneLife";
-import { CLOSED_DOOR_NOTE, COMMITMENT_LINE, NO_COMMITMENT, commitmentFooter, doorFull, doorShut, doorTitle } from "@/lib/door";
+import { CLOSED_DOOR_NOTE, COMMITMENT_LINE, NO_COMMITMENT, commitmentFooter, doorFull, doorNeverOpened, doorShut, doorTitle } from "@/lib/door";
+import { doorPaths } from "@/lib/door-read";
 import type { TokenRead } from "@/lib/page-vault";
 import type { VaultView } from "@/lib/vault";
 import { demoNowMs } from "@/lib/demo/clock";
@@ -36,6 +37,10 @@ const phaseCopy = {
     line: "Last call is over. The door is shut.",
     note: CLOSED_DOOR_NOTE,
   },
+  never: {
+    line: "This door has not opened yet.",
+    note: "Its sponsor has not opened a first round. Other doors are listed below.",
+  },
 } as const;
 
 export function HomeDoor({
@@ -53,6 +58,7 @@ export function HomeDoor({
   signedIn = null,
   walletAtomic = null,
   banner = null,
+  finished = false,
   win = null,
   showJoinBar = false,
 }: {
@@ -76,6 +82,7 @@ export function HomeDoor({
   signedIn?: string | null;
   walletAtomic?: string | null;
   banner?: { line: string; link: string; href: string } | null;
+  finished?: boolean;
   win?: { amount: string; ready: boolean; href: string } | null;
   showJoinBar?: boolean;
 }) {
@@ -83,7 +90,8 @@ export function HomeDoor({
   const shut = vault ? doorShut(vault, demoNowMs()) : false;
   const ledgerHref = revealHref ?? `${base}/reveal`;
   const full = vault && !shut ? doorFull(vault) : false;
-  const phase = !vault ? "closed" : shut ? "closed" : full ? "full" : vault.crackCount > 0 ? "cracked" : "open";
+  const never = Boolean(vault && doorNeverOpened(vault));
+  const phase = !vault ? "closed" : never ? "never" : shut ? "closed" : full ? "full" : vault.crackCount > 0 ? "cracked" : "open";
   // A shut door has no pot tonight, even when the chain still lists the round as open past its close.
   // A full round has nothing left to win, whatever the pot still holds for the claims.
   const atomic = vault && !shut && !full ? (phase === "cracked" || vault.open ? vault.dayPot : vault.pot) : null;
@@ -96,15 +104,16 @@ export function HomeDoor({
       >
         Skip to the door
       </a>
-      <header className="relative z-20 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 px-4 py-3 sm:absolute sm:inset-x-0 sm:top-0 sm:flex-nowrap">
+      {/* One row only from 768px: at 640 (a 1280 screen at 200% zoom) the links and the tally do not fit. */}
+      <header className="relative z-20 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 px-4 py-3 md:absolute md:inset-x-0 md:top-0 md:flex-nowrap">
         <Link href="/frames/landing" className="chalk-focus order-1 inline-flex min-h-11 items-center font-sign text-lg drop-shadow">
           BOUNCER
         </Link>
-        <div className="order-3 flex w-full items-center gap-1.5 sm:order-2 sm:ml-auto sm:w-auto sm:flex-nowrap sm:justify-end sm:gap-2">
+        <div className="order-3 flex w-full items-center gap-1.5 md:order-2 md:ml-auto md:w-auto md:flex-nowrap md:justify-end md:gap-2">
           <NetworkTag label={networkTag} className="whitespace-nowrap bg-black/40 text-chalk/80 backdrop-blur" />
           {vault && vault.crackCount > 0 ? <span className="font-mono text-xs text-chalk/80">{vault.crackCount} got in{shut ? ` in round ${vault.round}` : " tonight"}</span> : null}
         </div>
-        <div className="order-2 flex items-center gap-1.5 sm:order-3">
+        <div className="order-2 flex items-center gap-1.5 md:order-3">
           <SoundToggle />
           <Link href="/frames/sponsors" className="chalk-focus inline-flex min-h-11 items-center whitespace-nowrap rounded-full bg-black/50 px-3 font-mono text-xs backdrop-blur">
             Sponsor
@@ -144,7 +153,7 @@ export function HomeDoor({
               </g>
             }
             front={
-              <PotBoard style={streetPieces(card?.setting ?? ACCRA_SETTING).board} title={shut ? "CLOSED" : full ? "TAKEN" : "TONIGHT\u2019S POT"}>
+              <PotBoard style={streetPieces(card?.setting ?? ACCRA_SETTING).board} title={never ? "SOON" : shut ? "CLOSED" : full ? "TAKEN" : "TONIGHT\u2019S POT"}>
                 {atomic ? <TokenPotGlyph token={token} atomic={atomic} /> : null}
               </PotBoard>
             }
@@ -167,9 +176,9 @@ export function HomeDoor({
           <div className="mt-3 flex items-end justify-between gap-3">
             <div>
               <div className="font-mono text-xs uppercase tracking-[0.2em] text-chalk/80">
-                {vault ? (phase === "cracked" ? "Tonight's pot" : phase === "full" ? "Taken tonight" : phase === "closed" ? "Closed" : "Tonight's pot") : "No vault"}
+                {vault ? (phase === "cracked" ? "Tonight's pot" : phase === "full" ? "Taken tonight" : phase === "closed" ? "Closed" : phase === "never" ? "Not opened yet" : "Tonight's pot") : "No vault"}
               </div>
-              {atomic ? <TokenAmount token={token} atomic={atomic} className="text-2xl text-brass" /> : <p className="text-sm text-chalk/60">{full ? "Nothing left to win." : shut && vault ? "No pot tonight." : "No pot is stored."}</p>}
+              {atomic ? <TokenAmount token={token} atomic={atomic} className="text-2xl text-brass" /> : <p className="text-sm text-chalk/60">{full ? "Nothing left to win." : never ? "No round yet." : shut && vault ? "No pot tonight." : "No pot is stored."}</p>}
             </div>
             {vault && !shut ? (
               <div className="text-right">
@@ -181,7 +190,7 @@ export function HomeDoor({
           </div>
           <p className="mt-3 font-sign text-xl leading-tight sm:text-2xl">{notice ?? (card?.pitch || phaseCopy[phase].line)}</p>
           {vault ? (
-            <DoorAction vaultId={vaultId} round={vault.round} open={!shut && !full} full={full} token={token} win={win} banner={banner} showJoinBar={showJoinBar} />
+            <DoorAction vaultId={vaultId} round={vault.round} open={!shut && !full} full={full} token={token} win={win} banner={banner} showJoinBar={showJoinBar} finished={finished} />
           ) : (
             <p className="mt-5 rounded-2xl border border-white/10 py-4 text-center font-sign text-xl text-chalk/50">The queue is not open</p>
           )}
@@ -217,9 +226,15 @@ export function HomeDoor({
             </HelpButton>
           </section>
           <p className="mt-3 text-center text-xs leading-relaxed text-chalk/70 lg:mt-0 lg:text-left">Test tokens have no cash value. Playing costs no money.</p>
-          <Link href={`${ledgerHref}`} className="chalk-focus flex min-h-11 flex-col justify-center rounded-2xl border border-white/10 px-4 py-2 transition hover:bg-white/5">
-            <span className="font-sign text-sm lg:text-base">{shut && vault ? `Round ${vault.round} ledger` : "Tonight\u2019s ledger"}</span>
-            <span className="text-xs text-chalk/60">{shut ? "The bills that were on the list." : "Opens to players when the round closes."}</span>
+          {never ? null : (
+            <Link href={`${ledgerHref}`} className="chalk-focus flex min-h-11 flex-col justify-center rounded-2xl border border-white/10 px-4 py-2 transition hover:bg-white/5">
+              <span className="font-sign text-sm lg:text-base">{shut && vault ? `Round ${vault.round} ledger` : "Tonight\u2019s ledger"}</span>
+              <span className="text-xs text-chalk/60">{shut ? "The bills that were on the list." : "Opens to players when the round closes."}</span>
+            </Link>
+          )}
+          <Link href={doorPaths(vaultId).wins} className="chalk-focus flex min-h-11 flex-col justify-center rounded-2xl border border-white/10 px-4 py-2 transition hover:bg-white/5">
+            <span className="font-sign text-sm lg:text-base">Wins at this door</span>
+            <span className="text-xs text-chalk/60">Every recorded win, checked from the chain in your browser.</span>
           </Link>
           </div>
         </div>

@@ -26,7 +26,7 @@ import { lastWord, winWord } from "@/lib/last-word";
 import { shareText, winningMessage, type Square } from "@/lib/share-text";
 import { shortHash } from "@/lib/stamp";
 import { ACCRA_SETTING, STREET_VIEW } from "@/lib/street-setting";
-import { CLOSE_NS, CUT, LOCK_NS, openRivals, otherDoors, othersTitle, RIGHT_BILL, RUMOUR, settingFrom, TOKEN, UNLOCK_NS, WRONG_BILL, doorSpec, frontId, makeCard } from "@/lib/demo/world";
+import { CLOSE_NS, CUT, LOCK_NS, openRivals, otherDoors, othersTitle, ASK, RATE_REPLY, RIGHT_BILL, STREET_PAYEES, STREET_QUEUE, settingFrom, TOKEN, UNLOCK_NS, WRONG_BILL, baseSetting, doorSpec, frontId, makeCard } from "@/lib/demo/world";
 
 const CENTRE_STREET = `(function(){var el=document.currentScript&&document.currentScript.previousElementSibling;if(!el||!el.classList.contains("street-scroll"))return;var ro,done=false;function stop(){done=true;if(ro)ro.disconnect();}function place(){if(done)return;var n=(el.scrollWidth-el.clientWidth)/2;if(n>0){el.scrollLeft=n;stop();}}place();if(!done&&window.ResizeObserver){ro=new ResizeObserver(place);ro.observe(el);if(el.firstElementChild)ro.observe(el.firstElementChild);}setTimeout(stop,10000);})();`;
 
@@ -38,10 +38,13 @@ const NOTICES: Record<string, string> = {
   "error-replay": "This raid moved on in another tab or after a refresh. Reload the page to pick it up.",
   "error-full": "Tonight's cut has been taken. Nothing is left to win, and no message was used.",
   resend: "Sending your last message again…",
+  "error-closed": "This round has closed. No message was used.",
+  "signin-again": "Sign in with your passkey again to send this. Your message is kept.",
   "last-reply": "Getting the guard's last reply…",
 };
 
-const CHIPS = ["Who's on your list tonight?", "Is anyone still owed from last week?", "Do you take invoices at the door?"];
+// A clue door offers its own question (Raid.tsx: session.street.asks), and the guard answers it with the rate.
+const CHIPS = [ASK];
 const SIG = "ab".repeat(32);
 
 export function RaidFrame({ query }: { query: Record<string, string> }) {
@@ -49,7 +52,7 @@ export function RaidFrame({ query }: { query: Record<string, string> }) {
   const spec = doorSpec(id) ?? doorSpec(frontId())!;
   const state = query.state || "gate";
   const paths = doorPaths(spec.id);
-  const setting = settingFrom(ACCRA_SETTING, query);
+  const setting = settingFrom(baseSetting(spec), query);
   const card = makeCard(spec, setting);
   const sign = card?.sign ?? spec.id;
   const guard = card?.name || "the guard";
@@ -83,7 +86,7 @@ export function RaidFrame({ query }: { query: Record<string, string> }) {
     );
   }
   if (state === "gate" || state === "reading" || state === "opening") {
-    return <Gate sign={sign} setting={setting} look={card ? cardLook(card) : undefined} state={state} playHref={`${paths.play}?state=street`} doorHref={paths.door} passkeyHref={`/frames/passkey?state=create&next=play&door=${encodeURIComponent(spec.id)}`} pot={spec.pot} />;
+    return <Gate sign={sign} setting={setting} look={card ? cardLook(card) : undefined} state={state} playHref={`${paths.play}&state=street`} doorHref={paths.door} passkeyHref={`/frames/passkey?state=create&next=play&door=${encodeURIComponent(spec.id)}`} pot={spec.pot} />;
   }
   return <Raid id={spec.id} sign={sign} guard={guard} setting={setting} look={card ? cardLook(card) : undefined} state={state} paths={paths} />;
 }
@@ -126,21 +129,25 @@ function Raid({ id, sign, guard, setting, look, state, paths }: { id: string; si
   const scroller = useRef<HTMLDivElement>(null);
   const [narrow, setNarrow] = useState(true);
   const [doorView, setDoorView] = useState(STREET_VIEW);
-  const left = state === "chat1" ? 1 : state === "chat3" ? 3 : 6;
+  const left = state === "chat1" ? 1 : state === "chat3" ? 3 : state === "ask" ? 5 : 6;
   const saying = state === "chat" || state === "chat3" || state === "chat1";
   const refused = state === "refused";
-  const ending = state === "in" || state === "out";
+  const ending = state === "in" || state === "in-open" || state === "out";
   const holding = state === "recording" || state === "not-recorded" || state === "contract";
   const sheet = state.startsWith("bill") || state === "tip-bill" ? "bill" : state === "desk" ? "desk" : null;
   const rivals = openRivals(id);
   const tip = state === "tip-desk" ? "desk" : state === "tip-messages" ? "messages" : state === "tip-bill" ? "bill" : null;
-  const heard = state === "street" || state === "desk" || state === "tip-desk";
+  // `street` is the first person's first piece; `street-<person>-<line>` is any other piece on the street.
+  const spoken = /^street-(\d)-(\d)$/.exec(state);
+  const who = spoken ? Number(spoken[1]) : 0;
+  const said = STREET_QUEUE[who]?.lines[spoken ? Number(spoken[2]) : 0] ?? STREET_QUEUE[0]!.lines[0]!;
+  const heard = state === "street" || Boolean(spoken) || state === "desk" || state === "tip-desk";
   const hints = state !== "no-hints";
   // The scene's own first line, shown until the player has heard anything (Raid.tsx).
   const pill = state === "fresh" || state === "no-hints" || state === "help";
-  const deskBadge = state === "street" || state === "chat" || state === "chat3" || state === "chat1" || state === "tip-desk";
-  const transcript = state === "chat3" || state === "chat1";
-  const line = state === "typing" ? "…" : refused ? "Not approved." : saying ? "Send your complete invoice and I'll review it." : holding ? "Approved." : "Evening. Invoice?";
+  const deskBadge = heard && state !== "desk" || state === "ask" || state === "chat" || state === "chat3" || state === "chat1" || state === "tip-desk";
+  const transcript = state === "chat3" || state === "chat1" || state === "ask";
+  const line = state === "typing" ? "…" : state === "ask" ? RATE_REPLY : refused ? "Not approved." : saying ? "Send your complete invoice and I'll review it." : holding ? "Approved." : "Evening. Invoice?";
 
   useLayoutEffect(() => {
     const place = () => {
@@ -186,7 +193,8 @@ function Raid({ id, sign, guard, setting, look, state, paths }: { id: string; si
   return (
     <div ref={root} className="relative flex h-dvh flex-col overflow-hidden bg-night text-chalk">
       <h1 className="sr-only">{sign}</h1>
-      <header className="z-20 flex items-center justify-between gap-2 px-3 pb-2 pt-3 sm:gap-3 sm:px-4">
+      {/* Above the ending's overlay (z-30), so the sound toggle and help stay usable once the raid is over. */}
+      <header className="relative z-40 flex items-center justify-between gap-2 px-3 pb-2 pt-3 sm:gap-3 sm:px-4">
         <a href={paths.door} className="chalk-focus inline-flex min-h-11 min-w-0 flex-col justify-center leading-none">
           <div className="font-sign text-sm">BOUNCER</div>
           <div className="truncate font-mono text-xs uppercase tracking-wider text-chalk/80 sm:tracking-[0.2em]">{sign} · Round 1</div>
@@ -194,11 +202,13 @@ function Raid({ id, sign, guard, setting, look, state, paths }: { id: string; si
         <Squares left={left} />
         <div className="flex shrink-0 items-center gap-1.5">
           <span className="hidden items-center gap-1 rounded-full bg-night-3 px-2 py-1 font-mono text-[11px] min-[380px]:flex">Round 1</span>
-          <HelpButton values={{ budget: 6, lockNs: LOCK_NS }} initialOpen={state === "help"} className="relative grid size-7 shrink-0 place-items-center rounded-full bg-night-3 font-sign text-sm after:absolute after:-inset-2 after:content-['']">
-            <span aria-hidden="true">?</span>
+          <HelpButton values={{ budget: 6, lockNs: LOCK_NS }} initialOpen={state === "help"} className="-my-2 grid size-11 shrink-0 place-items-center">
+            <span aria-hidden="true" className="grid size-7 place-items-center rounded-full bg-night-3 font-sign text-sm">?</span>
             <span className="sr-only">How to play</span>
           </HelpButton>
-          <button type="button" data-sound-toggle aria-label="Street sound off" aria-pressed={false} className="relative shrink-0 whitespace-nowrap rounded-full bg-night-3 px-2 py-1 font-mono text-[11px] sm:px-2.5 sm:text-xs">♪ sound off</button>
+          <button type="button" data-sound-toggle aria-label="Street sound off" aria-pressed={false} className="-my-2 inline-flex min-h-11 shrink-0 items-center whitespace-nowrap">
+            <span className="rounded-full bg-night-3 px-2 py-1 font-mono text-[11px] sm:px-2.5 sm:text-xs">♪ sound off</span>
+          </button>
         </div>
       </header>
       <section ref={stageRef} className="scene relative min-h-0 flex-1 overflow-hidden bg-[#140f1c]">
@@ -223,15 +233,21 @@ function Raid({ id, sign, guard, setting, look, state, paths }: { id: string; si
         ) : null}
         {heard ? (
           <div className="pointer-events-none absolute bottom-3 left-3 z-10 w-[230px] animate-[fadeIn_.25s_ease-out] rounded-2xl rounded-bl-sm bg-chalk px-3 py-2 text-ink shadow-xl">
-            <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-ink/50">Someone in the queue · noted</div>
-            <div className="text-[13px] leading-snug">&ldquo;{RUMOUR}&rdquo;</div>
+            <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-ink/50">{STREET_QUEUE[who]?.who} · noted</div>
+            <div className="text-[13px] leading-snug">&ldquo;{said.text}&rdquo;</div>
           </div>
         ) : null}
       </section>
       {hints ? (
         <div className="flex items-center gap-2 overflow-x-auto bg-night-2 px-4 py-2" role="group" aria-label="People on the street">
           <span className="shrink-0 font-mono text-xs uppercase text-chalk/75">Street hints</span>
-          <a href={`${paths.play}?state=street`} className="chalk-focus min-h-11 shrink-0 rounded-full border border-chalk/60 px-3 text-xs leading-[2.75rem] text-chalk">Listen to Someone in the queue</a>
+          {STREET_QUEUE.map((person, i) => {
+            // Each tap moves to that person's next piece, as the live street does.
+            const next = i === who && spoken ? (Number(spoken[2]) + 1) % person.lines.length : i === who && state === "street" ? 1 % person.lines.length : 0;
+            return (
+              <a key={person.who} href={`${paths.play}&state=street-${i}-${next}`} className="chalk-focus min-h-11 shrink-0 rounded-full border border-chalk/60 px-3 text-xs leading-[2.75rem] text-chalk">Listen to {person.who}</a>
+            );
+          })}
         </div>
       ) : null}
       <section className="z-20 rounded-t-3xl border-t border-white/10 bg-night-2 px-4 pb-5 pt-4">
@@ -246,7 +262,7 @@ function Raid({ id, sign, guard, setting, look, state, paths }: { id: string; si
           <details className="mt-2 text-xs text-chalk/70">
             <summary className="cursor-pointer">Conversation on this device</summary>
             <ol className="mt-2 max-h-40 space-y-2 overflow-y-auto">
-              <li><p>You: {CHIPS[0]}</p><p>Guard: Send your complete invoice and I&apos;ll review it.</p></li>
+              <li><p>You: {CHIPS[0]}</p><p>Guard: {state === "ask" ? RATE_REPLY : "Send your complete invoice and I'll review it."}</p></li>
             </ol>
           </details>
         ) : null}
@@ -258,23 +274,23 @@ function Raid({ id, sign, guard, setting, look, state, paths }: { id: string; si
             </div>
             <div className="flex gap-2 overflow-x-auto pb-1">
               {CHIPS.map((chip) => (
-                <span key={chip} className="shrink-0 rounded-full border border-chalk/25 px-3 py-1.5 text-[13px] text-chalk/80">{chip}</span>
+                <a key={chip} href={`${paths.play}&state=ask`} className="shrink-0 rounded-full border border-chalk/25 px-3 py-1.5 text-[13px] text-chalk/80">{chip}</a>
               ))}
             </div>
             <div className="flex items-center justify-between text-[11px] text-chalk/45">
               <span>Each message costs 1 of your 6. Listening and the desk are free.</span>
-              <a href={`${paths.play}?state=street`} className="underline">Back</a>
+              <a href={`${paths.play}&state=street`} className="underline">Back</a>
             </div>
           </form>
         ) : (
           <>
           {tip === "desk" || tip === "messages" ? (
-            <Tip text={tipText(tip, 6)} onDone={() => window.location.assign(`${paths.play}?state=${tip === "desk" ? "tip-messages" : "street"}`)} className={`mt-3 ${tip === "desk" ? "ml-auto" : ""}`} />
+            <Tip text={tipText(tip, 6)} onDone={() => window.location.assign(`${paths.play}&state=${tip === "desk" ? "tip-messages" : "street"}`)} className={`mt-3 ${tip === "desk" ? "ml-auto" : ""}`} />
           ) : null}
           <div className="mt-3 grid grid-cols-[1fr_1.3fr_1fr] gap-2">
-            <a href={`${paths.play}?state=chat`} className="rounded-2xl border border-chalk/25 py-3 text-center text-sm">Say<span className="block font-mono text-[10px] text-chalk/45">Costs 1 message</span></a>
-            <a href={`${paths.play}?state=bill-empty`} className="rounded-2xl bg-chalk py-3 text-center font-sign text-ink shadow-[0_5px_0_#9c9483]">Write a bill<span className="block font-mono text-[10px] font-normal text-ink/50">Costs 1 message</span></a>
-            <a href={`${paths.play}?state=desk`} className="relative rounded-2xl border border-chalk/25 py-3 text-center text-sm">Desk<span className="block font-mono text-[10px] text-chalk/45">free</span>{deskBadge ? <span className="absolute -right-1 -top-1 grid size-5 place-items-center rounded-full bg-uv font-mono text-[10px] text-white">1</span> : null}</a>
+            <a href={`${paths.play}&state=chat`} className="rounded-2xl border border-chalk/25 py-3 text-center text-sm">Say<span className="block font-mono text-[10px] text-chalk/45">Costs 1 message</span></a>
+            <a href={`${paths.play}&state=bill-empty`} className="rounded-2xl bg-chalk py-3 text-center font-sign text-ink shadow-[0_5px_0_#9c9483]">Write a bill<span className="block font-mono text-[10px] font-normal text-ink/50">Costs 1 message</span></a>
+            <a href={`${paths.play}&state=desk`} className="relative rounded-2xl border border-chalk/25 py-3 text-center text-sm">Desk<span className="block font-mono text-[10px] text-chalk/45">free</span>{deskBadge ? <span className="absolute -right-1 -top-1 grid size-5 place-items-center rounded-full bg-uv font-mono text-[10px] text-white">1</span> : null}</a>
           </div>
           </>
         )}
@@ -282,31 +298,30 @@ function Raid({ id, sign, guard, setting, look, state, paths }: { id: string; si
       {sheet ? (
         <div className="absolute inset-0 z-40 flex flex-col justify-end bg-black/60">
           <div className="max-h-[88%] overflow-y-auto">
-            {tip === "bill" ? <Tip text={tipText("bill")} onDone={() => window.location.assign(`${paths.play}?state=bill-empty`)} className="mx-4 mb-2" /> : null}
+            {tip === "bill" ? <Tip text={tipText("bill")} onDone={() => window.location.assign(`${paths.play}&state=bill-empty`)} className="mx-4 mb-2" /> : null}
             {sheet === "bill" ? (
               <BillBuilder
-                payees={[]}
-                payout="chosen when you claim"
+                payees={STREET_PAYEES}
                 currency="tUSDC"
                 venue={sign}
                 left={left}
                 initial={state === "bill-filled" ? RIGHT_BILL : state === "bill-decimals" ? WRONG_BILL : null}
                 decimalsNote={state === "bill-decimals"}
                 onSubmit={(bill) => {
-                  const right = bill.payee.trim().toLowerCase() === RIGHT_BILL.payee.toLowerCase() && bill.reference.trim().toUpperCase() === RIGHT_BILL.reference && Math.abs(bill.qty * bill.unit - 12.5) < 0.005;
-                  window.location.assign(`${paths.play}?state=${right ? "recording" : "refused"}`);
+                  const right = bill.payee.trim().toLowerCase() === RIGHT_BILL.payee.toLowerCase() && bill.reference.trim().toUpperCase() === RIGHT_BILL.reference && Math.abs(bill.qty * bill.unit - RIGHT_BILL.qty * RIGHT_BILL.unit) < 0.005;
+                  window.location.assign(`${paths.play}&state=${right ? "recording" : "refused"}`);
                 }}
-                onClose={() => window.location.assign(`${paths.play}?state=street`)}
+                onClose={() => window.location.assign(`${paths.play}&state=street`)}
               />
             ) : (
-              <Desk notes={[{ id: "rumour", text: RUMOUR, source: "Heard" }]} payees={[]} poster={[]} inside={false} onPin={() => undefined} onMark={() => undefined} onClose={() => window.location.assign(`${paths.play}?state=street`)} />
+              <Desk notes={STREET_QUEUE.flatMap((person, i) => person.lines.map((heardLine, n) => ({ id: `door${i}-${n}`, text: heardLine.note, source: "Heard" as const })))} payees={STREET_PAYEES} poster={[]} inside={false} onPin={() => undefined} onMark={() => undefined} onClose={() => window.location.assign(`${paths.play}&state=street`)} />
             )}
           </div>
         </div>
       ) : null}
-      {holding ? <Hold state={state} amount={CUT} doorHref={paths.door} retryHref={`${paths.play}?state=recording`} /> : null}
+      {holding ? <Hold state={state} amount={CUT} doorHref={paths.door} retryHref={`${paths.play}&state=recording`} /> : null}
       {state === "out" ? <Turned sign={sign} guard={guard} rivals={rivals} doorHref={paths.door} revealHref={paths.reveal} /> : null}
-      {state === "in" ? <GotIn sign={sign} guard={guard} doorHref={paths.door} claimHref={`${paths.claim}?state=locked`} /> : null}
+      {state === "in" || state === "in-open" ? <GotIn sign={sign} guard={guard} doorHref={paths.door} claimHref={`${paths.claim}&state=${state === "in" ? "locked" : "ready"}`} unlocked={state === "in-open"} /> : null}
     </div>
   );
 }
@@ -390,17 +405,17 @@ function Hold({ state, amount, doorHref, retryHref }: { state: string; amount: s
   );
 }
 
-function GotIn({ sign, guard, doorHref, claimHref }: { sign: string; guard: string; doorHref: string; claimHref: string }) {
+function GotIn({ sign, guard, doorHref, claimHref, unlocked }: { sign: string; guard: string; doorHref: string; claimHref: string; unlocked: boolean }) {
   const grid: Square[] = ["ask", "ask", "approved", "none", "none", "none"];
   const message = winningMessage(grid);
   const text = shareText({ kind: "in", sign, guard, grid, streak: 3 }, 6);
   return (
-    <div className="absolute inset-0 z-30 flex flex-col items-center justify-end overflow-y-auto bg-[linear-gradient(to_bottom,rgb(13_10_18/0.1)_0%,rgb(13_10_18/0.6)_30%,rgb(13_10_18/0.97)_55%)] px-6 pb-8 text-center">
+    <div className="absolute inset-0 z-30 flex flex-col items-center justify-end overflow-y-auto bg-[linear-gradient(to_bottom,rgb(13_10_18/0.55)_0%,rgb(13_10_18/0.92)_12%,rgb(13_10_18/0.99)_30%)] px-6 pb-8 text-center">
       <ApprovedStamp signature={SIG} ring={`${sign} · #1 · DOOR · ${shortHash(SIG).toUpperCase()} · `} size={150} className="end-stamp" />
       <h1 className="end-title mt-5 font-sign text-5xl leading-none">You got in.</h1>
       <figure className="end-rest mt-4 max-w-sm">
         <blockquote className="relative rounded-2xl border border-white/20 bg-night-2 px-4 py-3 text-left font-sign text-lg leading-snug text-chalk">
-          &ldquo;{winWord("harbour-light")}&rdquo;
+          &ldquo;{winWord("skyline-social")}&rdquo;
           <span aria-hidden className="absolute -top-2 left-8 size-4 rotate-45 border-l border-t border-white/20 bg-night-2" />
         </blockquote>
         <figcaption className="mt-2 font-mono text-xs uppercase tracking-[0.2em] text-chalk/70">{guard}, on the door</figcaption>
@@ -412,11 +427,11 @@ function GotIn({ sign, guard, doorHref, claimHref }: { sign: string; guard: stri
       <p className="end-rest mt-2 text-sm text-brass">Tonight still counts · 3-day streak · #4 on the board</p>
       <div className="end-rest end-cut mt-4">
         <div className="font-mono text-xs uppercase tracking-[0.25em] text-chalk/80">Your cut</div>
-        <Money text="12.5" currency="tUSDC" className="neon-brass text-4xl" />
-        <p className="mt-1 text-sm text-chalk/70">The vault has recorded it. Collect in about <Countdown endsAtNs={UNLOCK_NS} className="text-chalk" />.</p>
+        <Money text="3.24" currency="tUSDC" className="neon-brass text-4xl" />
+        <p className="mt-1 text-sm text-chalk/70">{unlocked ? "The vault has recorded it, and the time lock is open." : <>The vault has recorded it. Collect in about <Countdown endsAtNs={UNLOCK_NS} className="text-chalk" />.</>}</p>
       </div>
       <div className="end-rest mt-5 flex w-full max-w-sm flex-col gap-3">
-        <a href={claimHref} className="rounded-2xl bg-chalk py-4 font-sign text-lg text-ink shadow-[0_6px_0_#9c9483]">Collect when the lock opens</a>
+        <a href={claimHref} className="rounded-2xl bg-chalk py-4 font-sign text-lg text-ink shadow-[0_6px_0_#9c9483]">{unlocked ? "Claim your cut" : "Collect when the lock opens"}</a>
         <div className="flex flex-wrap items-center justify-center gap-2">
           <ShareButton text={text} url={doorHref} label="Share your night" className="rounded-2xl border border-chalk/30 px-5 py-3 font-sign" />
         </div>
@@ -429,10 +444,10 @@ function GotIn({ sign, guard, doorHref, claimHref }: { sign: string; guard: stri
 function Turned({ sign, guard, rivals, doorHref, revealHref }: { sign: string; guard: string; rivals: ReturnType<typeof openRivals>; doorHref: string; revealHref: string }) {
   const grid: Square[] = ["refused", "ask", "refused", "ask", "refused", "ask"];
   const [first, ...more] = rivals;
-  const line = lastWord(first ? { sign: first.sign, guard: first.name || null, pot: null } : null, "harbour-light");
+  const line = lastWord(first ? { sign: first.sign, guard: first.name || null, pot: null } : null, "skyline-social");
   const dare = shareText({ kind: "out", sign, guard, grid, streak: 3 }, grid.length);
   return (
-    <div className="absolute inset-0 z-30 flex flex-col items-center justify-end overflow-y-auto bg-[linear-gradient(to_bottom,rgb(13_10_18/0.1)_0%,rgb(13_10_18/0.7)_25%,rgb(13_10_18/0.97)_45%)] px-6 pb-8 text-center">
+    <div className="absolute inset-0 z-30 flex flex-col items-center justify-end overflow-y-auto bg-[linear-gradient(to_bottom,rgb(13_10_18/0.55)_0%,rgb(13_10_18/0.92)_12%,rgb(13_10_18/0.99)_30%)] px-6 pb-8 text-center">
       <div className="end-stamp"><TurnedAwayStamp /></div>
       <figure className="end-title mt-5 max-w-sm">
         <blockquote className="relative rounded-2xl border border-white/20 bg-night-2 px-4 py-3 text-left font-sign text-lg leading-snug text-chalk">
@@ -450,7 +465,7 @@ function Turned({ sign, guard, rivals, doorHref, revealHref }: { sign: string; g
         {first ? (
           <a href={first.href} className="rounded-2xl bg-chalk py-4 font-sign text-lg text-ink shadow-[0_6px_0_#9c9483]">
             Try {first.sign}
-            {first.dayPot ? <span className="block font-mono text-xs uppercase tracking-wider">Tonight&apos;s pot · <TokenAmount token={TOKEN} atomic={first.dayPot} className="text-ink" /></span> : null}
+            {first.dayPot ? <span className="block font-mono text-xs uppercase tracking-wider">Tonight&apos;s pot · <TokenAmount token={TOKEN} atomic={first.dayPot} className="normal-case text-ink" /></span> : null}
           </a>
         ) : null}
         {more.length ? (
