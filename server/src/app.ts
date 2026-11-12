@@ -146,16 +146,18 @@ export function createApp(deps: Deps) {
     if (deps.players && result.status === 200) {
       const payload = result.body as { ok?: unknown; blob?: unknown };
       if (payload?.ok === true && body.op === "open" && typeof payload.blob === "string" && typeof body.player_id === "string" && typeof body.vault_id === "string") {
-        await recordProgress(deps.players, { claimKey: body.player_id, vaultId: body.vault_id, round: String(body.round), ...(typeof (payload as { used?: unknown }).used === "number" ? { used: (payload as { used: number }).used } : {}), street: (payload as { street?: unknown }).street ?? null }).catch(() => undefined);
+        await recordProgress(deps.players, { claimKey: body.player_id, vaultId: body.vault_id, round: String(body.round), ...(typeof (payload as { used?: unknown }).used === "number" ? { used: (payload as { used: number }).used } : {}), street: (payload as { street?: unknown }).street ?? null, preflight: (payload as { model_proof?: unknown }).model_proof }).catch(() => undefined);
         await recordOpen(deps.players, { claimKey: body.player_id, vaultId: body.vault_id, round: String(body.round), blob: payload.blob, now: deps.now() }).catch(() => undefined);
       }
       if (payload?.ok === true && (body.op === "say" || body.op === "bill") && typeof payload.blob === "string" && typeof body.player_id === "string" && typeof body.vault_id === "string") {
         await recordTurn(deps.players, { claimKey: body.player_id, vaultId: body.vault_id, round: String(body.round), blob: payload.blob }).catch(() => undefined);
-        const answer = payload as { reply?: unknown; used?: unknown; signature?: unknown; verdict?: unknown };
+        const answer = payload as { reply?: unknown; used?: unknown; signature?: unknown; verdict?: unknown; attestation?: unknown; proof?: unknown };
         // One outcome per counted message: chat is "ask", a bill is refused or approved. The text is not kept.
         if (typeof answer.reply === "string" && answer.reply) {
           const outcome = body.op === "say" ? "ask" : answer.signature && answer.verdict ? "approved" : "refused";
-          await recordProgress(deps.players, { claimKey: body.player_id, vaultId: body.vault_id, round: String(body.round), outcome, ...(typeof answer.used === "number" ? { used: answer.used } : {}) }).catch(() => undefined);
+          // An approved bill keeps its evidence, so another sign-in can show the Verified panel for this win.
+          const evidence = outcome === "approved" ? { verdict: answer.verdict, signature: answer.signature, attestation: answer.attestation, proof: answer.proof } : undefined;
+          await recordProgress(deps.players, { claimKey: body.player_id, vaultId: body.vault_id, round: String(body.round), outcome, ...(typeof answer.used === "number" ? { used: answer.used } : {}), evidence }).catch(() => undefined);
         }
       }
     }

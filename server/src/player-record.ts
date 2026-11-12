@@ -200,15 +200,35 @@ export async function recordOpen(store: PlayerStore, input: { claimKey: string; 
   await store.saveBlob(input.claimKey, input.vaultId, input.round, input.blob);
 }
 
+/**
+ * A win's evidence, as the guard handed it to the browser: the signed verdict, its signature, the guard call's
+ * attestation link and the model's signature on the reply. None of it is secret (the verdict and signature go on
+ * chain), and the browser checks every piece itself, so a new sign-in can show the Verified panel again.
+ */
+export type WinEvidence = { verdict: Record<string, unknown>; signature: string; attestation: unknown; proof: unknown };
+
 export type RaidProgress = {
   used: number;
   outcomes: ("ask" | "refused" | "approved")[];
   street: unknown | null;
   won: boolean;
   amount: string | null;
+  /** The model's attestation taken when the raid opened (`model_proof`). */
+  preflight: unknown | null;
+  evidence: WinEvidence | null;
 };
 
-const EMPTY_PROGRESS: RaidProgress = { used: 0, outcomes: [], street: null, won: false, amount: null };
+const EMPTY_PROGRESS: RaidProgress = { used: 0, outcomes: [], street: null, won: false, amount: null, preflight: null, evidence: null };
+
+// Evidence is a few hundred bytes; anything far larger is not what the guard sends and is not kept.
+const MAX_EVIDENCE = 8_000;
+const small = (value: unknown): boolean => value !== undefined && JSON.stringify(value).length <= MAX_EVIDENCE;
+const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === "object" && !Array.isArray(value);
+
+function readEvidence(value: unknown): WinEvidence | null {
+  if (!isRecord(value) || !isRecord(value.verdict) || typeof value.signature !== "string" || !small(value)) return null;
+  return { verdict: value.verdict, signature: value.signature, attestation: value.attestation ?? null, proof: value.proof ?? null };
+}
 
 export function parseProgress(text: string | null): RaidProgress {
   if (!text) return { ...EMPTY_PROGRESS, outcomes: [] };
@@ -221,6 +241,8 @@ export function parseProgress(text: string | null): RaidProgress {
       street: value.street ?? null,
       won: value.won === true,
       amount: typeof value.amount === "string" && /^[0-9]+$/.test(value.amount) ? value.amount : null,
+      preflight: isRecord(value.preflight) && small(value.preflight) ? value.preflight : null,
+      evidence: readEvidence(value.evidence),
     };
   } catch {
     return { ...EMPTY_PROGRESS, outcomes: [] };
@@ -230,7 +252,7 @@ export function parseProgress(text: string | null): RaidProgress {
 /** Merges one guard turn into the raid's progress. No bill, payee or reference is kept: only counts and outcomes. */
 export async function recordProgress(
   store: PlayerStore,
-  input: { claimKey: string; vaultId: string; round: string; used?: number; outcome?: "ask" | "refused" | "approved"; street?: unknown; won?: boolean; amount?: string | null },
+  input: { claimKey: string; vaultId: string; round: string; used?: number; outcome?: "ask" | "refused" | "approved"; street?: unknown; won?: boolean; amount?: string | null; preflight?: unknown; evidence?: unknown },
 ): Promise<void> {
   if (!CLAIM.test(input.claimKey) || !input.vaultId || !/^[0-9]+$/.test(input.round)) return;
   if (!(await store.findByClaim(input.claimKey))) return;
@@ -241,6 +263,8 @@ export async function recordProgress(
     street: input.street !== undefined ? input.street : current.street,
     won: input.won === true ? true : current.won,
     amount: input.amount !== undefined ? input.amount : current.amount,
+    preflight: isRecord(input.preflight) && small(input.preflight) ? input.preflight : current.preflight,
+    evidence: readEvidence(input.evidence) ?? current.evidence,
   };
   await store.saveProgress(input.claimKey, input.vaultId, input.round, JSON.stringify(next));
 }

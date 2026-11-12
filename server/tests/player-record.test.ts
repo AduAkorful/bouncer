@@ -154,3 +154,27 @@ test("a raid's progress keeps counts, outcomes, street and the win, and nothing 
   assert.equal(await store.readProgress("f".repeat(64), "door", "1"), null);
   assert.deepEqual(parseProgress("not json").outcomes, []);
 });
+
+test("a win keeps its evidence and the opening's model proof, so a new sign-in can show the checks", async () => {
+  const store = memoryPlayers();
+  const account = KeyPair.fromRandom("ed25519");
+  const claim = KeyPair.fromRandom("ed25519");
+  const keys = { publicKey: account.getPublicKey().toString(), claimKey: Buffer.from(claim.getPublicKey().data).toString("hex") };
+  await openSession(store, { ...keys, now: START, pick: () => 0 });
+  const at = { claimKey: keys.claimKey, vaultId: "door", round: "1" };
+  await recordProgress(store, { ...at, used: 0, preflight: { nonce: "n", signing_address: "0x1" } });
+  await recordProgress(store, { ...at, outcome: "refused", used: 1, evidence: undefined });
+  assert.equal(parseProgress(await store.readProgress(keys.claimKey, "door", "1")).evidence, null);
+  const evidence = { verdict: { vault_id: "door", round: 1 }, signature: "ab".repeat(64), attestation: { call_id: "c" }, proof: { chat_id: "x" } };
+  await recordProgress(store, { ...at, outcome: "approved", used: 2, evidence });
+  // A later turn without evidence keeps the win's.
+  await recordProgress(store, { ...at, won: true, amount: "3240000" });
+  const seen = parseProgress(await store.readProgress(keys.claimKey, "door", "1"));
+  assert.deepEqual(seen.evidence, evidence);
+  assert.deepEqual(seen.preflight, { nonce: "n", signing_address: "0x1" });
+  // Evidence without a signed verdict, or far larger than the guard sends, is not kept.
+  await recordProgress(store, { ...at, vaultId: "other", evidence: { verdict: null, signature: "x" } });
+  await recordProgress(store, { ...at, vaultId: "big", evidence: { verdict: {}, signature: "x", proof: "y".repeat(9_000) } });
+  assert.equal(parseProgress(await store.readProgress(keys.claimKey, "other", "1")).evidence, null);
+  assert.equal(parseProgress(await store.readProgress(keys.claimKey, "big", "1")).evidence, null);
+});
